@@ -22,6 +22,8 @@ parser = argparse.ArgumentParser()
 parser.add_argument("--num_envs", type=int, default=16)
 parser.add_argument("--collect_steps", type=int, default=2500, help="env 당 수집 control step")
 parser.add_argument("--bc_epochs", type=int, default=60)
+parser.add_argument("--t_cc_use", type=float, default=None,
+                    help="clearcoat 소모 벌점 가중치 재정의 (기본 cfg=0; 14ch 챔피언 재현엔 30)")
 parser.add_argument("--obs", default="thermal",
                     choices=["basic", "thermal", "spatial", "full"],
                     help="관측 프로파일 (polish_env_cfg.apply_obs_profile)")
@@ -60,6 +62,9 @@ def main():
     env_cfg.scene.num_envs = args.num_envs
     env_cfg.side_env_ratio = args.side_ratio
     apply_obs_profile(env_cfg, args.obs)
+    if args.t_cc_use is not None:
+        env_cfg.t_cc_use = args.t_cc_use
+        print(f"[cfg] t_cc_use = {args.t_cc_use}")
     env = PolishEnv(env_cfg, render_mode=None)
     wrapped = RslRlVecEnvWrapper(env, clip_actions=1.0)
     agent_cfg = handle_deprecated_rsl_rl_cfg(PolishPPORunnerCfg(),
