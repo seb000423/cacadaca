@@ -96,9 +96,9 @@ class PolishEnvCfg(DirectRLEnvCfg):
     t_rz: float = 50.0            # × (rz_before − rz_after)/2.0 [μm]
     t_pass_bonus: float = 500.0   # 판정 5종 전부 통과 시 (GU≥70·Ra≤0.20·Rz≤2.0·CC≥35·scratch 감소)
     t_cc_fail: float = 1500.0     # 잔여 clearcoat 최소 < 안전기준(35 μm) — 큰 실패 페널티.
-    # clearcoat 효율 항 (WORKLOG 9.9 — 단독으론 기각됐으나 병합 보존, 기본 30):
-    # 에피소드가 소모한 최소-잔여량 [μm]당 벌점. GU 항보다 작게 — '안 깎기' 퇴화 주의.
-    t_cc_use: float = 30.0
+    # clearcoat 효율 항 (WORKLOG 9.9 에서 기각 — 코드는 보존하되 **기본 꺼짐**):
+    # 에피소드가 소모한 최소-잔여량 [μm]당 벌점. 켜면 '안 깎기' 퇴화 위험 (9.9·9.14 실측).
+    t_cc_use: float = 0.0
     t_thermal_damage: float = 1000.0  # × 최종 thermal_damage_peak
     t_overheat: float = 500.0         # × max(0, peak_C-Tg_C)/(80-Tg), PT-DESIGN
     #   GU 70 만 노리고 clearcoat 를 과도하게 깎는 정책을 막는 항 — pass_bonus(500)보다 크다.
