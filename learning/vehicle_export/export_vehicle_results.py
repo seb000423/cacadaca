@@ -129,18 +129,28 @@ def load_recipe(path: str = RECIPE_JSON) -> Recipe:
                   n_passes=int(d.get("n_passes", 1)))
 
 
-def load_bc_policy(ckpt_path: str, obs_dim: int = 11, act_dim: int = 2):
-    """rsl_rl checkpoint(actor_state_dict)에서 BC actor 재구성 — demo_arm._load_policy 와 동일."""
+def load_bc_policy(ckpt_path: str, obs_dim: int | None = None, act_dim: int = 2):
+    """rsl_rl checkpoint(actor_state_dict)에서 actor 재구성 — demo_arm._load_policy 와 동일.
+
+    obs_dim 은 체크포인트의 첫 Linear 가중치 shape 에서 자동 감지한다
+    (구 11ch / 열 통합 14ch 체크포인트 겸용 — WORKLOG 9.13).
+    """
     from rsl_rl.models.mlp_model import MLPModel
     from tensordict import TensorDict
 
+    ck_probe = torch.load(ckpt_path, map_location="cpu", weights_only=False)
+    if obs_dim is None:
+        for k, v in ck_probe["actor_state_dict"].items():
+            if k.endswith("mlp.0.weight"):
+                obs_dim = int(v.shape[1])
+                break
+        assert obs_dim in (11, 14), f"관측 차원 감지 실패: {obs_dim}"
     dummy = TensorDict({"policy": torch.zeros(1, obs_dim)}, batch_size=[1])
     actor = MLPModel(dummy, {"actor": ["policy"]}, "actor", act_dim,
                      hidden_dims=[128, 128], activation="elu", obs_normalization=True,
                      distribution_cfg={"class_name": "GaussianDistribution",
                                        "init_std": 0.3, "std_type": "scalar"})
-    ck = torch.load(ckpt_path, map_location="cpu", weights_only=False)
-    actor.load_state_dict(ck["actor_state_dict"])
+    actor.load_state_dict(ck_probe["actor_state_dict"])
     actor.eval()
 
     def policy(obs_np: np.ndarray) -> np.ndarray:
@@ -150,6 +160,7 @@ def load_bc_policy(ckpt_path: str, obs_dim: int = 11, act_dim: int = 2):
             a = actor(td)                      # deterministic mean
         return a.clamp(-1.0, 1.0).squeeze(0).numpy()
 
+    policy.obs_dim = obs_dim
     return policy
 
 
@@ -200,18 +211,22 @@ class _Path:
 
 
 def footprint_stats(st, uv, clearcoat_limit: float):
-    """polish_env._footprint_stats 와 동일 — 코어(반경 = 패드 절반) 잔여 scratch 관측."""
+    """polish_env._footprint_stats 와 동일 — 코어 crop 의 scratch/제거/여유 + 열 3통계."""
     res, R = st.resolution_m, 0.5 * PC.PAD_RADIUS_M
     i0 = max(int((uv[0] - R) / res), 0); i1 = min(int((uv[0] + R) / res) + 1, st.shape[0])
     j0 = max(int((uv[1] - R) / res), 0); j1 = min(int((uv[1] + R) / res) + 1, st.shape[1])
     if i0 >= i1 or j0 >= j1:
-        return 0.0, 0.0, 0.0, 20.0
+        return (0.0, 0.0, 0.0, 20.0,
+                PC.AMBIENT_TEMPERATURE_C, PC.AMBIENT_TEMPERATURE_C, 0.0)
     sl = (slice(i0, i1), slice(j0, j1))
     remaining = np.clip(st.initial_scratch_depth_um[sl] - st.cumulative_removal_um[sl],
                         0.0, None)
     return (float(remaining.mean()), float(remaining.max()),
             float(st.cumulative_removal_um[sl].mean()),
-            float(st.clearcoat_remaining_um[sl].min() - clearcoat_limit))
+            float(st.clearcoat_remaining_um[sl].min() - clearcoat_limit),
+            float(st.temperature_c[sl].mean()),
+            float(st.peak_temperature_c[sl].max()),
+            float(st.thermal_damage_proxy[sl].mean()))
 
 
 def run_cell_episode(row: dict, recipe: Recipe, policy, cal, max_repolish: int = 2) -> dict:
@@ -281,11 +296,13 @@ def run_cell_episode(row: dict, recipe: Recipe, policy, cal, max_repolish: int =
         force_mean = 0.0
         obs_scr_mean = obs_scr_max = obs_removal = 0.0
         obs_cc_margin = 20.0
+        obs_temp = obs_peak = PC.AMBIENT_TEMPERATURE_C
+        obs_tdmg = 0.0
         completed = False
         cc_min_ep_start = float(st.clearcoat_remaining_um.min())
 
         for step in range(MAX_CONTROL_STEPS):
-            obs = np.array([
+            core = [
                 force_mean / 10.0,
                 0.0,                                   # (f − cmd)/5 — 아래서 채움
                 (force_mean - prev_force) / 5.0,
@@ -293,8 +310,12 @@ def run_cell_episode(row: dict, recipe: Recipe, policy, cal, max_repolish: int =
                 min(arc / path.total, 1.0),
                 obs_scr_mean / 2.0, obs_scr_max / 2.0,
                 obs_removal / 5.0, obs_cc_margin / 20.0,
-                prev_a[0], prev_a[1],
-            ], dtype=np.float32)
+            ]
+            if getattr(policy, "obs_dim", 11) == 14:   # 열 통합판 (polish_env 관측과 동일 정규화)
+                core += [(obs_temp - PC.AMBIENT_TEMPERATURE_C) / 40.0,
+                         (obs_peak - PC.AMBIENT_TEMPERATURE_C) / 60.0,
+                         obs_tdmg / PC.THERMAL_DAMAGE_MAX]
+            obs = np.array(core + [prev_a[0], prev_a[1]], dtype=np.float32)
             # 직전 스텝의 명령 기준 오차/이송 (polish_env 관측과 동일한 시점 정렬)
             cmd_force_prev = recipe.target_contact_force_n * (1.0 + prev_a[0] * FORCE_RATIO_LIMIT)
             cmd_feed_prev = feed0 * (1.0 + prev_a[1] * FEED_RATIO_LIMIT)
@@ -323,8 +344,8 @@ def run_cell_episode(row: dict, recipe: Recipe, policy, cal, max_repolish: int =
                 rpm=recipe.rpm,
                 feed_speed_m_s=feed_cmd,
             ), dt_s=quality_dt, sim_time_s=sim_t)
-            obs_scr_mean, obs_scr_max, obs_removal, obs_cc_margin = footprint_stats(
-                st, uv, CLEARCOAT_SAFE_MIN_UM)
+            (obs_scr_mean, obs_scr_max, obs_removal, obs_cc_margin,
+             obs_temp, obs_peak, obs_tdmg) = footprint_stats(st, uv, CLEARCOAT_SAFE_MIN_UM)
 
             prev_a = a
             a_sum += a; f_sum += force_mean; feed_sum += feed_cmd
