@@ -31,6 +31,8 @@ parser.add_argument("--desired_kl", type=float, default=None,
 parser.add_argument("--gamma", type=float, default=None,
                     help="할인율 재정의. 종말 보상은 에피소드(~4800스텝) 끝에만 나오므로 "
                          "0.99 로는 초반 상태에 신호가 닿지 않는다 (0.99^4800≈1e-21) → 0.9995 권장")
+parser.add_argument("--recipe_json", type=str, default=None,
+                    help="학습 env 의 process-context recipe 재정의 — 방법2(신규 recipe\n                         분포 정렬 재학습, WORKLOG 9.17 ②). 기본: 레거시 bo_best_recipe")
 parser.add_argument("--t_cc_use", type=float, default=None,
                     help="clearcoat 소모 벌점 가중치 재정의 (기본 cfg=0; 14ch 챔피언 재현엔 30)")
 parser.add_argument("--obs", default="thermal",
@@ -64,6 +66,9 @@ def main():
     env_cfg.seed = args.seed
     env_cfg.side_env_ratio = args.side_ratio
     apply_obs_profile(env_cfg, args.obs)
+    if args.recipe_json:
+        env_cfg.recipe_json_path = args.recipe_json
+        print(f"[cfg] recipe_json = {args.recipe_json}")
     if args.t_cc_use is not None:
         env_cfg.t_cc_use = args.t_cc_use
         print(f"[cfg] t_cc_use = {args.t_cc_use}")
