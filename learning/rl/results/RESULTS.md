@@ -224,3 +224,26 @@ model_bc_side 에서 출발, 품질 선택 it1498 = model_terminal_ppo_combo_it1
 150셀 판정: **86/150 — 현 챔피언(91) 미달. 교체 안 함.**
 단독 실험(88, 84)과 조합(86) 모두 91 미만 — 세 방향 전부 소진 확인.
 현 구조의 정점은 91/150 로 재확정. 다음은 구조 변경 (9.9장 ①~③).
+
+### 9.11 BO outer loop + 자세별 recipe 분리 — ★ 신기록 95/150 (2026-08-29)
+
+05 문서 9장 절차 실행: 챔피언 정책(it400)을 고정하고 **실제 판정 조건(정책+어드미턴스+
+재폴리싱)을 평가자로** BO 재탐색 (learning/rl/bo_outer_loop.py, 29회 평가, 고정 6셀 짝지은
+비교). 결과 후보: force 6.69 N / feed 5.65 / rpm 3259 / spacing 0.270 / 2 pass.
+
+150셀 검증에서 반전 두 번:
+1. 후보 단일 적용 = 87/150 (미달) — 그러나 **top 32/50 역대 최고**, side 55/100 악화.
+   원인: BO 평가셀이 top 4:side 2 로 실배포(1:2)와 반대 편향.
+2. **자세별 분리** (top=후보, side=현행): 산술 예측 32+63=95 → 실측 **95/150 적중**.
+
+| recipe 구성 | 150셀 | top | side |
+|---|---:|---:|---:|
+| 단일(현행 5.78N/5436rpm/0.184) | 91 | 28 | 63 |
+| 단일(BO 후보) | 87 | **32** | 55 |
+| **자세별 분리 (공식)** | **95** | **32** | **63** |
+
+공식화: top 전용 recipe = outputs/bo_best_recipe_top.json, side = 기존 bo_best_recipe.json.
+export 는 --recipe_json(top) + --recipe_json_side 로 실행 (README 갱신). 단일 recipe 공식
+결과는 rl_vehicle_150_results_single_recipe.csv 로 보존. 원 시뮬도 top/side 목표힘을
+분리했으므로(contact.py 상수) 공정 관행과 일치. 다음 개선 여지: side 전용 BO 재탐색
+(평가셀을 side 로 구성), 새 recipe 분포로 정책 재학습 (05§9 outer iteration 2).

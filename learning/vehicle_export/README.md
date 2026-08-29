@@ -22,8 +22,11 @@ cd <repo>
 ~/isaacsim/python.sh learning/vehicle_export/make_example_input.py
 
 # 본 실행 — Isaac Sim 앱 불필요 (torch+rsl_rl+numpy). 150셀 ≈ 2~5분 (8워커)
+# 자세별 recipe: top(보닛/루프)=BO outer loop 최적, side(도어/펜더)=기존 BO (WORKLOG 9.11)
 ~/isaacsim/python.sh learning/vehicle_export/export_vehicle_results.py \
-    --checkpoint learning/rl/champion/model_bc.pt \
+    --checkpoint learning/rl/champion/model_terminal_ppo_it400.pt \
+    --recipe_json      learning/polytwin/outputs/bo_best_recipe_top.json \
+    --recipe_json_side learning/polytwin/outputs/bo_best_recipe.json \
     --input  learning/vehicle_export/vehicle_150_cells.csv \
     --output learning/vehicle_export/rl_vehicle_150_results.csv \
     --workers 8

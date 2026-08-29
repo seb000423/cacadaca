@@ -424,22 +424,34 @@ def run_cell_episode(row: dict, recipe: Recipe, policy, cal, max_repolish: int =
 # ── multiprocessing worker ────────────────────────────────────────────────
 _G = {}
 
-def _init_worker(ckpt, max_repolish=2):
+def _init_worker(ckpt, max_repolish=2, recipe_json=RECIPE_JSON, recipe_json_side=None):
     global EVALUATION_MODE
     EVALUATION_MODE = policy_label(ckpt)[1]
     _G["max_repolish"] = max_repolish
-    _G["recipe"] = load_recipe()
+    _G["recipe"] = load_recipe(recipe_json)
+    _G["recipe_side"] = load_recipe(recipe_json_side) if recipe_json_side else _G["recipe"]
     _G["policy"] = load_bc_policy(ckpt)
     _G["cal"] = load_calibrated_config()
 
 def _work(row):
-    return run_cell_episode(row, _G["recipe"], _G["policy"], _G["cal"],
+    import math as _m
+    n = np.array([float(row["normal_x"]), float(row["normal_y"]), float(row["normal_z"])])
+    n /= max(np.linalg.norm(n), 1e-9)
+    tilt = _m.degrees(_m.acos(float(np.clip(n[2], -1.0, 1.0))))
+    recipe = _G["recipe_side"] if tilt > 45.0 else _G["recipe"]
+    return run_cell_episode(row, recipe, _G["policy"], _G["cal"],
                             max_repolish=_G["max_repolish"])
 
 
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--checkpoint", default=DEFAULT_CKPT)
+    ap.add_argument("--recipe_json", default=RECIPE_JSON,
+                    help="공정 recipe JSON — BO outer loop 후보 검증 시 교체")
+    ap.add_argument("--recipe_json_side", default=None,
+                    help="side(수직면, tilt>45°) 셀 전용 recipe JSON. 자세별 공정 분리 — "
+                         "원 시뮬도 top/side 목표힘을 다르게 뒀다 (contact.py 상수). "
+                         "미지정 시 전 셀 --recipe_json 사용")
     ap.add_argument("--input", required=True)
     ap.add_argument("--output", required=True)
     ap.add_argument("--summary", default=None, help="기본: <output 이름>_summary.json")
@@ -463,10 +475,12 @@ def main():
     if args.workers > 1:
         import multiprocessing as mp
         with mp.get_context("fork").Pool(args.workers, _init_worker,
-                                         (args.checkpoint, args.max_repolish)) as pool:
+                                         (args.checkpoint, args.max_repolish,
+                                          args.recipe_json, args.recipe_json_side)) as pool:
             results = pool.map(_work, rows, chunksize=2)
     else:
-        _init_worker(args.checkpoint, args.max_repolish)
+        _init_worker(args.checkpoint, args.max_repolish, args.recipe_json,
+                     args.recipe_json_side)
         results = [_work(r) for r in rows]
 
     with open(args.output, "w", newline="", encoding="utf-8") as f:
