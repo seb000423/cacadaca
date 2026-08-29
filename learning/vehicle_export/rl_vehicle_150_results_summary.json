@@ -14,21 +14,21 @@
   },
   "all": {
     "n_cells": 150,
-    "n_pass": 95,
+    "n_pass": 97,
     "gu_after": {
-      "mean": 69.749,
+      "mean": 69.933,
       "min": 60.97,
-      "max": 73.53
+      "max": 73.33
     },
     "scratch_after_um": {
-      "mean": 0.391,
-      "min": 0.039,
-      "max": 1.136
+      "mean": 0.458,
+      "min": 0.081,
+      "max": 1.2
     },
-    "scratch_reduction_pct": 64.4,
+    "scratch_reduction_pct": 58.3,
     "clearcoat_remaining_min_um": {
-      "mean": 40.489,
-      "min": 35.0,
+      "mean": 40.778,
+      "min": 35.48,
       "max": 47.96
     }
   },
@@ -54,22 +54,22 @@
   },
   "side_facing_cells (도어/펜더 등, tilt>45°)": {
     "n_cells": 100,
-    "n_pass": 63,
+    "n_pass": 65,
     "gu_after": {
-      "mean": 69.742,
-      "min": 62.23,
-      "max": 73.53
+      "mean": 70.018,
+      "min": 62.94,
+      "max": 72.98
     },
     "scratch_after_um": {
-      "mean": 0.368,
-      "min": 0.039,
-      "max": 1.136
+      "mean": 0.469,
+      "min": 0.081,
+      "max": 1.2
     },
-    "scratch_reduction_pct": 65.9,
+    "scratch_reduction_pct": 56.5,
     "clearcoat_remaining_min_um": {
-      "mean": 40.407,
-      "min": 35.0,
-      "max": 47.46
+      "mean": 40.841,
+      "min": 35.61,
+      "max": 47.17
     }
   },
   "per_region": {
@@ -117,80 +117,80 @@
       "n_cells": 25,
       "n_pass": 17,
       "gu_after": {
-        "mean": 69.82,
-        "min": 63.25,
-        "max": 72.69
+        "mean": 70.285,
+        "min": 65.6,
+        "max": 72.24
       },
       "scratch_after_um": {
-        "mean": 0.365,
-        "min": 0.054,
-        "max": 0.836
+        "mean": 0.433,
+        "min": 0.135,
+        "max": 0.818
       },
-      "scratch_reduction_pct": 65.2,
+      "scratch_reduction_pct": 58.7,
       "clearcoat_remaining_min_um": {
-        "mean": 40.554,
-        "min": 35.8,
+        "mean": 40.932,
+        "min": 35.61,
         "max": 45.66
       }
     },
     "R4:door_right": {
       "n_cells": 25,
-      "n_pass": 16,
+      "n_pass": 15,
       "gu_after": {
-        "mean": 69.84,
-        "min": 63.64,
-        "max": 73.32
+        "mean": 69.665,
+        "min": 62.94,
+        "max": 72.97
       },
       "scratch_after_um": {
-        "mean": 0.357,
-        "min": 0.105,
-        "max": 0.832
+        "mean": 0.469,
+        "min": 0.081,
+        "max": 0.918
       },
-      "scratch_reduction_pct": 67.4,
+      "scratch_reduction_pct": 57.2,
       "clearcoat_remaining_min_um": {
-        "mean": 40.024,
-        "min": 35.25,
-        "max": 47.33
+        "mean": 40.415,
+        "min": 35.64,
+        "max": 47.17
       }
     },
     "R5:fender_left": {
       "n_cells": 25,
-      "n_pass": 15,
+      "n_pass": 17,
       "gu_after": {
-        "mean": 69.825,
-        "min": 65.18,
-        "max": 73.24
+        "mean": 69.948,
+        "min": 65.76,
+        "max": 72.76
       },
       "scratch_after_um": {
-        "mean": 0.479,
-        "min": 0.13,
-        "max": 1.136
+        "mean": 0.567,
+        "min": 0.217,
+        "max": 1.2
       },
-      "scratch_reduction_pct": 59.7,
+      "scratch_reduction_pct": 52.3,
       "clearcoat_remaining_min_um": {
-        "mean": 40.77,
-        "min": 35.93,
-        "max": 47.46
+        "mean": 41.07,
+        "min": 36.16,
+        "max": 46.97
       }
     },
     "R6:fender_right": {
       "n_cells": 25,
-      "n_pass": 15,
+      "n_pass": 16,
       "gu_after": {
-        "mean": 69.485,
-        "min": 62.23,
-        "max": 73.53
+        "mean": 70.173,
+        "min": 65.93,
+        "max": 72.98
       },
       "scratch_after_um": {
-        "mean": 0.272,
-        "min": 0.039,
-        "max": 0.763
+        "mean": 0.409,
+        "min": 0.115,
+        "max": 0.928
       },
-      "scratch_reduction_pct": 72.4,
+      "scratch_reduction_pct": 58.6,
       "clearcoat_remaining_min_um": {
-        "mean": 40.281,
-        "min": 35.0,
-        "max": 45.97
+        "mean": 40.947,
+        "min": 35.91,
+        "max": 46.22
       }
     }
   },
@@ -307,223 +307,211 @@
       "region_id": "R3",
       "region_name": "door_left",
       "cell_id": "0",
-      "failure_reason": "gu_below_target(65.3<70)"
+      "failure_reason": "gu_below_target(68.2<70)"
     },
     {
       "region_id": "R3",
       "region_name": "door_left",
       "cell_id": "3",
-      "failure_reason": "gu_below_target(65.1<70)"
+      "failure_reason": "gu_below_target(68.5<70)"
     },
     {
       "region_id": "R3",
       "region_name": "door_left",
       "cell_id": "4",
-      "failure_reason": "gu_below_target(67.7<70);clearcoat_budget_exhausted"
+      "failure_reason": "gu_below_target(68.0<70);clearcoat_budget_exhausted"
     },
     {
       "region_id": "R3",
       "region_name": "door_left",
       "cell_id": "8",
-      "failure_reason": "gu_below_target(65.7<70);clearcoat_budget_exhausted"
+      "failure_reason": "gu_below_target(65.6<70)"
     },
     {
       "region_id": "R3",
       "region_name": "door_left",
       "cell_id": "12",
-      "failure_reason": "gu_below_target(67.3<70)"
+      "failure_reason": "gu_below_target(69.4<70)"
     },
     {
       "region_id": "R3",
       "region_name": "door_left",
-      "cell_id": "15",
-      "failure_reason": "gu_below_target(69.9<70)"
+      "cell_id": "14",
+      "failure_reason": "gu_below_target(69.8<70)"
     },
     {
       "region_id": "R3",
       "region_name": "door_left",
       "cell_id": "19",
-      "failure_reason": "gu_below_target(63.2<70)"
+      "failure_reason": "gu_below_target(66.9<70)"
     },
     {
       "region_id": "R3",
       "region_name": "door_left",
       "cell_id": "23",
-      "failure_reason": "gu_below_target(68.6<70)"
+      "failure_reason": "gu_below_target(69.6<70)"
     },
     {
       "region_id": "R4",
       "region_name": "door_right",
       "cell_id": "4",
-      "failure_reason": "gu_below_target(68.1<70)"
+      "failure_reason": "gu_below_target(68.4<70);ra_above_target(0.201>0.20)"
     },
     {
       "region_id": "R4",
       "region_name": "door_right",
       "cell_id": "10",
-      "failure_reason": "gu_below_target(66.6<70)"
+      "failure_reason": "gu_below_target(66.3<70);ra_above_target(0.205>0.20)"
     },
     {
       "region_id": "R4",
       "region_name": "door_right",
       "cell_id": "11",
-      "failure_reason": "gu_below_target(68.7<70)"
+      "failure_reason": "gu_below_target(69.2<70)"
     },
     {
       "region_id": "R4",
       "region_name": "door_right",
       "cell_id": "12",
-      "failure_reason": "gu_below_target(65.2<70);clearcoat_budget_exhausted"
+      "failure_reason": "gu_below_target(66.1<70);clearcoat_budget_exhausted"
     },
     {
       "region_id": "R4",
       "region_name": "door_right",
       "cell_id": "13",
-      "failure_reason": "gu_below_target(65.7<70)"
+      "failure_reason": "gu_below_target(64.7<70)"
     },
     {
       "region_id": "R4",
       "region_name": "door_right",
       "cell_id": "14",
-      "failure_reason": "gu_below_target(68.6<70)"
+      "failure_reason": "gu_below_target(67.2<70);ra_above_target(0.217>0.20)"
     },
     {
       "region_id": "R4",
       "region_name": "door_right",
       "cell_id": "15",
-      "failure_reason": "gu_below_target(63.6<70);clearcoat_budget_exhausted"
+      "failure_reason": "gu_below_target(62.9<70);clearcoat_budget_exhausted"
     },
     {
       "region_id": "R4",
       "region_name": "door_right",
       "cell_id": "18",
-      "failure_reason": "gu_below_target(69.5<70)"
+      "failure_reason": "gu_below_target(69.0<70)"
+    },
+    {
+      "region_id": "R4",
+      "region_name": "door_right",
+      "cell_id": "19",
+      "failure_reason": "gu_below_target(70.0<70)"
     },
     {
       "region_id": "R4",
       "region_name": "door_right",
       "cell_id": "23",
-      "failure_reason": "gu_below_target(69.0<70)"
-    },
-    {
-      "region_id": "R5",
-      "region_name": "fender_left",
-      "cell_id": "1",
-      "failure_reason": "gu_below_target(69.9<70);clearcoat_budget_exhausted"
+      "failure_reason": "gu_below_target(69.4<70)"
     },
     {
       "region_id": "R5",
       "region_name": "fender_left",
       "cell_id": "3",
-      "failure_reason": "gu_below_target(65.9<70);clearcoat_budget_exhausted"
+      "failure_reason": "gu_below_target(65.8<70)"
     },
     {
       "region_id": "R5",
       "region_name": "fender_left",
       "cell_id": "4",
-      "failure_reason": "gu_below_target(66.9<70);clearcoat_budget_exhausted"
+      "failure_reason": "gu_below_target(66.5<70)"
     },
     {
       "region_id": "R5",
       "region_name": "fender_left",
       "cell_id": "6",
-      "failure_reason": "gu_below_target(68.6<70)"
+      "failure_reason": "gu_below_target(69.7<70)"
     },
     {
       "region_id": "R5",
       "region_name": "fender_left",
       "cell_id": "8",
-      "failure_reason": "gu_below_target(65.2<70)"
+      "failure_reason": "gu_below_target(67.1<70)"
     },
     {
       "region_id": "R5",
       "region_name": "fender_left",
       "cell_id": "12",
-      "failure_reason": "gu_below_target(67.8<70)"
+      "failure_reason": "gu_below_target(67.5<70)"
     },
     {
       "region_id": "R5",
       "region_name": "fender_left",
       "cell_id": "13",
-      "failure_reason": "gu_below_target(68.4<70)"
+      "failure_reason": "gu_below_target(68.7<70);ra_above_target(0.200>0.20)"
     },
     {
       "region_id": "R5",
       "region_name": "fender_left",
       "cell_id": "19",
-      "failure_reason": "gu_below_target(69.2<70)"
-    },
-    {
-      "region_id": "R5",
-      "region_name": "fender_left",
-      "cell_id": "21",
-      "failure_reason": "gu_below_target(69.1<70)"
+      "failure_reason": "gu_below_target(68.9<70)"
     },
     {
       "region_id": "R5",
       "region_name": "fender_left",
       "cell_id": "23",
-      "failure_reason": "gu_below_target(67.1<70)"
-    },
-    {
-      "region_id": "R6",
-      "region_name": "fender_right",
-      "cell_id": "4",
       "failure_reason": "gu_below_target(66.9<70)"
     },
     {
       "region_id": "R6",
       "region_name": "fender_right",
+      "cell_id": "4",
+      "failure_reason": "gu_below_target(69.1<70)"
+    },
+    {
+      "region_id": "R6",
+      "region_name": "fender_right",
       "cell_id": "5",
-      "failure_reason": "gu_below_target(65.4<70)"
+      "failure_reason": "gu_below_target(67.9<70)"
     },
     {
       "region_id": "R6",
       "region_name": "fender_right",
       "cell_id": "6",
-      "failure_reason": "gu_below_target(68.7<70)"
+      "failure_reason": "gu_below_target(69.8<70)"
     },
     {
       "region_id": "R6",
       "region_name": "fender_right",
       "cell_id": "9",
-      "failure_reason": "gu_below_target(66.2<70)"
+      "failure_reason": "gu_below_target(66.3<70)"
     },
     {
       "region_id": "R6",
       "region_name": "fender_right",
       "cell_id": "11",
-      "failure_reason": "gu_below_target(67.0<70)"
+      "failure_reason": "gu_below_target(69.0<70)"
     },
     {
       "region_id": "R6",
       "region_name": "fender_right",
       "cell_id": "12",
-      "failure_reason": "gu_below_target(67.7<70)"
+      "failure_reason": "gu_below_target(68.0<70);ra_above_target(0.201>0.20)"
     },
     {
       "region_id": "R6",
       "region_name": "fender_right",
       "cell_id": "13",
-      "failure_reason": "gu_below_target(62.2<70)"
+      "failure_reason": "gu_below_target(65.9<70);clearcoat_budget_exhausted"
     },
     {
       "region_id": "R6",
       "region_name": "fender_right",
       "cell_id": "17",
-      "failure_reason": "gu_below_target(66.2<70)"
-    },
-    {
-      "region_id": "R6",
-      "region_name": "fender_right",
-      "cell_id": "21",
-      "failure_reason": "gu_below_target(66.2<70)"
+      "failure_reason": "gu_below_target(69.8<70)"
     },
     {
       "region_id": "R6",
       "region_name": "fender_right",
       "cell_id": "22",
-      "failure_reason": "gu_below_target(65.9<70)"
+      "failure_reason": "gu_below_target(67.8<70)"
     }
   ],
   "synthetic_disclaimer": "모든 품질 수치는 논문 근거 모델의 SYNTHETIC 출력 — 실측 아님."

@@ -416,3 +416,19 @@ export 는 --recipe_json(top) + --recipe_json_side 로 실행 (README 갱신). �
 결과는 rl_vehicle_150_results_single_recipe.csv 로 보존. 원 시뮬도 top/side 목표힘을
 분리했으므로(contact.py 상수) 공정 관행과 일치. 다음 개선 여지: side 전용 BO 재탐색
 (평가셀을 side 로 구성), 새 recipe 분포로 정책 재학습 (05§9 outer iteration 2).
+
+### 9.12 side 전용 BO 재탐색 — ★ 97/150 (2026-08-29)
+
+9.11 후속: 평가셀을 전부 side 로 구성해 재탐색 (bo_outer_loop --posture side).
+후보 = **8.30 N / feed 6.90 / rpm 4648 / spacing 0.262 / 3 pass** — 힘은 포화 한계까지,
+"빠르게 3회" 전략 (구 side recipe 는 "느리게 2회"). 150셀 검증: side 63→**65**/100,
+전체 **95→97/150**, GU 평균 69.75→69.93, 평균 공정시간 493→461 s (빨라지기까지 함).
+
+공식 recipe 3종 체계 확정:
+  top  = outputs/bo_best_recipe_top.json   (6.69N/5.65/3259rpm/0.270/2pass)
+  side = outputs/bo_best_recipe_side.json  (8.30N/6.90/4648rpm/0.262/3pass)
+  (구 단일 recipe = bo_best_recipe.json — 학습 env process context 로 유지, 05§9
+   outer iteration 2 에서 정책 재학습 시 갱신 검토)
+
+미달 53건: GU 미달(깊은 손상 + 예산 한계) 중심 — 다음 수단은 방법 2
+(새 recipe 분포로 정책 재학습) 또는 공간 관측.

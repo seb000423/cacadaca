@@ -26,7 +26,7 @@ cd <repo>
 ~/isaacsim/python.sh learning/vehicle_export/export_vehicle_results.py \
     --checkpoint learning/rl/champion/model_terminal_ppo_it400.pt \
     --recipe_json      learning/polytwin/outputs/bo_best_recipe_top.json \
-    --recipe_json_side learning/polytwin/outputs/bo_best_recipe.json \
+    --recipe_json_side learning/polytwin/outputs/bo_best_recipe_side.json \
     --input  learning/vehicle_export/vehicle_150_cells.csv \
     --output learning/vehicle_export/rl_vehicle_150_results.csv \
     --workers 8

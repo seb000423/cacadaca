@@ -33,16 +33,27 @@ OUT_DIR = os.path.join(_REPO, "learning", "polytwin", "outputs")
 DEFAULT_CKPT = os.path.join(_REPO, "learning", "rl", "champion",
                             "model_terminal_ppo_it400.pt")
 
-# ── 평가 셀 6종 (고정 seed — 짝지은 비교). 차량 입력 분포를 대표: 얕음~깊음 + side 2 ──
-EVAL_CELLS = [
-    # (seed, scratch_um, cc_um, normal)   top 4 + side 2
-    (9101, 0.7, 44.0, (0.0, 0.0, 1.0)),
-    (9102, 1.1, 47.0, (0.0, 0.0, 1.0)),
-    (9103, 1.5, 41.0, (-0.10, 0.0, 0.995)),
-    (9104, 1.9, 43.0, (0.0, 0.0, 1.0)),
-    (9105, 0.9, 45.0, (0.0, 1.0, 0.0)),
-    (9106, 1.5, 42.0, (0.0, -1.0, 0.0)),
-]
+# ── 평가 셀 세트 (고정 seed — 짝지은 비교). --posture 로 선택 ──
+# ⚠ 9.11 교훈: 평가셀 자세 구성이 실배포와 다르면 BO 가 편향된 최적을 낸다.
+#   자세별 recipe 체계에서는 자세별로 따로 탐색하는 게 정합적.
+EVAL_SETS = {
+    "mixed": [   # (seed, scratch_um, cc_um, normal)  top 4 + side 2 — 9.11 에서 사용
+        (9101, 0.7, 44.0, (0.0, 0.0, 1.0)),
+        (9102, 1.1, 47.0, (0.0, 0.0, 1.0)),
+        (9103, 1.5, 41.0, (-0.10, 0.0, 0.995)),
+        (9104, 1.9, 43.0, (0.0, 0.0, 1.0)),
+        (9105, 0.9, 45.0, (0.0, 1.0, 0.0)),
+        (9106, 1.5, 42.0, (0.0, -1.0, 0.0)),
+    ],
+    "side": [    # 전부 수직면 — side 전용 recipe 탐색 (달성힘 ~2.8N 포화 영역)
+        (9201, 0.6, 44.0, (0.0, 1.0, 0.0)),
+        (9202, 0.9, 47.0, (0.0, -1.0, 0.0)),
+        (9203, 1.2, 41.0, (0.0, 1.0, 0.0)),
+        (9204, 1.5, 43.0, (0.0, -1.0, 0.0)),
+        (9205, 1.8, 45.0, (0.0, 1.0, 0.0)),
+        (9206, 1.4, 42.0, (0.15, -0.97, 0.19)),
+    ],
+}
 
 def _row(seed, scr, cc, n):
     return {"region_id": "EV", "region_name": "bo_eval", "cell_id": seed,
@@ -50,6 +61,8 @@ def _row(seed, scr, cc, n):
             "normal_x": n[0], "normal_y": n[1], "normal_z": n[2],
             "init_ra_um": 0.08, "init_scratch_um": scr, "init_clearcoat_um": cc,
             "surface_seed": seed}
+
+EVAL_CELLS = EVAL_SETS["mixed"]
 
 _G = {}
 
@@ -97,7 +110,12 @@ def main():
     ap.add_argument("--n_iter", type=int, default=18)
     ap.add_argument("--workers", type=int, default=6)
     ap.add_argument("--seed", type=int, default=11)
+    ap.add_argument("--posture", choices=list(EVAL_SETS), default="mixed")
+    ap.add_argument("--baseline_json", default=os.path.join(OUT_DIR, "bo_best_recipe.json"),
+                    help="비교 기준 recipe (side 탐색 시 side 현행)")
     args = ap.parse_args()
+    global EVAL_CELLS
+    EVAL_CELLS = EVAL_SETS[args.posture]
 
     import multiprocessing as mp
     from scipy.stats import qmc
@@ -106,7 +124,7 @@ def main():
     ev = make_evaluator(pool)
 
     # 현행 recipe 를 기준점으로 반드시 포함 (개선 여부를 같은 평가자로 직접 비교)
-    with open(os.path.join(OUT_DIR, "bo_best_recipe.json"), encoding="utf-8") as f:
+    with open(args.baseline_json, encoding="utf-8") as f:
         cur = json.load(f)
     x_cur = np.array([cur["target_contact_force_n"], cur["feed_speed_mm_s"],
                       cur["rpm"], cur["step_over_spacing_ratio"], cur["n_passes"]])
@@ -146,7 +164,7 @@ def main():
            "current_recipe_result": dataset[0], "best": best, "dataset": dataset,
            "note": "평가자 = 챔피언 정책 + 어드미턴스 + 재폴리싱 (05 문서 9장 outer loop). "
                    "SYNTHETIC — 논문 기반 트윈 출력."}
-    path = os.path.join(OUT_DIR, "bo_outer_dataset.json")
+    path = os.path.join(OUT_DIR, f"bo_outer_dataset_{args.posture}.json")
     with open(path, "w", encoding="utf-8") as f:
         json.dump(out, f, ensure_ascii=False, indent=2, default=str)
     print(f"\n현행 recipe cost {dataset[0]['cost']:.3f} (pass {dataset[0]['n_pass']}/6)")
