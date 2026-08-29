@@ -49,7 +49,7 @@ from learning.rl.env.contact import VirtualPadContact    # noqa: E402
 
 RECIPE_JSON = os.path.join(_REPO, "learning", "polytwin", "outputs", "bo_best_recipe.json")
 DEFAULT_CKPT = os.path.join(_REPO, "learning", "rl", "champion",
-                            "model_terminal_ppo_it400.pt")   # 2026-08-28 챔피언 교체
+                            "model_terminal_ppo_14ch_it800.pt")   # 2026-08-29 챔피언 (WORKLOG 9.16)
 
 
 def policy_label(ckpt_path: str) -> tuple:
@@ -144,7 +144,7 @@ def load_bc_policy(ckpt_path: str, obs_dim: int | None = None, act_dim: int = 2)
             if k.endswith("mlp.0.weight"):
                 obs_dim = int(v.shape[1])
                 break
-        assert obs_dim in (11, 14), f"관측 차원 감지 실패: {obs_dim}"
+        assert obs_dim in (11, 14, 15, 18), f"관측 차원 감지 실패: {obs_dim}"
     dummy = TensorDict({"policy": torch.zeros(1, obs_dim)}, batch_size=[1])
     actor = MLPModel(dummy, {"actor": ["policy"]}, "actor", act_dim,
                      hidden_dims=[128, 128], activation="elu", obs_normalization=True,
@@ -208,6 +208,27 @@ class _Path:
                 return (p0[0] + (p1[0] - p0[0]) * t, p0[1] + (p1[1] - p0[1]) * t)
             a -= L
         return self.pts[-1][1]
+
+
+def spatial_lookahead(st, path, arc: float):
+    """env._lookahead_stats 와 동일 정의 — near/far 구간 잔여 scratch mean/max."""
+    R = 0.5 * PC.PAD_RADIUS_M
+    res = st.resolution_m
+    out = []
+    for d0, d1 in ((0.0, PC.PAD_RADIUS_M), (PC.PAD_RADIUS_M, 3.0 * PC.PAD_RADIUS_M)):
+        means, maxs = [], []
+        for t in range(3):
+            a = min(arc + d0 + (d1 - d0) * (t + 0.5) / 3.0, path.total)
+            uv = path.pos_at(a)
+            i0 = max(int((uv[0] - R) / res), 0); i1 = min(int((uv[0] + R) / res) + 1, st.shape[0])
+            j0 = max(int((uv[1] - R) / res), 0); j1 = min(int((uv[1] + R) / res) + 1, st.shape[1])
+            if i0 >= i1 or j0 >= j1:
+                means.append(0.0); maxs.append(0.0); continue
+            sl = (slice(i0, i1), slice(j0, j1))
+            rem = np.clip(st.initial_scratch_depth_um[sl] - st.cumulative_removal_um[sl], 0.0, None)
+            means.append(float(rem.mean())); maxs.append(float(rem.max()))
+        out += [float(np.mean(means)), float(np.max(maxs))]
+    return out
 
 
 def footprint_stats(st, uv, clearcoat_limit: float):
@@ -311,11 +332,19 @@ def run_cell_episode(row: dict, recipe: Recipe, policy, cal, max_repolish: int =
                 obs_scr_mean / 2.0, obs_scr_max / 2.0,
                 obs_removal / 5.0, obs_cc_margin / 20.0,
             ]
-            if getattr(policy, "obs_dim", 11) == 14:   # 열 통합판 (polish_env 관측과 동일 정규화)
-                core += [(obs_temp - PC.AMBIENT_TEMPERATURE_C) / 40.0,
+            # 채널 순서는 polish_env 와 동일: core(0-8), prev_action(9-10),
+            # thermal(+3, use_thermal_obs), spatial(+4, use_spatial_obs).
+            # ⚠ 9.14/9.15 의 첫 판정은 thermal 을 prev 앞에 넣은 배선 오류로 오염 — 수정판.
+            od = getattr(policy, "obs_dim", 11)
+            tail = []
+            if od in (14, 18):
+                tail += [(obs_temp - PC.AMBIENT_TEMPERATURE_C) / 40.0,
                          (obs_peak - PC.AMBIENT_TEMPERATURE_C) / 60.0,
                          obs_tdmg / PC.THERMAL_DAMAGE_MAX]
-            obs = np.array(core + [prev_a[0], prev_a[1]], dtype=np.float32)
+            if od in (15, 18):
+                la = spatial_lookahead(st, path, arc)
+                tail += [v / 2.0 for v in la]
+            obs = np.array(core + [prev_a[0], prev_a[1]] + tail, dtype=np.float32)
             # 직전 스텝의 명령 기준 오차/이송 (polish_env 관측과 동일한 시점 정렬)
             cmd_force_prev = recipe.target_contact_force_n * (1.0 + prev_a[0] * FORCE_RATIO_LIMIT)
             cmd_feed_prev = feed0 * (1.0 + prev_a[1] * FEED_RATIO_LIMIT)

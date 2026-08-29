@@ -164,6 +164,32 @@ class PolishEnv(DirectRLEnv):
                 float(s.peak_temperature_c[sl].max()),
                 float(s.thermal_damage_proxy[sl].mean()))
 
+    def _remaining_crop(self, i: int, uv, R: float):
+        """uv 주변 반경 R crop 의 잔여 scratch (mean, max) — lookahead 용 경량 판."""
+        s = self._surfaces[i]
+        res = s.resolution_m
+        i0 = max(int((uv[0] - R) / res), 0); i1 = min(int((uv[0] + R) / res) + 1, s.shape[0])
+        j0 = max(int((uv[1] - R) / res), 0); j1 = min(int((uv[1] + R) / res) + 1, s.shape[1])
+        if i0 >= i1 or j0 >= j1:
+            return 0.0, 0.0
+        sl = (slice(i0, i1), slice(j0, j1))
+        rem = np.clip(s.initial_scratch_depth_um[sl] - s.cumulative_removal_um[sl], 0.0, None)
+        return float(rem.mean()), float(rem.max())
+
+    def _lookahead_stats(self, i: int, arc: float):
+        """경로 진행 방향 예견 (공간 관측 — WORKLOG 9.16): near(0~1 패드반경)/far(1~3 반경)
+        구간을 각 3점 샘플해 잔여 scratch mean/max. 정책이 감속을 선제적으로 걸 수 있게."""
+        R = 0.5 * PC.PAD_RADIUS_M
+        out = []
+        for d0, d1 in ((0.0, PC.PAD_RADIUS_M), (PC.PAD_RADIUS_M, 3.0 * PC.PAD_RADIUS_M)):
+            means, maxs = [], []
+            for t in range(3):
+                a = min(arc + d0 + (d1 - d0) * (t + 0.5) / 3.0, self._path_len)
+                m, mx = self._remaining_crop(i, self._pos_at_arc(a), R)
+                means.append(m); maxs.append(mx)
+            out += [float(np.mean(means)), float(np.max(maxs))]
+        return out          # [near_mean, near_max, far_mean, far_max]
+
     def _evaluate_quality(self, i: int) -> dict:
         """표면 i 의 품질 요약 (SYNTHETIC — 논문 기반 GU proxy). 전/후 공용."""
         q = self._model.evaluate(self._surfaces[i])
@@ -265,10 +291,15 @@ class PolishEnv(DirectRLEnv):
             st[:, 2:3] / 5.0,                        # 국소 누적 제거 [μm]
             st[:, 3:4] / 20.0,                       # clearcoat 안전여유 [μm]
             self._prev_action,
+        ] + ([
             (st[:, 4:5] - PC.AMBIENT_TEMPERATURE_C) / 40.0,  # 국소 현재온도 상승
             (st[:, 5:6] - PC.AMBIENT_TEMPERATURE_C) / 60.0,  # 국소 최고온도 상승
             st[:, 6:7] / PC.THERMAL_DAMAGE_MAX,               # 누적 열손상
-        ], dim=1)
+        ] if self.cfg.use_thermal_obs else []) + ([
+            torch.as_tensor(np.array(
+                [self._lookahead_stats(i, float(arcs[i])) for i in range(E)],
+                dtype=np.float32), device=self.device) / 2.0,  # lookahead 잔여 scratch /2
+        ] if self.cfg.use_spatial_obs else []), dim=1)
         self._prev_force = self._force_mean.clone()
         return {"policy": obs}
 

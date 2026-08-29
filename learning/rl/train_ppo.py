@@ -31,6 +31,9 @@ parser.add_argument("--desired_kl", type=float, default=None,
 parser.add_argument("--gamma", type=float, default=None,
                     help="할인율 재정의. 종말 보상은 에피소드(~4800스텝) 끝에만 나오므로 "
                          "0.99 로는 초반 상태에 신호가 닿지 않는다 (0.99^4800≈1e-21) → 0.9995 권장")
+parser.add_argument("--obs", default="thermal",
+                    choices=["basic", "thermal", "spatial", "full"],
+                    help="관측 프로파일 (polish_env_cfg.apply_obs_profile)")
 parser.add_argument("--side_ratio", type=float, default=0.0,
                     help="side(수직면) 접촉 env 비율 — side 학습 시 0.5")
 parser.add_argument("--freeze_actor_iters", type=int, default=0,
@@ -49,7 +52,7 @@ from importlib import metadata  # noqa: E402
 from isaaclab_rl.rsl_rl import RslRlVecEnvWrapper, handle_deprecated_rsl_rl_cfg  # noqa: E402
 
 from learning.rl.env.polish_env import PolishEnv  # noqa: E402
-from learning.rl.env.polish_env_cfg import PolishEnvCfg  # noqa: E402
+from learning.rl.env.polish_env_cfg import PolishEnvCfg, apply_obs_profile  # noqa: E402
 from learning.rl.ppo_cfg import PolishPPORunnerCfg  # noqa: E402
 
 
@@ -58,6 +61,7 @@ def main():
     env_cfg.scene.num_envs = args.num_envs
     env_cfg.seed = args.seed
     env_cfg.side_env_ratio = args.side_ratio
+    apply_obs_profile(env_cfg, args.obs)
     env = PolishEnv(env_cfg, render_mode=None)
 
     agent_cfg = PolishPPORunnerCfg()

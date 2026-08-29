@@ -34,9 +34,14 @@ class PolishEnvCfg(DirectRLEnvCfg):
     action_space = 2                    # 임피던스형 잔차 [Δforce_ratio, Δfeed_ratio]
     # ⚠ 04 문서 7장의 두 잔차안 중 임피던스형 채택 — 기존 프로젝트 잔차 개념(힘·속도)과
     #   일치시키기 위함. 기하형(법선offset/tilt)은 로봇 팔 증분에서 재검토.
-    # 기존 11채널 + 국소 현재온도/최고온도/열손상 3채널.
-    # 구 11차원 checkpoint는 새 BC/PPO에 resume할 수 없으며 평가 시 앞 11채널만 전달한다.
+    # 관측 구성 (2026-08-29 공간 관측 실험 — WORKLOG 9.16):
+    #   기본 11ch + use_thermal_obs(+3: 국소 현재/최고온도·열손상) + use_spatial_obs(+4:
+    #   경로 lookahead 잔여 scratch near/far mean·max). observation_space 는 학습 스크립트가
+    #   플래그에 맞춰 셋팅한다 (11/14/15/18 — export 는 차원으로 구성을 식별).
+    # 구 11차원 checkpoint는 새 obs env에 resume할 수 없으며 평가 시 앞 11채널만 전달한다.
     observation_space = 14
+    use_thermal_obs: bool = True
+    use_spatial_obs: bool = False
     state_space = 0
 
     # ── simulation ── (강체 동역학 없음 — sim 은 시간축·씬 관리·향후 로봇용)
@@ -105,3 +110,20 @@ class PolishEnvCfg(DirectRLEnvCfg):
     # 판정 임계값 (literature-derived project target — vehicle_export 와 동일)
     t_ra_pass_max_um: float = 0.20
     t_rz_pass_max_um: float = 2.0
+
+
+def apply_obs_profile(env_cfg, profile: str):
+    """관측 프로파일 → cfg 플래그·차원·열 페널티 (변수 통제 — WORKLOG 9.16).
+
+    basic/spatial 은 열 페널티도 0 (챔피언 학습 조건과 동일 보상) — 열 모델 자체(q_thermal
+    판정·온도장)는 항상 켜져 있고, '정책이 열을 보고/벌 받는지'만 바꾼다.
+    """
+    env_cfg.use_thermal_obs = profile in ("thermal", "full")
+    env_cfg.use_spatial_obs = profile in ("spatial", "full")
+    env_cfg.observation_space = 11 + 3 * env_cfg.use_thermal_obs + 4 * env_cfg.use_spatial_obs
+    if profile in ("basic", "spatial"):
+        env_cfg.w_thermal_damage = 0.0
+        env_cfg.t_thermal_damage = 0.0
+        env_cfg.t_overheat = 0.0
+    print(f"[obs_profile] {profile}: obs={env_cfg.observation_space}ch "
+          f"thermal_obs={env_cfg.use_thermal_obs} spatial={env_cfg.use_spatial_obs}")

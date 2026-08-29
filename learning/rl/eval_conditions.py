@@ -24,6 +24,9 @@ parser.add_argument("--conditions", type=str, required=True,
                     help="쉼표구분 name=ckpt (ckpt 비우면 baseline)")
 parser.add_argument("--num_envs", type=int, default=8)
 parser.add_argument("--episodes", type=int, default=2)
+parser.add_argument("--obs", default="thermal",
+                    choices=["basic", "thermal", "spatial", "full"],
+                    help="관측 프로파일 (polish_env_cfg.apply_obs_profile)")
 parser.add_argument("--side_ratio", type=float, default=0.0)
 parser.add_argument("--out", type=str,
                     default=os.path.join(_REPO_ROOT, "learning", "rl", "results",
@@ -41,7 +44,7 @@ from rsl_rl.runners import OnPolicyRunner  # noqa: E402
 from isaaclab_rl.rsl_rl import RslRlVecEnvWrapper, handle_deprecated_rsl_rl_cfg  # noqa: E402
 
 from learning.rl.env.polish_env import PolishEnv  # noqa: E402
-from learning.rl.env.polish_env_cfg import PolishEnvCfg  # noqa: E402
+from learning.rl.env.polish_env_cfg import PolishEnvCfg, apply_obs_profile  # noqa: E402
 from learning.rl.ppo_cfg import PolishPPORunnerCfg  # noqa: E402
 
 RA_MAX, RZ_MAX, GU_MIN = 0.20, 2.0, 70.0
@@ -113,6 +116,7 @@ def main():
     env_cfg = PolishEnvCfg()
     env_cfg.scene.num_envs = args.num_envs
     env_cfg.side_env_ratio = args.side_ratio
+    apply_obs_profile(env_cfg, args.obs)
     env = PolishEnv(env_cfg, render_mode=None)
     wrapped = RslRlVecEnvWrapper(env, clip_actions=1.0)
     agent_cfg = handle_deprecated_rsl_rl_cfg(PolishPPORunnerCfg(),
