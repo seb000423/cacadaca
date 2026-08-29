@@ -432,3 +432,22 @@ export 는 --recipe_json(top) + --recipe_json_side 로 실행 (README 갱신). �
 
 미달 53건: GU 미달(깊은 손상 + 예산 한계) 중심 — 다음 수단은 방법 2
 (새 recipe 분포로 정책 재학습) 또는 공간 관측.
+
+### 9.13 yj(lr_yj 브랜치) 접촉·열·로봇 작업 통합 (2026-08-29)
+
+onlyho12-sketch/cacadaca 의 lr_yj 브랜치(작성자 yj, 우리 어젯밤 스냅샷 기반)를 수동 통합
+(이력 재작성으로 공통 조상이 없어 git merge 불가 — 파일 단위 병합).
+
+**투 트랙 구조로 편입**:
+- 공유 코어 (병합): polytwin 열 모델(온도장·열손상·q_thermal GU 항, test_temperature 13/13),
+  polish_env 14ch 관측(+국소 온도/최고온도/열손상) + 열 dense/terminal 페널티 + _quality_uv 훅.
+  우리 side_env_ratio·t_cc_use 는 재적용해 보존. Gate2 통합판 13/13.
+- 해석식 트랙 (기존 이름 유지): bootstrap_bc/train_ppo/eval_* — 빠른 실험용
+- 로봇 트랙 (신규 *_robot.py): PhysX 실접촉 RobotPolishEnv + 검증 게이트
+  (test_pad_contact_force) + repolish_eval 상태기계 + rl/robot·rl/thermal 챔피언/결과
+- gloss_test/ (yj 검사 파이프라인·인수인계서) 포함. 대형 USD 바이너리·대시보드 자산은 제외.
+
+**GU 스케일 3차 변경 주의**: q_thermal 항으로 GU 정의가 또 바뀜 → 공식 150셀
+**97 → 96/150** (열 반영 스케일). 구 수치와 직접 비교 금지 (35μm 때와 동일한 종류의 이동).
+⚠ 구 11ch 체크포인트는 14ch env 에 resume 불가 — 평가 시 앞 11채널 전달 (yj 설계).
+다음: 14ch 관측으로 BC→종말 PPO 재학습 (열·side·cc효율이 처음으로 한 판에 모임).

@@ -73,6 +73,12 @@ def summarize(state) -> dict:
             state.cumulative_removal_um[state.healthy_mask] - C.HEALTHY_ALLOWANCE_UM,
             0.0, None).mean()) if state.healthy_mask.any() else 0.0,
         "heat_proxy_peak": float(state.heat_risk_proxy.max()),
+        "temperature_mean_c": float(state.temperature_c.mean()),
+        "temperature_peak_c": float(state.peak_temperature_c.max()),
+        "friction_heat_flux_peak_w_m2": float(state.friction_heat_flux_w_m2.max()),
+        "temperature_removal_factor_mean": float(state.temperature_removal_factor.mean()),
+        "thermal_damage_mean": float(state.thermal_damage_proxy.mean()),
+        "thermal_damage_peak": float(state.thermal_damage_proxy.max()),
         "coverage_ratio": float(
             (state.cumulative_removal_um >= C.MINIMUM_EFFECTIVE_REMOVAL_UM).mean()),
     }

@@ -15,7 +15,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-MODEL_VERSION = "literature_polishing_v1"
+MODEL_VERSION = "literature_polishing_thermal_v2"
 
 # ── 패드 (고정. 프로젝트 전 과정에서 바꾸지 않는다) ────────────────────────
 PAD_DIAMETER_M = 0.110          # L-DERIVED  현행 v5 POLISHING_DISK_RADIUS=0.055 의 직경
@@ -82,6 +82,35 @@ HEAT_GAIN = 1e-6                # PT-DESIGN  임의 단위
 COOLING_TIME_CONSTANT_S = 20.0  # PT-DESIGN
 HEAT_PROXY_MAX = 10.0           # PT-DESIGN
 
+# ── Literature-based synthetic thermal model (09 document) ──────────────────────
+# PhysX does not solve clearcoat contact heat transfer.  These parameters form an
+# explicit synthetic material profile; they must not be presented as measured
+# temperatures for a Toyota/BMW coating.
+THERMAL_MODEL_VERSION = "literature_synthetic_thermal_v1"
+THERMAL_MATERIAL_PROFILE_ID = "generic_automotive_clearcoat_transfer_v1"
+AMBIENT_TEMPERATURE_C = 23.0
+INITIAL_TEMPERATURE_C = 23.0
+FRICTION_COEFFICIENT = 0.35             # PT-DESIGN: pad/compound/clearcoat effective mu
+HEAT_PARTITION_TO_COATING = 0.35        # PT-DESIGN: frictional heat entering coating stack
+EFFECTIVE_AREAL_HEAT_CAPACITY_J_M2K = 2500.0  # PT-DESIGN: lumped coating+substrate capacity
+THERMAL_COOLING_TIME_CONSTANT_S = 20.0  # PT-DESIGN: lumped convection/conduction cooling
+TEMPERATURE_MIN_C = -50.0               # numerical guard, not an operating limit
+TEMPERATURE_MAX_C = 200.0               # numerical guard, not an operating limit
+
+# Piecewise interpolation is used because polymer wear need not increase
+# monotonically with temperature (09 document section 7).  The points are a
+# PT-DESIGN transfer profile, not direct um/pass data from a paper.
+TEMPERATURE_FACTOR_POINTS_C = (23.0, 40.0, 60.0, 80.0)
+REMOVAL_TEMPERATURE_FACTORS = (1.00, 1.12, 1.05, 1.25)
+
+# Generic acrylic/melamine clearcoat transfer profile.  Tg~40 C is tied to the
+# cited Trezona specimen only; it is not asserted for every vehicle clearcoat.
+THERMAL_DAMAGE_ONSET_C = 35.0           # PT-DESIGN onset for the selected profile
+THERMAL_PROFILE_TG_C = 40.0             # L-TRANSFER from the selected paper specimen
+THERMAL_DAMAGE_TIME_SCALE_S = 120.0     # PT-DESIGN degree-exposure normalization
+THERMAL_DAMAGE_MAX = 10.0
+THERMAL_GLOSS_DAMAGE_SCALE = 1.0        # PT-DESIGN q_thermal exponential scale
+
 # ── 안전·품질 한계 (02 문서 12장) — 전부 PT-DESIGN. 논문 규격 아님 ────────
 CLEARCOAT_SAFETY_LIMIT_UM = 35.0      # 2026-08-28 차량 검사 시스템 기준으로 통일 (구 30.0)
 #   ⚠ BO recipe(recipe_00020) 는 30 제약으로 탐색됐으나 결과 clearcoat_min 38.38 ≥ 35 라
@@ -136,6 +165,20 @@ class PolishingModelConfig:
     heat_gain: float = HEAT_GAIN
     cooling_time_constant_s: float = COOLING_TIME_CONSTANT_S
     heat_proxy_max: float = HEAT_PROXY_MAX
+    thermal_enabled: bool = True
+    thermal_model_version: str = THERMAL_MODEL_VERSION
+    thermal_material_profile_id: str = THERMAL_MATERIAL_PROFILE_ID
+    ambient_temperature_c: float = AMBIENT_TEMPERATURE_C
+    friction_coefficient: float = FRICTION_COEFFICIENT
+    heat_partition_to_coating: float = HEAT_PARTITION_TO_COATING
+    effective_areal_heat_capacity_j_m2k: float = EFFECTIVE_AREAL_HEAT_CAPACITY_J_M2K
+    thermal_cooling_time_constant_s: float = THERMAL_COOLING_TIME_CONSTANT_S
+    temperature_factor_points_c: tuple = TEMPERATURE_FACTOR_POINTS_C
+    removal_temperature_factors: tuple = REMOVAL_TEMPERATURE_FACTORS
+    thermal_damage_onset_c: float = THERMAL_DAMAGE_ONSET_C
+    thermal_profile_tg_c: float = THERMAL_PROFILE_TG_C
+    thermal_damage_time_scale_s: float = THERMAL_DAMAGE_TIME_SCALE_S
+    thermal_damage_max: float = THERMAL_DAMAGE_MAX
     minimum_effective_removal_um: float = MINIMUM_EFFECTIVE_REMOVAL_UM
     pass_debounce_s: float = PASS_DEBOUNCE_S
     tags: dict = field(default_factory=lambda: {
@@ -149,4 +192,12 @@ class PolishingModelConfig:
         "base_removal_fraction": "PT-DESIGN",
         "selective_removal_fraction": "PT-DESIGN",
         "heat_gain": "PT-DESIGN",
+        "thermal_model": "L-TRANSFER+PT-DESIGN",
+        "thermal_enabled": "PT-DESIGN",
+        "friction_coefficient": "PT-DESIGN",
+        "heat_partition_to_coating": "PT-DESIGN",
+        "effective_areal_heat_capacity_j_m2k": "PT-DESIGN",
+        "thermal_cooling_time_constant_s": "PT-DESIGN",
+        "temperature_factor_profile": "L-TRANSFER+PT-DESIGN",
+        "thermal_damage_profile": "L-TRANSFER+PT-DESIGN",
     })

@@ -34,7 +34,9 @@ class PolishEnvCfg(DirectRLEnvCfg):
     action_space = 2                    # 임피던스형 잔차 [Δforce_ratio, Δfeed_ratio]
     # ⚠ 04 문서 7장의 두 잔차안 중 임피던스형 채택 — 기존 프로젝트 잔차 개념(힘·속도)과
     #   일치시키기 위함. 기하형(법선offset/tilt)은 로봇 팔 증분에서 재검토.
-    observation_space = 11
+    # 기존 11채널 + 국소 현재온도/최고온도/열손상 3채널.
+    # 구 11차원 checkpoint는 새 BC/PPO에 resume할 수 없으며 평가 시 앞 11채널만 전달한다.
+    observation_space = 14
     state_space = 0
 
     # ── simulation ── (강체 동역학 없음 — sim 은 시간축·씬 관리·향후 로봇용)
@@ -45,12 +47,9 @@ class PolishEnvCfg(DirectRLEnvCfg):
     # BO export 를 그대로 읽는다. 없으면 reference 기준 recipe 로 폴백.
     recipe_json_path: str = os.path.join(_POLYTWIN_OUT, "bo_best_recipe.json")
 
-    # ── 작업면 자세 (2026-08-29 side 학습) ──
-    # env 중 이 비율만큼을 side(수직면 — 도어/펜더) 접촉 상수로 돌린다.
-    # side 는 어드미턴스 정적 상한이 ~2.8 N 이라 힘이 포화된다 — 차량 150셀에서
-    # side 근소 미달 12건의 원인. 관측은 11차원 유지: 명령-달성 힘의 지속 오차가
-    # 관측(힘 오차 채널)에 그대로 드러나 정책이 자세를 추론할 수 있다.
-    side_env_ratio: float = 0.0          # 0 = 기존 동작(top 전용). 학습 시 0.5 권장
+    # ── 작업면 자세 (2026-08-29 side 학습 — WORKLOG 9.8) ──
+    # env 중 이 비율만큼을 side(수직면) 접촉 상수로 돌린다. 관측은 힘 오차 채널로 자세 추론.
+    side_env_ratio: float = 0.0          # 0 = top 전용. side 혼합 학습 시 0.5
 
     # ── 표면 patch ──
     patch_size_m: tuple = (0.12, 0.12)   # 스모크 규모. 본 학습에서 0.20 으로 확대
@@ -77,6 +76,10 @@ class PolishEnvCfg(DirectRLEnvCfg):
     w_healthy_over: float = 250.0        # 정상부 허용치 초과 셀당 평균 [μm]당
     w_action_rate: float = 0.05
     w_time: float = 0.01
+    w_thermal_damage: float = 1000.0  # 열손상 증분(proxy/step) 페널티, PT-DESIGN
+
+    # 합성 열 안전기준. 특정 실제 차량의 검증된 온도 규격이 아니다.
+    thermal_hard_limit_c: float = 80.0
 
     # ── 종말 보상 — "논문 기반 최종 GU proxy 종말 보상" ──────────────────
     # ⚠ 실측 GU 가 없는 프로젝트다. 이것은 실제 GU 가 아니라 **논문 기반 디지털 트윈의
@@ -93,14 +96,12 @@ class PolishEnvCfg(DirectRLEnvCfg):
     t_rz: float = 50.0            # × (rz_before − rz_after)/2.0 [μm]
     t_pass_bonus: float = 500.0   # 판정 5종 전부 통과 시 (GU≥70·Ra≤0.20·Rz≤2.0·CC≥35·scratch 감소)
     t_cc_fail: float = 1500.0     # 잔여 clearcoat 최소 < 안전기준(35 μm) — 큰 실패 페널티.
+    # clearcoat 효율 항 (WORKLOG 9.9 — 단독으론 기각됐으나 병합 보존, 기본 30):
+    # 에피소드가 소모한 최소-잔여량 [μm]당 벌점. GU 항보다 작게 — '안 깎기' 퇴화 주의.
+    t_cc_use: float = 30.0
+    t_thermal_damage: float = 1000.0  # × 최종 thermal_damage_peak
+    t_overheat: float = 500.0         # × max(0, peak_C-Tg_C)/(80-Tg), PT-DESIGN
     #   GU 70 만 노리고 clearcoat 를 과도하게 깎는 정책을 막는 항 — pass_bonus(500)보다 크다.
-    # clearcoat 효율 항 (2026-08-29, WORKLOG 9.8): 이진 페널티만으론 "안 뚫리면 공짜"라
-    #   비효율 연마(과연마 가드 발동 19건)와 재폴리싱 예산 소진(18건)을 못 막는다.
-    #   에피소드가 소모한 최소-잔여량 [μm]당 벌점 — 같은 GU 를 더 적은 제거로 달성하도록.
-    #   ⚠ "남긴 여유 보상"이 아니라 "소모 벌점"인 이유: 초기 두께(40~50)가 셀마다 달라
-    #     전자는 정책과 무관한 노이즈를 return 에 섞는다. 크기는 GU 항(200~300)보다 작게 —
-    #     너무 크면 "안 깎기"로 퇴화한다 (1차 학습의 '덜 문지르기' 재발 위험).
-    t_cc_use: float = 30.0        # × (cc_min_before − cc_min_after) [μm]
     # 판정 임계값 (literature-derived project target — vehicle_export 와 동일)
     t_ra_pass_max_um: float = 0.20
     t_rz_pass_max_um: float = 2.0

@@ -35,6 +35,75 @@ class LiteraturePolishingModel:
                 "먼저 수행할 것 (02 문서 7장). 임의값 확정 금지.")
         self.cfg = cfg
 
+    def _cool_temperature(self, state: SurfaceState, dt_s: float) -> None:
+        """Cool every cell exactly for a first-order lumped thermal model."""
+        tau = max(self.cfg.thermal_cooling_time_constant_s, 1e-9)
+        decay = np.exp(-dt_s / tau)
+        ambient = self.cfg.ambient_temperature_c
+        state.temperature_c[:] = ambient + (state.temperature_c - ambient) * decay
+        np.clip(state.temperature_c, C.TEMPERATURE_MIN_C, C.TEMPERATURE_MAX_C,
+                out=state.temperature_c)
+        state.friction_heat_flux_w_m2.fill(0.0)
+
+    def _update_contact_temperature(self, state: SurfaceState, sl, shape01,
+                                    pressure_pa: float, relative_speed: float,
+                                    dt_s: float) -> tuple[np.ndarray, float]:
+        """Update synthetic temperature and return its step-average in the footprint.
+
+        q = mu*P*V follows the moving heat-source energy structure.  Heat partition,
+        areal heat capacity and cooling are explicit PT-DESIGN transfer parameters.
+        """
+        cfg = self.cfg
+        if not cfg.thermal_enabled:
+            state.temperature_removal_factor[sl] = 1.0
+            state.friction_heat_flux_w_m2.fill(0.0)
+            return np.ones_like(shape01), 0.0
+        tau = max(cfg.thermal_cooling_time_constant_s, 1e-9)
+        decay = np.exp(-dt_s / tau)
+        ambient = cfg.ambient_temperature_c
+        old_local = state.temperature_c[sl].copy()
+
+        # First cool the complete coating map so cells outside the footprint also cool.
+        self._cool_temperature(state, dt_s)
+
+        heat_flux = cfg.friction_coefficient * pressure_pa * relative_speed * shape01
+        heating_rate = (cfg.heat_partition_to_coating * heat_flux
+                        / max(cfg.effective_areal_heat_capacity_j_m2k, 1e-9))
+        equilibrium_rise = heating_rate * tau
+        end_local = (ambient + (old_local - ambient) * decay
+                     + equilibrium_rise * (1.0 - decay))
+        state.temperature_c[sl] = np.clip(
+            end_local, C.TEMPERATURE_MIN_C, C.TEMPERATURE_MAX_C)
+        state.friction_heat_flux_w_m2[sl] = heat_flux
+        state.peak_temperature_c[sl] = np.maximum(
+            state.peak_temperature_c[sl], state.temperature_c[sl])
+
+        # Exact average temperature over dt for constant heat input.
+        if dt_s > 0.0:
+            mean_decay = tau * (1.0 - decay) / dt_s
+            mean_local = (ambient + equilibrium_rise
+                          + (old_local - ambient - equilibrium_rise) * mean_decay)
+        else:
+            mean_local = old_local
+        factor = np.interp(
+            mean_local,
+            np.asarray(cfg.temperature_factor_points_c, dtype=float),
+            np.asarray(cfg.removal_temperature_factors, dtype=float),
+        )
+        state.temperature_removal_factor[sl] = factor
+
+        onset = cfg.thermal_damage_onset_c
+        span = max(cfg.thermal_profile_tg_c - onset, 1e-6)
+        exposure = np.clip((mean_local - onset) / span, 0.0, None)
+        damage_before = state.thermal_damage_proxy[sl].copy()
+        state.thermal_damage_proxy[sl] += (
+            exposure * dt_s / max(cfg.thermal_damage_time_scale_s, 1e-9) * shape01)
+        np.clip(state.thermal_damage_proxy, 0.0, cfg.thermal_damage_max,
+                out=state.thermal_damage_proxy)
+        damage_delta_mean = float(
+            (state.thermal_damage_proxy[sl] - damage_before).mean())
+        return factor, damage_delta_mean
+
     # ── 4장: footprint ────────────────────────────────────────────────────
     # ⚠ 문서 4장의 weight=raw/sum(raw) (합=1) 를 그대로 깊이에 곱하면 제거 "깊이"가
     #   격자 셀 수에 반비례해 해상도 의존이 된다 (단위시험 10 위반). 깊이는 물리량이므로
@@ -113,19 +182,23 @@ class LiteraturePolishingModel:
                                       / self.cfg.cooling_time_constant_s) * dt_s
             np.clip(state.heat_risk_proxy, 0.0, self.cfg.heat_proxy_max,
                     out=state.heat_risk_proxy)
+            self._cool_temperature(state, dt_s)
             return {"mean_removal_delta_um": 0.0}
 
         sl, shape01, w_dist, area_m2 = self._footprint(state, contact.pad_center_uv_m)
         if sl is None:
+            self._cool_temperature(state, dt_s)
             return {"mean_removal_delta_um": 0.0}
 
         delta, pressure_pa, rel_speed = self._delta_removal_um(
             contact, shape01, area_m2, dt_s)
+        temperature_factor, thermal_damage_delta = self._update_contact_temperature(
+            state, sl, shape01, pressure_pa, rel_speed, dt_s)
 
         # 8장: 돌출부 선택 제거
         height = state.micro_height_um[sl]
         mult = self._peak_selective_multiplier(height, w_dist, self.cfg)
-        local_removal = delta * mult
+        local_removal = delta * mult * temperature_factor
 
         # Clearcoat 을 음수로 뚫지 않는다 (물질수지)
         local_removal = np.minimum(local_removal, state.clearcoat_remaining_um[sl])
@@ -173,7 +246,11 @@ class LiteraturePolishingModel:
         return {"mean_removal_delta_um": float(local_removal.mean()),
                 "defect_removal_um": defect_removal,
                 "healthy_over_removal_um": healthy_over_removal,
-                "pressure_pa": pressure_pa}
+                "pressure_pa": pressure_pa,
+                "temperature_mean_c": float(state.temperature_c[sl].mean()),
+                "temperature_peak_c": float(state.peak_temperature_c[sl].max()),
+                "temperature_removal_factor_mean": float(temperature_factor.mean()),
+                "thermal_damage_delta_mean": thermal_damage_delta}
 
     # ── evaluate ──────────────────────────────────────────────────────────
     def evaluate(self, state: SurfaceState) -> dict:

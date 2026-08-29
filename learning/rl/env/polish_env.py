@@ -109,6 +109,8 @@ class PolishEnv(DirectRLEnv):
         self._action_rate = torch.zeros(E, device=self.device)
         self._defect_removal = torch.zeros(E, device=self.device)
         self._healthy_over = torch.zeros(E, device=self.device)
+        self._thermal_damage_delta = torch.zeros(E, device=self.device)
+        self._thermal_hard_violated = torch.zeros(E, dtype=torch.bool, device=self.device)
         self._substep_n = 0
         # 로그 (action=0 baseline 비교용, 06 문서 10장)
         self.step_log: list[dict] = []
@@ -133,6 +135,10 @@ class PolishEnv(DirectRLEnv):
             a -= L
         return self._lines[-1][1]
 
+    def _quality_uv(self, i: int, arc_m: float) -> tuple[float, float]:
+        """Quality-model pad center. Robot-coupled env overrides this with measured pad pose."""
+        return self._pos_at_arc(arc_m)
+
     def _footprint_stats(self, i: int, uv) -> tuple:
         """관측용 국소 crop 통계 (04 문서 6장의 map crop 축약형).
 
@@ -147,13 +153,16 @@ class PolishEnv(DirectRLEnv):
         i0 = max(int((uv[0] - R) / res), 0); i1 = min(int((uv[0] + R) / res) + 1, s.shape[0])
         j0 = max(int((uv[1] - R) / res), 0); j1 = min(int((uv[1] + R) / res) + 1, s.shape[1])
         if i0 >= i1 or j0 >= j1:
-            return 0.0, 0.0, 0.0, 20.0
+            return 0.0, 0.0, 0.0, 20.0, PC.AMBIENT_TEMPERATURE_C, PC.AMBIENT_TEMPERATURE_C, 0.0
         sl = (slice(i0, i1), slice(j0, j1))
         remaining = np.clip(s.initial_scratch_depth_um[sl] - s.cumulative_removal_um[sl],
                             0.0, None)
         return (float(remaining.mean()), float(remaining.max()),
                 float(s.cumulative_removal_um[sl].mean()),
-                float(s.clearcoat_remaining_um[sl].min() - self.cfg.clearcoat_safety_limit_um))
+                float(s.clearcoat_remaining_um[sl].min() - self.cfg.clearcoat_safety_limit_um),
+                float(s.temperature_c[sl].mean()),
+                float(s.peak_temperature_c[sl].max()),
+                float(s.thermal_damage_proxy[sl].mean()))
 
     def _evaluate_quality(self, i: int) -> dict:
         """표면 i 의 품질 요약 (SYNTHETIC — 논문 기반 GU proxy). 전/후 공용."""
@@ -161,7 +170,11 @@ class PolishEnv(DirectRLEnv):
         g = self._gloss.evaluate(self._surfaces[i])["summary"]
         return {"gu": float(g["gu_mean"]), "scratch": float(q["max_residual_scratch_um"]),
                 "ra": float(q["ra_um"]), "rz": float(q["rz_um"]),
-                "cc_min": float(q["clearcoat_min_um"])}
+                "cc_min": float(q["clearcoat_min_um"]),
+                "temperature_mean_c": float(q["temperature_mean_c"]),
+                "temperature_peak_c": float(q["temperature_peak_c"]),
+                "thermal_damage_mean": float(q["thermal_damage_mean"]),
+                "thermal_damage_peak": float(q["thermal_damage_peak"])}
 
     # ── DirectRLEnv hooks ─────────────────────────────────────────────────
     def _pre_physics_step(self, actions: torch.Tensor) -> None:
@@ -204,8 +217,9 @@ class PolishEnv(DirectRLEnv):
         feeds = self._feed_cmd.cpu().numpy()
         defect_rm = np.zeros(self.num_envs, dtype=np.float32)
         healthy_over = np.zeros(self.num_envs, dtype=np.float32)
+        thermal_damage_delta = np.zeros(self.num_envs, dtype=np.float32)
         for i in range(self.num_envs):
-            uv = self._pos_at_arc(float(arcs[i]))
+            uv = self._quality_uv(i, float(arcs[i]))
             out = self._model.step(self._surfaces[i], ContactState(
                 pad_center_uv_m=uv,
                 contact_force_n=float(forces[i]),       # 달성 힘 — 명령이 아니라 (핵심)
@@ -214,8 +228,13 @@ class PolishEnv(DirectRLEnv):
             ), dt_s=self.quality_dt, sim_time_s=float(times[i]))
             defect_rm[i] = out.get("defect_removal_um", 0.0)
             healthy_over[i] = out.get("healthy_over_removal_um", 0.0)
+            thermal_damage_delta[i] = out.get("thermal_damage_delta_mean", 0.0)
+            if bool(self._surfaces[i].peak_temperature_c.max()
+                    > self.cfg.thermal_hard_limit_c):
+                self._thermal_hard_violated[i] = True
         self._defect_removal = torch.as_tensor(defect_rm, device=self.device)
         self._healthy_over = torch.as_tensor(healthy_over, device=self.device)
+        self._thermal_damage_delta = torch.as_tensor(thermal_damage_delta, device=self.device)
         self._force_mean = force_mean
         if self.log_raw_steps:
             self.step_log.append({
@@ -228,11 +247,11 @@ class PolishEnv(DirectRLEnv):
         # 품질 갱신은 _get_dones 에서 이미 수행됨 — 여기서는 결과를 읽기만 한다.
         E = self.num_envs
         arcs = self._arc.cpu().numpy()
-        stats = np.zeros((E, 4), dtype=np.float32)
+        stats = np.zeros((E, 7), dtype=np.float32)
         for i in range(E):
             # 관측용 잔존 scratch = 초기맵 − 누적제거 근사 (_footprint_stats 참고).
             # evaluate() 의 기하학적 valley 재계산은 무거워서 종료 시에만 수행한다.
-            stats[i] = self._footprint_stats(i, self._pos_at_arc(float(arcs[i])))
+            stats[i] = self._footprint_stats(i, self._quality_uv(i, float(arcs[i])))
         st = torch.as_tensor(stats, device=self.device)
         progress = (self._arc / self._path_len).clamp(0, 1).unsqueeze(1)
         f = self._force_mean.unsqueeze(1)
@@ -246,6 +265,9 @@ class PolishEnv(DirectRLEnv):
             st[:, 2:3] / 5.0,                        # 국소 누적 제거 [μm]
             st[:, 3:4] / 20.0,                       # clearcoat 안전여유 [μm]
             self._prev_action,
+            (st[:, 4:5] - PC.AMBIENT_TEMPERATURE_C) / 40.0,  # 국소 현재온도 상승
+            (st[:, 5:6] - PC.AMBIENT_TEMPERATURE_C) / 60.0,  # 국소 최고온도 상승
+            st[:, 6:7] / PC.THERMAL_DAMAGE_MAX,               # 누적 열손상
         ], dim=1)
         self._prev_force = self._force_mean.clone()
         return {"policy": obs}
@@ -260,6 +282,7 @@ class PolishEnv(DirectRLEnv):
         r = (cfg.w_force * r_force
              + cfg.w_defect_removal * self._defect_removal
              - cfg.w_healthy_over * self._healthy_over
+             - cfg.w_thermal_damage * self._thermal_damage_delta
              - cfg.w_action_rate * self._action_rate
              - cfg.w_time)
 
@@ -275,17 +298,22 @@ class PolishEnv(DirectRLEnv):
                 if b is None:
                     continue
                 cc_ok = fin["cc_min"] >= cfg.clearcoat_safety_limit_um
+                thermal_safe = fin["temperature_peak_c"] <= cfg.thermal_hard_limit_c
                 scr_improved = fin["scratch"] < b["scratch"] or b["scratch"] < 0.05
                 all_pass = (fin["gu"] >= 70.0
                             and fin["ra"] <= cfg.t_ra_pass_max_um
                             and fin["rz"] <= cfg.t_rz_pass_max_um
-                            and cc_ok and scr_improved)
+                            and cc_ok and thermal_safe and scr_improved)
                 rt = (cfg.t_gu_final * (fin["gu"] - 70.0) / 10.0
                       + cfg.t_gu_delta * (fin["gu"] - b["gu"]) / 10.0
                       + cfg.t_scratch * (b["scratch"] - fin["scratch"]) / 2.0
                       + cfg.t_ra * (b["ra"] - fin["ra"]) / 0.20
-                      + cfg.t_rz * (b["rz"] - fin["rz"]) / 2.0
-                      - cfg.t_cc_use * max(b["cc_min"] - fin["cc_min"], 0.0))
+                      + cfg.t_rz * (b["rz"] - fin["rz"]) / 2.0)
+                rt -= cfg.t_cc_use * max(b["cc_min"] - fin["cc_min"], 0.0)
+                rt -= cfg.t_thermal_damage * fin["thermal_damage_peak"]
+                overheat_span = max(80.0 - PC.THERMAL_PROFILE_TG_C, 1.0)
+                rt -= cfg.t_overheat * max(
+                    0.0, fin["temperature_peak_c"] - PC.THERMAL_PROFILE_TG_C) / overheat_span
                 if not cc_ok:
                     rt -= cfg.t_cc_fail
                 if all_pass:
@@ -295,7 +323,8 @@ class PolishEnv(DirectRLEnv):
                 self.last_episode_results[i] = {
                     "before": b, "after": fin, "terminal_reward": float(rt),
                     "all_pass": bool(all_pass), "cc_ok": bool(cc_ok),
-                    "scr_improved": bool(scr_improved)}
+                    "scr_improved": bool(scr_improved),
+                    "thermal_safe": bool(thermal_safe)}
             if terms:
                 log = self.extras.setdefault("log", {})
                 log["Episode/terminal_reward"] = float(np.mean(terms))
@@ -306,7 +335,7 @@ class PolishEnv(DirectRLEnv):
         #   _get_rewards 가 같은 스텝의 결과로 계산된다 (_quality_update docstring 참고).
         self._quality_update()
         done_path = self._arc >= self._path_len
-        died = self._force_hard_violated.clone()
+        died = self._force_hard_violated | self._thermal_hard_violated
         time_out = self.episode_length_buf >= self.max_episode_length - 1
         return died | done_path, time_out
 
@@ -344,6 +373,7 @@ class PolishEnv(DirectRLEnv):
         self._prev_action[ids] = 0.0
         self._prev_force[ids] = 0.0
         self._force_hard_violated[ids] = False
+        self._thermal_hard_violated[ids] = False
         # 이전 에피소드 잔재가 새 에피소드의 관측/보상에 새지 않게 env 별로 청소.
         # (_quality_update 를 _get_dones 로 옮겨 표면 오염은 구조적으로 사라졌지만,
         #  관측의 힘 항과 보상 델타 항은 버퍼값을 읽으므로 명시적으로 0 이어야 한다.)
@@ -351,6 +381,7 @@ class PolishEnv(DirectRLEnv):
         self._force_accum[ids] = 0.0
         self._defect_removal[ids] = 0.0
         self._healthy_over[ids] = 0.0
+        self._thermal_damage_delta[ids] = 0.0
         self._action_rate[ids] = 0.0
         self._force_cmd[ids] = self.recipe.target_contact_force_n
         self._feed_cmd[ids] = self.recipe.feed_speed_mm_s / 1000.0

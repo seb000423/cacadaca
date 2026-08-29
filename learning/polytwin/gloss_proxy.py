@@ -53,6 +53,7 @@ class GlossProxyConfig:
     w_scratch: float = 1.0
     w_uniformity: float = 1.0
     w_clearcoat: float = 1.0
+    w_thermal: float = 1.0
     w_optical: float = 0.0     # RTX 파이프라인 연결(Step 8) 전까지 0
     # 판정 한계 (03 문서 10장) — PT-DESIGN
     gu_p10_limit: float = 60.0
@@ -106,9 +107,15 @@ class LiteratureGlossProxyModel:
             (state.clearcoat_remaining_um[sl].min() - cfg.clearcoat_failure_limit_um) / denom,
             0.0, 1.0))
 
+        # Synthetic thermal degradation term.  It changes the optical-quality
+        # proxy only; it is not a measured GU-temperature calibration.
+        q_thermal = float(np.exp(
+            -state.thermal_damage_proxy[sl].mean() / C.THERMAL_GLOSS_DAMAGE_SCALE))
+
         # 8장: geometric combination — 한 항의 심한 결함이 평균에 숨지 않게
         terms = {"q_ra": q_ra, "q_scratch": q_scratch,
-                 "q_uniformity": q_uniformity, "q_clearcoat": q_clearcoat}
+                 "q_uniformity": q_uniformity, "q_clearcoat": q_clearcoat,
+                 "q_thermal": q_thermal}
         weights = {"q_ra": self.cfg.w_ra, "q_scratch": self.cfg.w_scratch,
                    "q_uniformity": self.cfg.w_uniformity, "q_clearcoat": self.cfg.w_clearcoat}
         if optical is not None and self.cfg.w_optical > 0.0:
@@ -116,7 +123,11 @@ class LiteratureGlossProxyModel:
             weights["q_optical"] = self.cfg.w_optical
 
         wsum = sum(weights.values())
-        log_q = sum(w * np.log(max(terms[k], 1e-6)) for k, w in weights.items()) / wsum
+        # Thermal damage is a one-way penalty after the established geometric
+        # quality combination.  q_thermal=1 therefore preserves the pre-thermal
+        # GU scale instead of diluting existing defects with another perfect term.
+        log_q = (sum(w * np.log(max(terms[k], 1e-6)) for k, w in weights.items()) / wsum
+                 + self.cfg.w_thermal * np.log(max(q_thermal, 1e-6)))
         q_total = float(np.exp(log_q))
         gu = float(gu_from_relative(q_total, self.cfg.upper_anchor_gu))
         return {**terms, "q_total": q_total,
@@ -134,7 +145,7 @@ class LiteratureGlossProxyModel:
 
         gu_map = np.zeros(tiles)
         term_maps = {k: np.zeros(tiles) for k in
-                     ("q_ra", "q_scratch", "q_uniformity", "q_clearcoat", "q_total")}
+                     ("q_ra", "q_scratch", "q_uniformity", "q_clearcoat", "q_thermal", "q_total")}
         for sl_i, sl_j, i, j in _tile_slices(state.shape, tiles):
             optical = None if optical_map is None else float(optical_map[i, j])
             out = self._tile_terms(state, (sl_i, sl_j), optical)

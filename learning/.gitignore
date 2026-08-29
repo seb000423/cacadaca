@@ -8,3 +8,6 @@ rl/logs/
 outputs/*.png
 polytwin/outputs/*.png
 polytwin/outputs/*.csv
+rl/robot/logs/
+rl/robot/logs_smoke/
+rl/thermal/logs/

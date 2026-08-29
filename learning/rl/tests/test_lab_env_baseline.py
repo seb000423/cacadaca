@@ -34,7 +34,21 @@ print(f"\nrecipe: force {env.recipe.target_contact_force_n}N feed {env.recipe.fe
       f"passes {env.recipe.n_passes} | path {env._path_len:.2f} m")
 
 obs, _ = env.reset()
-check("reset: obs shape", tuple(obs["policy"].shape) == (4, 11), str(tuple(obs["policy"].shape)))
+check("reset: obs shape", tuple(obs["policy"].shape) == (4, 14), str(tuple(obs["policy"].shape)))
+check("reset: thermal obs neutral", torch.allclose(obs["policy"][:, 11:14],
+                                                   torch.zeros_like(obs["policy"][:, 11:14])))
+
+# 열손상 dense reward는 누적 절대값이 아니라 이번 step의 증가량만 감점한다.
+env._force_mean = env._force_cmd.clone()
+env._defect_removal.zero_(); env._healthy_over.zero_(); env._action_rate.zero_()
+env._thermal_damage_delta.zero_()
+r_without_damage = env._get_rewards().clone()
+env._thermal_damage_delta.fill_(0.001)
+r_with_damage = env._get_rewards().clone()
+check("thermal damage delta lowers dense reward",
+      torch.all(r_with_damage < r_without_damage),
+      f"delta reward={float((r_with_damage-r_without_damage).mean()):.3f}")
+env._thermal_damage_delta.zero_()
 
 # 초기 표면 저장 (재현성 비교용)
 init_surf = env._surfaces[0].micro_height_um.copy()
@@ -47,11 +61,15 @@ cmd_orig = env.recipe.target_contact_force_n
 env.recipe.target_contact_force_n = 6.0
 f6 = []
 for t in range(240):                     # 12 s
-    env.step(zero)
+    obs, *_ = env.step(zero)
     f6.append(float(env._force_mean[0]))
 s6 = np.array(f6[160:])                  # 8 s 이후
 check("도달가능 명령 6.0N 정확 수렴", abs(s6.mean() - 6.0) < 0.05 and s6.std() < 0.05,
       f"달성 {s6.mean():.3f} ± {s6.std():.4f} N")
+check("contact updates thermal observations",
+      bool(torch.isfinite(obs["policy"][:, 11:14]).all()
+           and (obs["policy"][:, 11] > 0).all()),
+      f"thermal obs env0={obs['policy'][0, 11:14].tolist()}")
 
 # ── 영역 2: 도달불가 명령 → 포화 limit cycle (문서화된 원본 거동) ──
 # 정적 상한 = K·(2·cdist − press_min) = 350·0.024 = 8.4 N. z_offset 클램프 시 z_vel 을

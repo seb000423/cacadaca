@@ -30,6 +30,11 @@ class SurfaceState:
     pass_count: np.ndarray                 # int
     peak_contact_pressure_proxy: np.ndarray
     heat_risk_proxy: np.ndarray
+    temperature_c: np.ndarray                 # synthetic surface temperature [deg C]
+    peak_temperature_c: np.ndarray            # maximum synthetic temperature [deg C]
+    friction_heat_flux_w_m2: np.ndarray       # latest local friction heat flux [W/m2]
+    temperature_removal_factor: np.ndarray    # dimensionless piecewise material factor
+    thermal_damage_proxy: np.ndarray          # dimensionless cumulative thermal exposure
     healthy_mask: np.ndarray               # bool
     defect_mask: np.ndarray                # bool
     last_active_time_s: np.ndarray         # pass debounce 용 (내부 상태)
@@ -140,6 +145,11 @@ def make_flat_patch(patch_size_m=(0.20, 0.20),
         pass_count=np.zeros(shape, dtype=np.int32),
         peak_contact_pressure_proxy=np.zeros(shape),
         heat_risk_proxy=np.zeros(shape),
+        temperature_c=np.full(shape, C.INITIAL_TEMPERATURE_C),
+        peak_temperature_c=np.full(shape, C.INITIAL_TEMPERATURE_C),
+        friction_heat_flux_w_m2=np.zeros(shape),
+        temperature_removal_factor=np.ones(shape),
+        thermal_damage_proxy=np.zeros(shape),
         healthy_mask=~defect,
         defect_mask=defect,
         last_active_time_s=np.full(shape, -1e9),

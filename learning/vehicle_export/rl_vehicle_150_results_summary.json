@@ -14,62 +14,62 @@
   },
   "all": {
     "n_cells": 150,
-    "n_pass": 97,
+    "n_pass": 96,
     "gu_after": {
-      "mean": 69.933,
-      "min": 60.97,
-      "max": 73.33
+      "mean": 69.9,
+      "min": 60.18,
+      "max": 73.31
     },
     "scratch_after_um": {
-      "mean": 0.458,
-      "min": 0.081,
-      "max": 1.2
+      "mean": 0.447,
+      "min": 0.076,
+      "max": 1.186
     },
-    "scratch_reduction_pct": 58.3,
+    "scratch_reduction_pct": 59.3,
     "clearcoat_remaining_min_um": {
-      "mean": 40.778,
-      "min": 35.48,
-      "max": 47.96
+      "mean": 40.737,
+      "min": 35.47,
+      "max": 47.93
     }
   },
   "top_facing_cells (보닛/루프 등, tilt≤45°)": {
     "n_cells": 50,
     "n_pass": 32,
     "gu_after": {
-      "mean": 69.763,
-      "min": 60.97,
-      "max": 73.33
+      "mean": 69.668,
+      "min": 60.18,
+      "max": 73.31
     },
     "scratch_after_um": {
-      "mean": 0.436,
-      "min": 0.088,
-      "max": 1.109
+      "mean": 0.42,
+      "min": 0.089,
+      "max": 1.097
     },
-    "scratch_reduction_pct": 61.6,
+    "scratch_reduction_pct": 63.0,
     "clearcoat_remaining_min_um": {
-      "mean": 40.652,
-      "min": 35.48,
-      "max": 47.96
+      "mean": 40.587,
+      "min": 35.47,
+      "max": 47.93
     }
   },
   "side_facing_cells (도어/펜더 등, tilt>45°)": {
     "n_cells": 100,
-    "n_pass": 65,
+    "n_pass": 64,
     "gu_after": {
-      "mean": 70.018,
-      "min": 62.94,
-      "max": 72.98
+      "mean": 70.016,
+      "min": 63.01,
+      "max": 73.01
     },
     "scratch_after_um": {
-      "mean": 0.469,
-      "min": 0.081,
-      "max": 1.2
+      "mean": 0.46,
+      "min": 0.076,
+      "max": 1.186
     },
-    "scratch_reduction_pct": 56.5,
+    "scratch_reduction_pct": 57.3,
     "clearcoat_remaining_min_um": {
-      "mean": 40.841,
-      "min": 35.61,
-      "max": 47.17
+      "mean": 40.813,
+      "min": 35.58,
+      "max": 47.13
     }
   },
   "per_region": {
@@ -77,120 +77,120 @@
       "n_cells": 25,
       "n_pass": 15,
       "gu_after": {
-        "mean": 69.354,
-        "min": 64.72,
-        "max": 71.42
+        "mean": 69.262,
+        "min": 64.53,
+        "max": 71.5
       },
       "scratch_after_um": {
-        "mean": 0.514,
-        "min": 0.088,
-        "max": 1.109
+        "mean": 0.496,
+        "min": 0.089,
+        "max": 1.097
       },
-      "scratch_reduction_pct": 58.1,
+      "scratch_reduction_pct": 59.5,
       "clearcoat_remaining_min_um": {
-        "mean": 40.306,
-        "min": 35.88,
-        "max": 45.88
+        "mean": 40.24,
+        "min": 35.82,
+        "max": 45.86
       }
     },
     "R2:roof": {
       "n_cells": 25,
       "n_pass": 17,
       "gu_after": {
-        "mean": 70.173,
-        "min": 60.97,
-        "max": 73.33
+        "mean": 70.074,
+        "min": 60.18,
+        "max": 73.31
       },
       "scratch_after_um": {
-        "mean": 0.358,
-        "min": 0.178,
-        "max": 0.794
+        "mean": 0.344,
+        "min": 0.168,
+        "max": 0.767
       },
-      "scratch_reduction_pct": 65.7,
+      "scratch_reduction_pct": 67.1,
       "clearcoat_remaining_min_um": {
-        "mean": 40.998,
-        "min": 35.48,
-        "max": 47.96
+        "mean": 40.934,
+        "min": 35.47,
+        "max": 47.93
       }
     },
     "R3:door_left": {
       "n_cells": 25,
-      "n_pass": 17,
+      "n_pass": 16,
       "gu_after": {
-        "mean": 70.285,
-        "min": 65.6,
-        "max": 72.24
+        "mean": 70.275,
+        "min": 65.51,
+        "max": 72.19
       },
       "scratch_after_um": {
-        "mean": 0.433,
-        "min": 0.135,
-        "max": 0.818
+        "mean": 0.425,
+        "min": 0.129,
+        "max": 0.812
       },
-      "scratch_reduction_pct": 58.7,
+      "scratch_reduction_pct": 59.5,
       "clearcoat_remaining_min_um": {
-        "mean": 40.932,
-        "min": 35.61,
-        "max": 45.66
+        "mean": 40.902,
+        "min": 35.58,
+        "max": 45.65
       }
     },
     "R4:door_right": {
       "n_cells": 25,
       "n_pass": 15,
       "gu_after": {
-        "mean": 69.665,
-        "min": 62.94,
-        "max": 72.97
+        "mean": 69.669,
+        "min": 63.01,
+        "max": 73.0
       },
       "scratch_after_um": {
-        "mean": 0.469,
-        "min": 0.081,
-        "max": 0.918
+        "mean": 0.459,
+        "min": 0.076,
+        "max": 0.913
       },
-      "scratch_reduction_pct": 57.2,
+      "scratch_reduction_pct": 58.0,
       "clearcoat_remaining_min_um": {
-        "mean": 40.415,
-        "min": 35.64,
-        "max": 47.17
+        "mean": 40.385,
+        "min": 35.63,
+        "max": 47.13
       }
     },
     "R5:fender_left": {
       "n_cells": 25,
       "n_pass": 17,
       "gu_after": {
-        "mean": 69.948,
-        "min": 65.76,
-        "max": 72.76
+        "mean": 69.946,
+        "min": 65.69,
+        "max": 72.79
       },
       "scratch_after_um": {
-        "mean": 0.567,
-        "min": 0.217,
-        "max": 1.2
+        "mean": 0.558,
+        "min": 0.216,
+        "max": 1.186
       },
-      "scratch_reduction_pct": 52.3,
+      "scratch_reduction_pct": 53.1,
       "clearcoat_remaining_min_um": {
-        "mean": 41.07,
-        "min": 36.16,
-        "max": 46.97
+        "mean": 41.042,
+        "min": 36.15,
+        "max": 46.94
       }
     },
     "R6:fender_right": {
       "n_cells": 25,
       "n_pass": 16,
       "gu_after": {
-        "mean": 70.173,
-        "min": 65.93,
-        "max": 72.98
+        "mean": 70.174,
+        "min": 65.9,
+        "max": 73.01
       },
       "scratch_after_um": {
-        "mean": 0.409,
-        "min": 0.115,
-        "max": 0.928
+        "mean": 0.4,
+        "min": 0.109,
+        "max": 0.92
       },
-      "scratch_reduction_pct": 58.6,
+      "scratch_reduction_pct": 59.4,
       "clearcoat_remaining_min_um": {
-        "mean": 40.947,
-        "min": 35.91,
-        "max": 46.22
+        "mean": 40.922,
+        "min": 35.89,
+        "max": 46.21
       }
     }
   },
@@ -199,109 +199,109 @@
       "region_id": "R1",
       "region_name": "bonnet",
       "cell_id": "5",
-      "failure_reason": "gu_below_target(67.7<70)"
+      "failure_reason": "gu_below_target(67.4<70)"
     },
     {
       "region_id": "R1",
       "region_name": "bonnet",
       "cell_id": "7",
-      "failure_reason": "gu_below_target(64.7<70);clearcoat_budget_exhausted"
+      "failure_reason": "gu_below_target(64.5<70);clearcoat_budget_exhausted"
     },
     {
       "region_id": "R1",
       "region_name": "bonnet",
       "cell_id": "8",
-      "failure_reason": "gu_below_target(69.2<70)"
+      "failure_reason": "gu_below_target(69.0<70)"
     },
     {
       "region_id": "R1",
       "region_name": "bonnet",
       "cell_id": "13",
-      "failure_reason": "gu_below_target(68.2<70)"
+      "failure_reason": "gu_below_target(67.9<70)"
     },
     {
       "region_id": "R1",
       "region_name": "bonnet",
       "cell_id": "14",
-      "failure_reason": "gu_below_target(65.9<70)"
+      "failure_reason": "gu_below_target(65.4<70)"
     },
     {
       "region_id": "R1",
       "region_name": "bonnet",
       "cell_id": "17",
-      "failure_reason": "gu_below_target(68.4<70)"
+      "failure_reason": "gu_below_target(68.1<70)"
     },
     {
       "region_id": "R1",
       "region_name": "bonnet",
       "cell_id": "20",
-      "failure_reason": "gu_below_target(66.9<70);clearcoat_budget_exhausted"
+      "failure_reason": "gu_below_target(66.7<70)"
     },
     {
       "region_id": "R1",
       "region_name": "bonnet",
       "cell_id": "21",
-      "failure_reason": "gu_below_target(64.8<70);clearcoat_budget_exhausted"
+      "failure_reason": "gu_below_target(64.7<70);clearcoat_budget_exhausted"
     },
     {
       "region_id": "R1",
       "region_name": "bonnet",
       "cell_id": "22",
-      "failure_reason": "gu_below_target(67.8<70)"
+      "failure_reason": "gu_below_target(67.4<70)"
     },
     {
       "region_id": "R1",
       "region_name": "bonnet",
       "cell_id": "24",
-      "failure_reason": "gu_below_target(69.3<70)"
+      "failure_reason": "gu_below_target(69.1<70)"
     },
     {
       "region_id": "R2",
       "region_name": "roof",
       "cell_id": "0",
-      "failure_reason": "gu_below_target(61.0<70);ra_above_target(0.216>0.20)"
+      "failure_reason": "gu_below_target(60.2<70);ra_above_target(0.222>0.20)"
     },
     {
       "region_id": "R2",
       "region_name": "roof",
       "cell_id": "2",
-      "failure_reason": "gu_below_target(69.8<70);clearcoat_budget_exhausted"
+      "failure_reason": "gu_below_target(69.7<70);clearcoat_budget_exhausted"
     },
     {
       "region_id": "R2",
       "region_name": "roof",
       "cell_id": "5",
-      "failure_reason": "gu_below_target(70.0<70)"
+      "failure_reason": "gu_below_target(69.9<70)"
     },
     {
       "region_id": "R2",
       "region_name": "roof",
       "cell_id": "9",
-      "failure_reason": "gu_below_target(64.2<70)"
+      "failure_reason": "gu_below_target(63.5<70)"
     },
     {
       "region_id": "R2",
       "region_name": "roof",
       "cell_id": "10",
-      "failure_reason": "gu_below_target(69.5<70)"
+      "failure_reason": "gu_below_target(69.4<70)"
     },
     {
       "region_id": "R2",
       "region_name": "roof",
       "cell_id": "11",
-      "failure_reason": "gu_below_target(66.8<70)"
+      "failure_reason": "gu_below_target(66.5<70)"
     },
     {
       "region_id": "R2",
       "region_name": "roof",
       "cell_id": "20",
-      "failure_reason": "gu_below_target(68.2<70)"
+      "failure_reason": "gu_below_target(68.0<70)"
     },
     {
       "region_id": "R2",
       "region_name": "roof",
       "cell_id": "21",
-      "failure_reason": "gu_below_target(67.7<70)"
+      "failure_reason": "gu_below_target(67.4<70)"
     },
     {
       "region_id": "R3",
@@ -313,37 +313,43 @@
       "region_id": "R3",
       "region_name": "door_left",
       "cell_id": "3",
-      "failure_reason": "gu_below_target(68.5<70)"
+      "failure_reason": "gu_below_target(68.4<70)"
     },
     {
       "region_id": "R3",
       "region_name": "door_left",
       "cell_id": "4",
-      "failure_reason": "gu_below_target(68.0<70);clearcoat_budget_exhausted"
+      "failure_reason": "gu_below_target(67.9<70);clearcoat_budget_exhausted"
     },
     {
       "region_id": "R3",
       "region_name": "door_left",
       "cell_id": "8",
-      "failure_reason": "gu_below_target(65.6<70)"
+      "failure_reason": "gu_below_target(65.5<70)"
     },
     {
       "region_id": "R3",
       "region_name": "door_left",
       "cell_id": "12",
-      "failure_reason": "gu_below_target(69.4<70)"
+      "failure_reason": "gu_below_target(69.3<70)"
     },
     {
       "region_id": "R3",
       "region_name": "door_left",
       "cell_id": "14",
-      "failure_reason": "gu_below_target(69.8<70)"
+      "failure_reason": "gu_below_target(69.7<70)"
+    },
+    {
+      "region_id": "R3",
+      "region_name": "door_left",
+      "cell_id": "16",
+      "failure_reason": "gu_below_target(70.0<70)"
     },
     {
       "region_id": "R3",
       "region_name": "door_left",
       "cell_id": "19",
-      "failure_reason": "gu_below_target(66.9<70)"
+      "failure_reason": "gu_below_target(66.8<70)"
     },
     {
       "region_id": "R3",
@@ -355,13 +361,13 @@
       "region_id": "R4",
       "region_name": "door_right",
       "cell_id": "4",
-      "failure_reason": "gu_below_target(68.4<70);ra_above_target(0.201>0.20)"
+      "failure_reason": "gu_below_target(68.4<70);ra_above_target(0.204>0.20)"
     },
     {
       "region_id": "R4",
       "region_name": "door_right",
       "cell_id": "10",
-      "failure_reason": "gu_below_target(66.3<70);ra_above_target(0.205>0.20)"
+      "failure_reason": "gu_below_target(66.4<70);ra_above_target(0.208>0.20)"
     },
     {
       "region_id": "R4",
@@ -373,37 +379,37 @@
       "region_id": "R4",
       "region_name": "door_right",
       "cell_id": "12",
-      "failure_reason": "gu_below_target(66.1<70);clearcoat_budget_exhausted"
+      "failure_reason": "gu_below_target(66.0<70);clearcoat_budget_exhausted"
     },
     {
       "region_id": "R4",
       "region_name": "door_right",
       "cell_id": "13",
-      "failure_reason": "gu_below_target(64.7<70)"
+      "failure_reason": "gu_below_target(64.5<70)"
     },
     {
       "region_id": "R4",
       "region_name": "door_right",
       "cell_id": "14",
-      "failure_reason": "gu_below_target(67.2<70);ra_above_target(0.217>0.20)"
+      "failure_reason": "gu_below_target(67.3<70);ra_above_target(0.220>0.20)"
     },
     {
       "region_id": "R4",
       "region_name": "door_right",
       "cell_id": "15",
-      "failure_reason": "gu_below_target(62.9<70);clearcoat_budget_exhausted"
+      "failure_reason": "gu_below_target(63.0<70);clearcoat_budget_exhausted"
     },
     {
       "region_id": "R4",
       "region_name": "door_right",
       "cell_id": "18",
-      "failure_reason": "gu_below_target(69.0<70)"
+      "failure_reason": "gu_below_target(69.1<70)"
     },
     {
       "region_id": "R4",
       "region_name": "door_right",
       "cell_id": "19",
-      "failure_reason": "gu_below_target(70.0<70)"
+      "failure_reason": "gu_below_target(69.9<70)"
     },
     {
       "region_id": "R4",
@@ -415,55 +421,55 @@
       "region_id": "R5",
       "region_name": "fender_left",
       "cell_id": "3",
-      "failure_reason": "gu_below_target(65.8<70)"
+      "failure_reason": "gu_below_target(65.7<70)"
     },
     {
       "region_id": "R5",
       "region_name": "fender_left",
       "cell_id": "4",
-      "failure_reason": "gu_below_target(66.5<70)"
+      "failure_reason": "gu_below_target(66.3<70)"
     },
     {
       "region_id": "R5",
       "region_name": "fender_left",
       "cell_id": "6",
-      "failure_reason": "gu_below_target(69.7<70)"
+      "failure_reason": "gu_below_target(69.6<70)"
     },
     {
       "region_id": "R5",
       "region_name": "fender_left",
       "cell_id": "8",
-      "failure_reason": "gu_below_target(67.1<70)"
+      "failure_reason": "gu_below_target(67.0<70)"
     },
     {
       "region_id": "R5",
       "region_name": "fender_left",
       "cell_id": "12",
-      "failure_reason": "gu_below_target(67.5<70)"
+      "failure_reason": "gu_below_target(67.4<70)"
     },
     {
       "region_id": "R5",
       "region_name": "fender_left",
       "cell_id": "13",
-      "failure_reason": "gu_below_target(68.7<70);ra_above_target(0.200>0.20)"
+      "failure_reason": "gu_below_target(68.7<70);ra_above_target(0.203>0.20)"
     },
     {
       "region_id": "R5",
       "region_name": "fender_left",
       "cell_id": "19",
-      "failure_reason": "gu_below_target(68.9<70)"
+      "failure_reason": "gu_below_target(69.0<70)"
     },
     {
       "region_id": "R5",
       "region_name": "fender_left",
       "cell_id": "23",
-      "failure_reason": "gu_below_target(66.9<70)"
+      "failure_reason": "gu_below_target(66.8<70);ra_above_target(0.201>0.20)"
     },
     {
       "region_id": "R6",
       "region_name": "fender_right",
       "cell_id": "4",
-      "failure_reason": "gu_below_target(69.1<70)"
+      "failure_reason": "gu_below_target(69.0<70)"
     },
     {
       "region_id": "R6",
@@ -481,19 +487,19 @@
       "region_id": "R6",
       "region_name": "fender_right",
       "cell_id": "9",
-      "failure_reason": "gu_below_target(66.3<70)"
+      "failure_reason": "gu_below_target(66.1<70)"
     },
     {
       "region_id": "R6",
       "region_name": "fender_right",
       "cell_id": "11",
-      "failure_reason": "gu_below_target(69.0<70)"
+      "failure_reason": "gu_below_target(68.9<70)"
     },
     {
       "region_id": "R6",
       "region_name": "fender_right",
       "cell_id": "12",
-      "failure_reason": "gu_below_target(68.0<70);ra_above_target(0.201>0.20)"
+      "failure_reason": "gu_below_target(68.0<70);ra_above_target(0.203>0.20)"
     },
     {
       "region_id": "R6",

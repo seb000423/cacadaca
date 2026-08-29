@@ -95,12 +95,19 @@ class VirtualPadContact:
         self.dt = float(dt)
         self.lag_offset = float(lag_offset)   # 지속 바이어스 [m] — 위 LAG 주석 참고
         self.lag_tau = float(lag_tau)         # 그 바이어스로 수렴하는 시간상수 [s]
+        # 어드미턴스 게인 — 기본값은 원본 상수 그대로 (replay 시험 기준). PhysX 물리
+        # 접촉 모드는 접촉 강성(~1e4 N/m)이 가상 스프링(350)보다 훨씬 높아 한계순환이
+        # 생기므로 RobotPolishEnv 가 인스턴스 값만 올린다 (모듈 상수는 불변).
+        self.admittance_mass = ADMITTANCE_MASS
+        self.admittance_damping = ADMITTANCE_DAMPING
+        self.admittance_max_vel = ADMITTANCE_MAX_VEL
 
         z = lambda: torch.zeros(num_envs, device=self.device, dtype=torch.float32)
         self.z_offset = z()
         self.z_vel = z()
         self.filtered = z()
         self.actual_clearance = z()
+        self.command_clearance = z()
         self.reset()
 
     # ── 작업면별 상수 선택 ────────────────────────────────────────────────
@@ -124,10 +131,13 @@ class VirtualPadContact:
         self.z_vel[env_ids] = 0.0
         self.filtered[env_ids] = 0.0
         self.actual_clearance[env_ids] = press_max[env_ids]
+        self.command_clearance[env_ids] = press_max[env_ids]
 
     # ── 한 스텝 ───────────────────────────────────────────────────────────
     def step(self, target_force: torch.Tensor, is_side: torch.Tensor,
-             surface_offset: torch.Tensor | None = None) -> torch.Tensor:
+             surface_offset: torch.Tensor | None = None,
+             measured_clearance: torch.Tensor | None = None,
+             control_force_override: torch.Tensor | None = None) -> torch.Tensor:
         """목표힘을 받아 한 스텝 진행하고, 필터된 실측 접촉력 [N] 을 돌려준다.
 
         target_force   : (E,) 어드미턴스 제어기의 목표힘 setpoint.
@@ -135,11 +145,17 @@ class VirtualPadContact:
         is_side        : (E,) bool. 로봇 1대 환경에서는 (tilt_deg > 45) 로 정의한다 (PLAN 7-1).
         surface_offset : (E,) 표면이 명목 경로보다 얼마나 나와 있는지 [m]. 굴곡/오차 주입용.
                          None 이면 0 (경로가 표면에 정확히 놓인 경우).
+        control_force_override : (E,) 어드미턴스 피드백 힘을 외부 값으로 교체 [N].
+                         PhysX 물리 접촉 모드에서 센서 필터힘을 넣어 폐루프 force
+                         tracking 을 만든다 (인수인계서 17.1-8~10). None 이면 기존
+                         동작(가상 스프링 filtered 피드백)과 완전히 동일하다 —
+                         기존 replay/baseline 시험에 영향 없음.
         """
         cdist, press_min, press_max, soft_limit = self._consts(is_side)
 
         # 1) z_offset → 명령 clearance  (agent.py:575-577)
         cmd_clearance = (self.z_offset - cdist).clamp(SURFACE_GUARD_MIN_CLEARANCE, CMD_CLEARANCE_MAX)
+        self.command_clearance = cmd_clearance
 
         # 2) 명령 → 실제 clearance.
         #    목표는 cmd + lag_offset (패드가 명령보다 lag_offset 만큼 덜 내려온다).
@@ -147,7 +163,11 @@ class VirtualPadContact:
         if surface_offset is not None:
             cmd_clearance = cmd_clearance - surface_offset
         target_clearance = cmd_clearance + self.lag_offset
-        if self.lag_tau > 0.0:
+        if measured_clearance is not None:
+            # M0609 결합 환경: 실제 패드 접촉면 자세에서 측정한 gap을 사용.
+            # 패드가 경로를 추종하지 못하면 힘이 발생하지 않는다.
+            self.actual_clearance = measured_clearance.to(self.device).clamp(min=-0.01, max=0.20)
+        elif self.lag_tau > 0.0:
             alpha = self.dt / (self.lag_tau + self.dt)
             self.actual_clearance = self.actual_clearance + alpha * (target_clearance - self.actual_clearance)
         else:
@@ -165,9 +185,17 @@ class VirtualPadContact:
 
         # 5) 어드미턴스 적분 (agent.py:2029-2037)
         #    충돌 off 모드라 control_force 는 물리센서가 아니라 filtered 를 쓴다 (agent.py:2031)
-        control_force = self.filtered.clamp(max=FORCE_CONTROL_CLIP_N)
-        accel = (control_force - target_force - ADMITTANCE_DAMPING * self.z_vel) / ADMITTANCE_MASS
-        self.z_vel = (self.z_vel + accel * self.dt).clamp(-ADMITTANCE_MAX_VEL, ADMITTANCE_MAX_VEL)
+        #    물리 접촉 모드에서는 override(센서 필터힘)가 피드백이 된다.
+        if control_force_override is not None:
+            control_force = control_force_override.to(self.device).clamp(
+                min=0.0, max=FORCE_CONTROL_CLIP_N
+            )
+        else:
+            control_force = self.filtered.clamp(max=FORCE_CONTROL_CLIP_N)
+        accel = (control_force - target_force
+                 - self.admittance_damping * self.z_vel) / self.admittance_mass
+        self.z_vel = (self.z_vel + accel * self.dt).clamp(
+            -self.admittance_max_vel, self.admittance_max_vel)
         self.z_offset = self.z_offset + self.z_vel * self.dt
         self.z_offset = torch.maximum(torch.minimum(self.z_offset, press_max), press_min)
 
