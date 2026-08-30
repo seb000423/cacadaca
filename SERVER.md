@@ -149,7 +149,7 @@ assets/js/auth-client.js   헤더 세션 표시 · 로그아웃 · API 래퍼
 
 | 파일 | 역할 |
 |---|---|
-| `api/[[...route]].js` | `/api/*` 캐치올 — `server/routes.js` 위임 |
+|  `api/index.js` | `/api/*` 단일 함수 — rewrite 가 원 경로를 `__path` 로 전달 · `server/routes.js` 위임 |
 | `middleware.js` | HTML 302/403 게이팅 (HMAC 서명 쿠키 검증, DB 안 봄) |
 | `server/db.js` | `TURSO_DATABASE_URL` 있으면 Turso(libSQL), 없으면 로컬 node:sqlite |
 | `vercel.json` | 자산 캐시(immutable) · HTML no-store · .glb MIME |
