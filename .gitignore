@@ -16,3 +16,6 @@ _probe.html
 
 # 참고용 원본 소스 (자체 git 저장소 — 이 repo 에 넣지 않는다)
 polytwin_sourcecode/
+
+.vercel
+.env*

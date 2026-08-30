@@ -164,13 +164,11 @@
             </div>
 
             <div style="padding: 18px 18px 8px">
+              <div style="position: relative">
               <svg viewBox="0 0 1200 300" role="img" aria-label="정답 run 의 접촉력 시계열" style="display: block; width: 100%; height: auto">
                 <rect x="{{ vizBand.x }}" y="{{ vizBand.y }}" width="{{ vizBand.w }}" height="{{ vizBand.h }}" style="fill: rgb(var(--accent-ch) / 0.07)"></rect>
                 <sc-for list="{{ vizGrid }}" as="g" hint-placeholder-count="4">
                   <line x1="64" y1="{{ g.y }}" x2="1180" y2="{{ g.y }}" stroke-width="1" vector-effect="non-scaling-stroke" style="stroke: var(--bg-panel)"></line>
-                </sc-for>
-                <sc-for list="{{ vizGrid }}" as="g" hint-placeholder-count="4">
-                  <text x="56" y="{{ g.ty }}" text-anchor="end" style="fill: var(--text-lo); font-family: var(--f-mono); font-size: 10px">{{ g.label }}</text>
                 </sc-for>
                 <sc-for list="{{ vizSeries }}" as="s" hint-placeholder-count="2">
                   <path d="{{ s.base }}" fill="none" stroke-width="1" stroke-dasharray="4 4" vector-effect="non-scaling-stroke" style="stroke: var(--line-hi)"></path>
@@ -180,9 +178,13 @@
                 </sc-for>
                 <line x1="64" y1="264" x2="1180" y2="264" stroke-width="1" vector-effect="non-scaling-stroke" style="stroke: var(--line)"></line>
                 <text x="64" y="286" style="fill: var(--text-lo); font-family: var(--f-mono); font-size: 11px">0</text>
-                <text x="1180" y="286" text-anchor="end" style="fill: var(--text-lo); font-family: var(--f-mono); font-size: 10px">{{ vizXMax }}</text>
                 <text x="622" y="286" text-anchor="middle" style="fill: var(--text-lo); font-size: 10px">경로 진행 (스텝)</text>
               </svg>
+                <sc-for list="{{ vizGrid }}" as="g" hint-placeholder-count="5">
+                  <div style="position: absolute; left: 0; top: {{ g.top }}; width: 4.4%; transform: translateY(-50%); text-align: right; font-family: var(--f-mono); font-size: 10px; color: var(--text-lo); font-variant-numeric: tabular-nums; pointer-events: none">{{ g.label }}</div>
+                </sc-for>
+                <div style="position: absolute; right: 0; bottom: 1.5%; font-family: var(--f-mono); font-size: 10px; color: var(--text-lo); font-variant-numeric: tabular-nums; pointer-events: none">{{ vizXMax }}</div>
+              </div>
             </div>
 
             <div style="display: flex; align-items: baseline; gap: 10px; padding: 0 18px 12px">
@@ -196,6 +198,7 @@
 
               <div>
                 <div style="font-size: 11px; font-weight: 500; letter-spacing: 0.12em; text-transform: uppercase; color: var(--text-lo); margin-bottom: 8px">지표 6종</div>
+                <div style="position: relative">
                 <svg viewBox="0 0 384 276" role="img" aria-label="지표 6종 비교 레이더" style="display: block; width: 100%; height: auto">
                   <sc-for list="{{ radarRings }}" as="r" hint-placeholder-count="4">
                     <polygon points="{{ r.points }}" fill="none" stroke-width="1" vector-effect="non-scaling-stroke" style="stroke: var(--line)"></polygon>
@@ -206,10 +209,11 @@
                   <sc-for list="{{ radarSeries }}" as="sr" hint-placeholder-count="2">
                     <polygon points="{{ sr.points }}" fill-opacity="0.12" stroke-width="1.5" stroke-linejoin="round" vector-effect="non-scaling-stroke" style="fill: {{ sr.color }}; stroke: {{ sr.color }}"></polygon>
                   </sc-for>
-                  <sc-for list="{{ radarLabels }}" as="l" hint-placeholder-count="6">
-                    <text x="{{ l.x }}" y="{{ l.y }}" text-anchor="{{ l.anchor }}" style="fill: var(--text-lo); font-size: 10px">{{ l.text }}</text>
-                  </sc-for>
                 </svg>
+                  <sc-for list="{{ radarLabels }}" as="l" hint-placeholder-count="6">
+                    <div style="position: absolute; left: {{ l.left }}; top: {{ l.top }}; transform: {{ l.shift }}; font-size: 10px; color: var(--text-lo); white-space: nowrap; pointer-events: none">{{ l.text }}</div>
+                  </sc-for>
+                </div>
                 <div style="margin-top: 6px; font-size: 10px; color: var(--text-lo); line-height: 1.5; word-break: keep-all">{{ radarNote }}</div>
               </div>
 
@@ -657,7 +661,9 @@ class Component extends DCLogic {
       const steps = 4;
       for (let i = 0; i <= steps; i++) {
         const v = yMax * i / steps;
-        vizGrid.push({ y: yOf(v).toFixed(1), ty: (yOf(v) + 3.5).toFixed(1), label: v.toFixed(1) });
+        // top 은 SVG 밖 HTML 라벨용. viewBox 높이 300 기준 백분율이다
+        vizGrid.push({ y: yOf(v).toFixed(1), ty: (yOf(v) + 3.5).toFixed(1),
+                       top: (yOf(v) / 300 * 100).toFixed(2) + '%', label: v.toFixed(1) });
       }
       const pathOf = (arr) => arr.map((v, i) =>
         (i ? 'L' : 'M') + (X0 + i / (arr.length - 1) * (X1 - X0)).toFixed(1) + ',' + yOf(v).toFixed(1)).join(' ');
@@ -704,11 +710,15 @@ class Component extends DCLogic {
     });
     const radarLabels = AXES.map((ax, i) => {
       const a = angOf(i), cx = Math.cos(a), cy = Math.sin(a);
+      // SVG <text> 는 이 프레임워크에서 바인딩이 안 먹어 HTML 로 얹는다.
+      // 좌표는 viewBox(384x276) 기준 백분율이라 폭이 바뀌어도 따라간다.
+      const lx = RCX + cx * (RR + 14), ly = RCY + cy * (RR + 14);
+      const ax0 = cx > 0.25 ? 0 : (cx < -0.25 ? -100 : -50);
       return {
         text: ax.key,
-        x: (RCX + cx * (RR + 14)).toFixed(1),
-        y: (RCY + cy * (RR + 14) + 3.5).toFixed(1),
-        anchor: cx > 0.25 ? 'start' : (cx < -0.25 ? 'end' : 'middle'),
+        left: (lx / 384 * 100).toFixed(2) + '%',
+        top: (ly / 276 * 100).toFixed(2) + '%',
+        shift: 'translate(' + ax0 + '%, -50%)',
       };
     });
     const radarSeries = pinned.map((u, i) => ({

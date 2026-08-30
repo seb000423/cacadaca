@@ -1,5 +1,8 @@
 /* ══════════════════════════════════════════════════════════════
-   Vercel 서버리스 함수 — /api/* 전부 이 캐치올 하나로 받는다.
+   Vercel 서버리스 함수 — /api/* 전부 이 함수 하나로 받는다.
+   vercel.json 의 rewrite 가 원래 경로를 __path 쿼리에 실어 보낸다
+   ([[...route]] 이중 대괄호 캐치올은 Next.js 문법이라 일반 Vercel
+   함수에서는 1단계 깊이만 매칭됐다 — 2026-08-31 실측).
    로직은 server/routes.js — 로컬 서버(server/server.js)와 같은
    코드다. 여기서는 pathname 만 풀어서 넘긴다.
 
@@ -14,7 +17,9 @@ const { handleApi, json } = require('../server/routes');
 module.exports = async (req, res) => {
   let pathname;
   try {
-    pathname = decodeURIComponent(new URL(req.url, 'http://localhost').pathname);
+    const u = new URL(req.url, 'http://localhost');
+    /* rewrite 를 거치면 req.url 이 /api/index?__path=… 가 된다 — 원 경로 우선 */
+    pathname = decodeURIComponent(u.searchParams.get('__path') || u.pathname);
   } catch {
     res.statusCode = 400;
     res.end('bad request');
