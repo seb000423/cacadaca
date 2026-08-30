@@ -120,7 +120,18 @@ function makeLibsqlBackend() {
   };
 }
 
-const be = process.env.TURSO_DATABASE_URL ? makeLibsqlBackend() : makeSqliteBackend();
+/* Vercel 인데 Turso 가 없으면 — 파일 SQLite 는 읽기 전용 FS 에서
+   크래시한다. 모듈 로드는 살려 두고, 실제 호출 시 명확히 알린다 */
+function makeUnconfiguredBackend() {
+  const die = () => {
+    throw new Error('TURSO_DATABASE_URL 미설정 — Vercel 에서는 원격 DB 가 필요합니다 (SERVER.md 참고).');
+  };
+  return { path: '(unconfigured)', run: die, get: die, all: die };
+}
+
+const be = process.env.TURSO_DATABASE_URL ? makeLibsqlBackend()
+  : process.env.VERCEL ? makeUnconfiguredBackend()
+  : makeSqliteBackend();
 
 /* ── 스토어 — 백엔드와 무관하게 한 벌 ────────────────────────── */
 const store = {
