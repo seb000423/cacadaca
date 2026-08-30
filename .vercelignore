@@ -1,0 +1,39 @@
+# ── 배포 제외 ─────────────────────────────────────────────
+# 전체 디렉터리는 700MB다. 배포는 50–60MB여야 정상이다.
+
+# 백업·스냅샷
+*.backup-*.html
+*.html.bak
+_snapshot_*/
+_probe.html
+
+# 원본 보관본 (비교용 — CLAUDE.md '배포 제외')
+assets/models/_orig/
+assets/img/_orig_light/
+
+# HTML 5장 어디서도 참조하지 않는다 (2026-08-31 grep 확인)
+assets/new_img/
+
+# 로컬 DB
+data/
+
+# 소스·도구 — 사이트가 fetch 하지 않는다
+console-src/
+polytwin_sourcecode/
+
+# 데이터셋: 사이트가 읽는 건 *.json 2개뿐 (아래 예외 참고)
+데이터셋/sweep_traj_csv/
+데이터셋/sweep_traj_csv.zip
+데이터셋/sweep_분석_0827/
+데이터셋/__pycache__/
+데이터셋/*.py
+데이터셋/*.docx
+데이터셋/data_sample.txt
+
+# 검수 도구 — 배포 대상 아님
+asset-check.html
+rig-check.html
+clip-check.html
+
+# 문서 (저장소에는 있고 배포에는 없다)
+*.md
