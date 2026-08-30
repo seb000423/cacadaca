@@ -24,6 +24,8 @@ parser.add_argument("--conditions", type=str, required=True,
                     help="쉼표구분 name=ckpt (ckpt 비우면 baseline)")
 parser.add_argument("--num_envs", type=int, default=8)
 parser.add_argument("--episodes", type=int, default=2)
+parser.add_argument("--recipe_json", type=str, default=None,
+                    help="env recipe 재정의 — 로봇 레시피 스크리닝용")
 parser.add_argument("--contact_mode", type=str, default="physical",
                     choices=["physical", "model"],
                     help="physical=PhysX 센서힘(검증 완료, C단계 기본) / model=가상 스프링힘")
@@ -138,6 +140,9 @@ def main():
         conds.append((name.strip(), ckpt.strip() or None))
 
     env_cfg = RobotPolishEnvCfg()
+    if args.recipe_json:
+        env_cfg.recipe_json_path = args.recipe_json
+        print(f"[cfg] recipe_json = {args.recipe_json}")
     env_cfg.scene.num_envs = args.num_envs
     env_cfg.enable_pad_physical_contact = (args.contact_mode == "physical")
     env = RobotPolishEnv(env_cfg, render_mode=None)

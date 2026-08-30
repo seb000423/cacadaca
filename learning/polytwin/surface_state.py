@@ -155,3 +155,51 @@ def make_flat_patch(patch_size_m=(0.20, 0.20),
         last_active_time_s=np.full(shape, -1e9),
         seed=seed,
     )
+
+
+# ── Gate 4: 곡면 patch 생성 (02 문서 6장 표면 family) ─────────────────────
+def make_curved_patch(kind: str = "cylinder",
+                      curvature_radius_m: float = 0.6,
+                      patch_size_m=(0.12, 0.12),
+                      resolution_m: float = 0.002,
+                      seed: int = 0,
+                      n_scratches: int | None = None,
+                      target_ra_um: float = C.RA_TARGET_UM,
+                      with_scratches: bool = True) -> SurfaceState:
+    """곡면 patch — nominal 형상과 법선만 곡면으로 바꾸고 미세층(거칠기·스크래치·
+    clearcoat·열)은 평면과 동일 절차로 생성한다.
+
+    설계 근거:
+      · 품질 모델은 (u,v) 격자 위 micro_height 로 동작하므로, 곡률의 효과는
+        ① nominal_xyz(로봇 경로·시각화), ② normal_xyz(자세→접촉 상수·정렬),
+        ③ detrend(roughness_metrics 는 2차 피팅까지 지원 — DETREND_ORDER 주의)로 들어온다.
+      · kind="cylinder": u 축을 따라 반경 R 원통 (펜더/루프 가장자리 근사).
+        kind="sphere"  : 반경 R 구면 캡 (보닛 중앙부 근사).
+      · 곡률 sagitta 는 patch 대비 작아야 한다 (0.12 m patch, R≥0.3 m → sag ≤ 6 mm).
+    ⚠ SYNTHETIC — 실측 차체 곡률 아님. 실차 맵은 Gate 7 이후.
+    """
+    if kind not in ("cylinder", "sphere"):
+        raise ValueError(f"kind must be cylinder|sphere, got {kind}")
+    st = make_flat_patch(patch_size_m, resolution_m, seed=seed,
+                         n_scratches=n_scratches, target_ra_um=target_ra_um,
+                         with_scratches=with_scratches)
+    xx = st.nominal_surface_xyz_m[..., 0]
+    yy = st.nominal_surface_xyz_m[..., 1]
+    cu = xx - patch_size_m[0] / 2.0          # patch 중심 기준 좌표
+    cv = yy - patch_size_m[1] / 2.0
+    R = float(curvature_radius_m)
+
+    if kind == "cylinder":
+        # z = R − sqrt(R² − cu²)  (u 방향으로만 굽음), 법선 = (−cu, 0, sqrt(R²−cu²))/R
+        under = np.clip(R * R - cu * cu, 1e-12, None)
+        z = R - np.sqrt(under)
+        n = np.stack([-cu, np.zeros_like(cv), np.sqrt(under)], axis=-1) / R
+    else:  # sphere
+        rho2 = cu * cu + cv * cv
+        under = np.clip(R * R - rho2, 1e-12, None)
+        z = R - np.sqrt(under)
+        n = np.stack([-cu, -cv, np.sqrt(under)], axis=-1) / R
+
+    st.nominal_surface_xyz_m[..., 2] = -z    # 볼록면: 중심이 가장 높게 (차체 외판)
+    st.normal_xyz = n / np.linalg.norm(n, axis=-1, keepdims=True)
+    return st
