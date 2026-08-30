@@ -32,9 +32,9 @@ from omni.isaac.sensor import ContactSensor
 
 # 스크립트 위치 기준 경로 설정
 _SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-_SRC_DIR = os.path.dirname(_SCRIPT_DIR)  # 
-final_polishing
-_ROBOTARM_POLISHING_DIR = "/home/rokey/isaacpjt"
+_SRC_DIR = os.path.dirname(_SCRIPT_DIR)  #
+# (구) 아무 데도 안 쓰이던 잔재 코드 제거: 미정의 이름 `final_polishing` 단독 참조로
+# 실행 시 NameError 발생, `_ROBOTARM_POLISHING_DIR`도 다른 PC 절대경로라 참조 없이 죽은 코드였음.
 
 # RMPFlow 컨트롤러 경로 추가
 sys.path.append(os.path.join(_SRC_DIR, "rmpflow"))

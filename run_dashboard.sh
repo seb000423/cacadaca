@@ -23,18 +23,25 @@ cleanup() { for p in "${PIDS[@]}"; do kill "$p" 2>/dev/null || true; done; }
 trap cleanup EXIT
 
 # --- 1) ROS2 rosbridge_server (UI ↔ ROS2 통신) ---
+# 서브셸(괄호)로 감싸서 source한 ROS2 환경변수(LD_LIBRARY_PATH 등)가 메인 셸로
+# 새어나가지 않게 격리한다. 이게 안 지켜지면 이후 이 셸에서 뜨는
+# dashboard_launcher.py -> isaac_python 서브프로세스가 그 환경을 그대로 물려받아,
+# Isaac Sim 내부 번들 ROS2(jazzy, cp311)와 시스템 ROS2가 라이브러리 레벨에서
+# 섞여 rclpy 세그폴트가 난다 (실제로 겪은 크래시: rcl_interfaces 컨버전 assert).
 ROS_SETUP="${ROS_SETUP:-/opt/ros/humble/setup.bash}"
 if [ -f "$ROS_SETUP" ]; then
-  # shellcheck disable=SC1090
-  source "$ROS_SETUP"
-  if ros2 pkg prefix rosbridge_server >/dev/null 2>&1; then
-    echo "[run_dashboard] rosbridge_server 실행 (ws://localhost:9090)"
-    ros2 launch rosbridge_server rosbridge_websocket_launch.xml >/tmp/rosbridge.log 2>&1 &
-    PIDS+=($!)
-  else
-    echo "[run_dashboard] ⚠ rosbridge_server 미설치 → ROS2 통신 불가 (UI는 데모 모드)"
-    echo "    설치: sudo apt install ros-humble-rosbridge-suite"
-  fi
+  (
+    # shellcheck disable=SC1090
+    source "$ROS_SETUP"
+    if ros2 pkg prefix rosbridge_server >/dev/null 2>&1; then
+      echo "[run_dashboard] rosbridge_server 실행 (ws://localhost:9090)"
+      exec ros2 launch rosbridge_server rosbridge_websocket_launch.xml >/tmp/rosbridge.log 2>&1
+    else
+      echo "[run_dashboard] ⚠ rosbridge_server 미설치 → ROS2 통신 불가 (UI는 데모 모드)"
+      echo "    설치: sudo apt install ros-humble-rosbridge-suite"
+    fi
+  ) &
+  PIDS+=($!)
 else
   echo "[run_dashboard] ⚠ ROS2($ROS_SETUP) 없음 → ROS2 통신 생략 (UI는 데모 모드)"
 fi
