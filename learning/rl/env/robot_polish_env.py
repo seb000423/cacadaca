@@ -183,7 +183,8 @@ class RobotPolishEnv(PolishEnv):
             for j, v in enumerate(vs):
                 h, _ = curve_height_normal(self.cfg.surface_kind,
                                            self.cfg.curvature_radius_m,
-                                           self.cfg.patch_size_m, float(u), float(v))
+                                           self.cfg.patch_size_m, float(u), float(v),
+                                           freeform_seed=self.cfg.freeform_seed)
                 pts.append(Gf.Vec3f(cx - self.cfg.patch_size_m[0] / 2 + float(u),
                                     cy - self.cfg.patch_size_m[1] / 2 + float(v),
                                     self.cfg.work_top_m + h))
@@ -343,7 +344,8 @@ class RobotPolishEnv(PolishEnv):
                 nrm = np.stack([curve_height_normal(
                     self.cfg.surface_kind, self.cfg.curvature_radius_m,
                     self.cfg.patch_size_m,
-                    float(self._pad_uv_actual[i, 0]), float(self._pad_uv_actual[i, 1]))[1]
+                    float(self._pad_uv_actual[i, 0]), float(self._pad_uv_actual[i, 1]),
+                    freeform_seed=self.cfg.freeform_seed)[1]
                     for i in range(self.num_envs)])
                 nrm_t = torch.as_tensor(nrm, dtype=net.dtype, device=net.device)
                 raw = (net * nrm_t).sum(dim=-1).abs()
@@ -435,7 +437,8 @@ class RobotPolishEnv(PolishEnv):
             h_curve, _ = curve_height_normal(self.cfg.surface_kind,
                                              self.cfg.curvature_radius_m,
                                              self.cfg.patch_size_m,
-                                             float(uv[0]), float(uv[1]))
+                                             float(uv[0]), float(uv[1]),
+                                             freeform_seed=self.cfg.freeform_seed)
             targets[i, 2] = (self.cfg.work_top_m + h_curve
                              + float(self.contact.command_clearance[i].clamp(-0.003, 0.08)))
 

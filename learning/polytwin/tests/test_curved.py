@@ -46,6 +46,24 @@ st2 = make_curved_patch("cylinder", 0.3, seed=1)
 tilt = np.degrees(np.arccos(np.clip(st2.normal_xyz[..., 2], -1, 1)))
 check("tilt 범위(완만 곡면 < 45°)", 5.0 < tilt.max() < 15.0, f"max tilt={tilt.max():.1f}°")
 
+# 7) freeform: 법선 해석식 vs 수치미분 일치 + 경사 한도
+from learning.polytwin.surface_state import curve_height_normal
+st3 = make_curved_patch("freeform", 0.0, seed=5)
+tilt3 = np.degrees(np.arccos(np.clip(st3.normal_xyz[..., 2], -1, 1)))
+check("freeform: 경사 한도(<12°)", tilt3.max() < 12.0, f"max {tilt3.max():.1f}°")
+eps = 1e-5
+h0,_ = curve_height_normal("freeform", 0, (0.12,0.12), 0.05, 0.07, freeform_seed=5)
+hu,_ = curve_height_normal("freeform", 0, (0.12,0.12), 0.05+eps, 0.07, freeform_seed=5)
+hv,_ = curve_height_normal("freeform", 0, (0.12,0.12), 0.05, 0.07+eps, freeform_seed=5)
+_, n0 = curve_height_normal("freeform", 0, (0.12,0.12), 0.05, 0.07, freeform_seed=5)
+num = np.array([-(hu-h0)/eps, -(hv-h0)/eps, 1.0]); num /= np.linalg.norm(num)
+check("freeform: 법선=수치미분 일치", np.allclose(n0, num, atol=1e-4))
+check("freeform: seed 별 형상 상이", not np.allclose(
+    st3.nominal_surface_xyz_m[...,2],
+    make_curved_patch("freeform", 0.0, seed=6).nominal_surface_xyz_m[...,2]))
+check("freeform: micro 층 평면과 동일", np.array_equal(
+    st3.micro_height_um, make_flat_patch((0.12,0.12),0.002,seed=5,with_scratches=True).micro_height_um))
+
 n_fail = ok.count(False)
 print(f"\n{len(ok)-n_fail}/{len(ok)} 통과")
 sys.exit(1 if n_fail else 0)

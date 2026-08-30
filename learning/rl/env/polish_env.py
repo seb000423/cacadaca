@@ -401,6 +401,15 @@ class PolishEnv(DirectRLEnv):
                     self.cfg.surface_kind, self.cfg.curvature_radius_m,
                     self.cfg.patch_size_m, self.cfg.patch_resolution_m,
                     seed=seed, with_scratches=True)
+                if self.cfg.surface_kind == "freeform":
+                    # 형상은 고정(충돌 메시와 일치), 미세층만 에피소드 seed — 형상 seed 를
+                    # cfg.freeform_seed 로 재생성해 nominal/법선을 덮어쓴다.
+                    ref = make_curved_patch("freeform", 0.0, self.cfg.patch_size_m,
+                                            self.cfg.patch_resolution_m,
+                                            seed=self.cfg.freeform_seed,
+                                            with_scratches=False)
+                    self._surfaces[i].nominal_surface_xyz_m = ref.nominal_surface_xyz_m
+                    self._surfaces[i].normal_xyz = ref.normal_xyz
             self._episode_count[i] += 1
             # 새 에피소드의 "전" 품질 — 종말 보상의 Δ(개선량) 기준점 (같은 에피소드 전·후)
             if self.cfg.use_terminal_reward:

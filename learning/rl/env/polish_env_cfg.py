@@ -64,7 +64,8 @@ class PolishEnvCfg(DirectRLEnvCfg):
     # flat(기본)|cylinder|sphere. 곡률의 물리 효과는 로봇 트랙에서 실재(IK+PhysX 접촉),
     # 해석식 트랙에서는 표면 생성만 곡면 (품질 모델은 (u,v) 격자라 동일 동작 — 명시).
     surface_kind: str = "flat"
-    curvature_radius_m: float = 0.6        # env i, episode e → seed = base + 97*i + e
+    curvature_radius_m: float = 0.6
+    freeform_seed: int = 0               # freeform 형상 seed (에피소드 표면 seed 와 별개)        # env i, episode e → seed = base + 97*i + e
 
     # ── 잔차 스케일 (PT-DESIGN — action=0 baseline p95 로 재산출 예정, 04 문서 7장) ──
     force_ratio_limit: float = 0.3       # 힘 목표 ±30 %

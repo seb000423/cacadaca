@@ -178,8 +178,8 @@ def make_curved_patch(kind: str = "cylinder",
       · 곡률 sagitta 는 patch 대비 작아야 한다 (0.12 m patch, R≥0.3 m → sag ≤ 6 mm).
     ⚠ SYNTHETIC — 실측 차체 곡률 아님. 실차 맵은 Gate 7 이후.
     """
-    if kind not in ("cylinder", "sphere"):
-        raise ValueError(f"kind must be cylinder|sphere, got {kind}")
+    if kind not in ("cylinder", "sphere", "freeform"):
+        raise ValueError(f"kind must be cylinder|sphere|freeform, got {kind}")
     st = make_flat_patch(patch_size_m, resolution_m, seed=seed,
                          n_scratches=n_scratches, target_ra_um=target_ra_um,
                          with_scratches=with_scratches)
@@ -188,6 +188,19 @@ def make_curved_patch(kind: str = "cylinder",
     cu = xx - patch_size_m[0] / 2.0          # patch 중심 기준 좌표
     cv = yy - patch_size_m[1] / 2.0
     R = float(curvature_radius_m)
+
+    if kind == "freeform":
+        nx, ny = st.shape
+        h = np.zeros((nx, ny)); nrm = np.zeros((nx, ny, 3))
+        for i in range(nx):
+            for j in range(ny):
+                hh, nn = curve_height_normal("freeform", curvature_radius_m, patch_size_m,
+                                             float(xx[i, j]), float(yy[i, j]),
+                                             freeform_seed=seed)
+                h[i, j] = hh; nrm[i, j] = nn
+        st.nominal_surface_xyz_m[..., 2] = h
+        st.normal_xyz = nrm
+        return st
 
     if kind == "cylinder":
         # z = R − sqrt(R² − cu²)  (u 방향으로만 굽음), 법선 = (−cu, 0, sqrt(R²−cu²))/R
@@ -205,7 +218,22 @@ def make_curved_patch(kind: str = "cylinder",
     return st
 
 
-def curve_height_normal(kind: str, radius_m: float, patch_size_m, u: float, v: float):
+def _freeform_params(seed: int, patch_size_m):
+    """자유곡면 = 가우시안 범프 K개의 합 (해석식 — 어느 (u,v)에서도 높이·법선 일관).
+
+    진폭·폭은 PT-DESIGN: 최대 경사 ~8° (검증된 원통 R=0.3 의 tilt 범위 안), sagitta 수 mm.
+    """
+    rng = np.random.default_rng(seed + 777_000)
+    K = 6
+    return [(float(rng.uniform(0.15, 0.85) * patch_size_m[0]),
+             float(rng.uniform(0.15, 0.85) * patch_size_m[1]),
+             float(rng.uniform(-0.0025, 0.0025)),           # 진폭 ±2.5 mm
+             float(rng.uniform(0.03, 0.06)))                # 폭 3~6 cm
+            for _ in range(K)]
+
+
+def curve_height_normal(kind: str, radius_m: float, patch_size_m, u: float, v: float,
+                        freeform_seed: int = 0):
     """(u,v) 에서의 곡면 높이 h(중심=0, 가장자리 음수)와 단위 법선. flat 이면 (0, +z).
 
     make_curved_patch 의 nominal 과 동일 규약 — env 의 IK 목표·힘 투영이 이 식을 쓴다.
@@ -223,6 +251,15 @@ def curve_height_normal(kind: str, radius_m: float, patch_size_m, u: float, v: f
         under = max(R * R - cu * cu - cv * cv, 1e-12)
         h = np.sqrt(under) - R
         n = np.array([-cu, -cv, np.sqrt(under)]) / R
+    elif kind == "freeform":
+        h, du, dv = 0.0, 0.0, 0.0
+        for cx, cy, amp, w in _freeform_params(freeform_seed, patch_size_m):
+            g = amp * np.exp(-(((u - cx) ** 2) + ((v - cy) ** 2)) / (2.0 * w * w))
+            h += g
+            du += g * (-(u - cx) / (w * w))
+            dv += g * (-(v - cy) / (w * w))
+        n = np.array([-du, -dv, 1.0])
+        return float(h), n / np.linalg.norm(n)
     else:
         raise ValueError(f"unknown surface kind: {kind}")
     return float(h), n / np.linalg.norm(n)
