@@ -26,7 +26,8 @@ from learning.polytwin import config as PC
 from learning.polytwin.gloss_proxy import LiteratureGlossProxyModel
 from learning.polytwin.path_executor import Recipe, load_calibrated_config, raster_waypoints
 from learning.polytwin.polishing_model import ContactState, LiteraturePolishingModel
-from learning.polytwin.surface_state import make_flat_patch
+from learning.polytwin.surface_state import (curve_height_normal, make_curved_patch,
+                                              make_flat_patch)
 
 from .contact import VirtualPadContact
 from .polish_env_cfg import PolishEnvCfg
@@ -391,9 +392,15 @@ class PolishEnv(DirectRLEnv):
 
         for i in ids.cpu().tolist():
             seed = self.cfg.surface_seed_base + 97 * i + int(self._episode_count[i])
-            self._surfaces[i] = make_flat_patch(
-                self.cfg.patch_size_m, self.cfg.patch_resolution_m,
-                seed=seed, with_scratches=True)
+            if self.cfg.surface_kind == "flat":
+                self._surfaces[i] = make_flat_patch(
+                    self.cfg.patch_size_m, self.cfg.patch_resolution_m,
+                    seed=seed, with_scratches=True)
+            else:
+                self._surfaces[i] = make_curved_patch(
+                    self.cfg.surface_kind, self.cfg.curvature_radius_m,
+                    self.cfg.patch_size_m, self.cfg.patch_resolution_m,
+                    seed=seed, with_scratches=True)
             self._episode_count[i] += 1
             # 새 에피소드의 "전" 품질 — 종말 보상의 Δ(개선량) 기준점 (같은 에피소드 전·후)
             if self.cfg.use_terminal_reward:

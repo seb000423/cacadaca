@@ -203,3 +203,26 @@ def make_curved_patch(kind: str = "cylinder",
     st.nominal_surface_xyz_m[..., 2] = -z    # 볼록면: 중심이 가장 높게 (차체 외판)
     st.normal_xyz = n / np.linalg.norm(n, axis=-1, keepdims=True)
     return st
+
+
+def curve_height_normal(kind: str, radius_m: float, patch_size_m, u: float, v: float):
+    """(u,v) 에서의 곡면 높이 h(중심=0, 가장자리 음수)와 단위 법선. flat 이면 (0, +z).
+
+    make_curved_patch 의 nominal 과 동일 규약 — env 의 IK 목표·힘 투영이 이 식을 쓴다.
+    """
+    if kind == "flat":
+        return 0.0, np.array([0.0, 0.0, 1.0])
+    cu = u - patch_size_m[0] / 2.0
+    cv = v - patch_size_m[1] / 2.0
+    R = float(radius_m)
+    if kind == "cylinder":
+        under = max(R * R - cu * cu, 1e-12)
+        h = np.sqrt(under) - R
+        n = np.array([-cu, 0.0, np.sqrt(under)]) / R
+    elif kind == "sphere":
+        under = max(R * R - cu * cu - cv * cv, 1e-12)
+        h = np.sqrt(under) - R
+        n = np.array([-cu, -cv, np.sqrt(under)]) / R
+    else:
+        raise ValueError(f"unknown surface kind: {kind}")
+    return float(h), n / np.linalg.norm(n)

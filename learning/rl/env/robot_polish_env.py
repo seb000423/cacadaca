@@ -25,6 +25,8 @@ from scripts.polishing_v5_modules.common import (
 )
 
 from .polish_env import PolishEnv
+from learning.polytwin.surface_state import curve_height_normal
+
 from .robot_polish_env_cfg import RobotPolishEnvCfg
 
 
@@ -128,11 +130,18 @@ class RobotPolishEnv(PolishEnv):
             # kinematic rigid body 로 스폰하면 정지 상태 그대로 필터가 지원된다.
             plate.rigid_props = sim_utils.RigidBodyPropertiesCfg(kinematic_enabled=True)
             plate.mass_props = sim_utils.MassPropertiesCfg(mass=10.0)
-        plate.func(
-            "/World/envs/env_0/Workpiece", plate,
-            translation=(self.cfg.patch_center_xy_m[0], self.cfg.patch_center_xy_m[1],
-                         self.cfg.work_top_m - 0.025),
-        )
+        if self.cfg.surface_kind == "flat":
+            plate.func(
+                "/World/envs/env_0/Workpiece", plate,
+                translation=(self.cfg.patch_center_xy_m[0], self.cfg.patch_center_xy_m[1],
+                             self.cfg.work_top_m - 0.025),
+            )
+        else:
+            # ── Gate 4: 곡면 작업면 — nominal 격자에서 삼각 메시를 절차 생성해
+            #    PhysX 가 "진짜 곡면"을 누르게 한다 (kinematic rigid + trimesh collider —
+            #    평판과 동일한 GPU contact-filter 우회 조건 유지). 패드는 수직 유지(1차
+            #    증분) → 곡면 가장자리 정렬 오차가 물리로 자연 발생.
+            self._spawn_curved_workpiece()
 
         spawn_ground_plane(prim_path="/World/ground", cfg=GroundPlaneCfg())
         self.scene.clone_environments(copy_from_source=False)
@@ -156,6 +165,50 @@ class RobotPolishEnv(PolishEnv):
 
         light = sim_utils.DomeLightCfg(intensity=3000.0, color=(0.85, 0.87, 0.9))
         light.func("/World/Light", light)
+
+    def _spawn_curved_workpiece(self):
+        """곡면 nominal 격자 → UsdGeom.Mesh (+Collision/kinematic RigidBody)."""
+        import omni.usd
+        from pxr import Gf, UsdGeom, UsdPhysics
+
+        stage = omni.usd.get_context().get_stage()
+        cx, cy = self.cfg.patch_center_xy_m
+        W = self.cfg.patch_size_m[0] + 0.04
+        H = self.cfg.patch_size_m[1] + 0.04
+        n = 41                                     # 41×41 격자 → 3,200 tri (충돌용 충분)
+        us = np.linspace(-0.02, self.cfg.patch_size_m[0] + 0.02, n)
+        vs = np.linspace(-0.02, self.cfg.patch_size_m[1] + 0.02, n)
+        pts, idx = [], []
+        for i, u in enumerate(us):
+            for j, v in enumerate(vs):
+                h, _ = curve_height_normal(self.cfg.surface_kind,
+                                           self.cfg.curvature_radius_m,
+                                           self.cfg.patch_size_m, float(u), float(v))
+                pts.append(Gf.Vec3f(cx - self.cfg.patch_size_m[0] / 2 + float(u),
+                                    cy - self.cfg.patch_size_m[1] / 2 + float(v),
+                                    self.cfg.work_top_m + h))
+        for i in range(n - 1):
+            for j in range(n - 1):
+                a = i * n + j; b = a + 1; c = a + n; d = c + 1
+                # 위쪽(+z) 법선이 되는 감김: (a,d,b), (a,c,d) — cross 검산 완료.
+                # ⚠ 처음 (a,b,d) 순서는 법선이 아래를 향해 단면 trimesh 를 패드가
+                #   그대로 통과했다 (스모크에서 접촉력 0 으로 발각).
+                idx += [a, d, b, a, c, d]
+        mesh = UsdGeom.Mesh.Define(stage, "/World/envs/env_0/Workpiece")
+        mesh.CreatePointsAttr(pts)
+        mesh.CreateFaceVertexCountsAttr([3] * (len(idx) // 3))
+        mesh.CreateFaceVertexIndicesAttr(idx)
+        mesh.CreateDisplayColorAttr([Gf.Vec3f(0.05, 0.12, 0.35)])
+        prim = mesh.GetPrim()
+        UsdPhysics.CollisionAPI.Apply(prim)
+        mesh_col = UsdPhysics.MeshCollisionAPI.Apply(prim)
+        mesh_col.CreateApproximationAttr("none")   # trimesh 그대로 (kinematic 지원)
+        if self.cfg.enable_pad_physical_contact:
+            rb = UsdPhysics.RigidBodyAPI.Apply(prim)
+            rb.CreateKinematicEnabledAttr(True)
+            UsdPhysics.MassAPI.Apply(prim).CreateMassAttr(10.0)
+        print(f"[RobotPolishEnv] 곡면 작업면 스폰: {self.cfg.surface_kind} "
+              f"R={self.cfg.curvature_radius_m} ({n}x{n} 격자)")
 
     def __init__(self, cfg: RobotPolishEnvCfg, render_mode: str | None = None, **kwargs):
         if cfg.enable_pad_physical_contact:
@@ -283,7 +336,17 @@ class RobotPolishEnv(PolishEnv):
                 net = net[:, 0, :]                       # (E,1,3) → (E,3): 패드 body 1개
             fault = ~torch.isfinite(net).all(dim=-1)
             net = torch.where(fault.unsqueeze(-1), torch.zeros_like(net), net)
-            raw = net[:, 2].abs()
+            if self.cfg.surface_kind == "flat":
+                raw = net[:, 2].abs()
+            else:
+                # 곡면: F_normal = |F · n(uv)| — 실측 패드 위치의 국소 법선으로 투영
+                nrm = np.stack([curve_height_normal(
+                    self.cfg.surface_kind, self.cfg.curvature_radius_m,
+                    self.cfg.patch_size_m,
+                    float(self._pad_uv_actual[i, 0]), float(self._pad_uv_actual[i, 1]))[1]
+                    for i in range(self.num_envs)])
+                nrm_t = torch.as_tensor(nrm, dtype=net.dtype, device=net.device)
+                raw = (net * nrm_t).sum(dim=-1).abs()
         except Exception:
             fault = torch.ones(self.num_envs, dtype=torch.bool, device=self.device)
             raw = torch.zeros(self.num_envs, device=self.device)
@@ -369,7 +432,12 @@ class RobotPolishEnv(PolishEnv):
             self._prev_uv[i] = uv
             targets[i, 0] = float(uv[0]) - self.cfg.patch_size_m[0] / 2 + self.cfg.patch_center_xy_m[0]
             targets[i, 1] = float(uv[1]) - self.cfg.patch_size_m[1] / 2 + self.cfg.patch_center_xy_m[1]
-            targets[i, 2] = self.cfg.work_top_m + float(self.contact.command_clearance[i].clamp(-0.003, 0.08))
+            h_curve, _ = curve_height_normal(self.cfg.surface_kind,
+                                             self.cfg.curvature_radius_m,
+                                             self.cfg.patch_size_m,
+                                             float(uv[0]), float(uv[1]))
+            targets[i, 2] = (self.cfg.work_top_m + h_curve
+                             + float(self.contact.command_clearance[i].clamp(-0.003, 0.08)))
 
         # Convert the desired contact-face pose to a link_6 target using measured
         # face feedback.  This remains correct even if the imported fixed-joint
