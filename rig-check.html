@@ -1,0 +1,279 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>M0609 리그 검수 · PolyTwin</title>
+<style>
+  :root {
+    --bg-void: #08090B; --bg-base: #0E1216; --bg-panel: #14181D;
+    --line: #232830; --line-hi: #3B424C;
+    --text-hi: #F2F4F7; --text-mid: #A8B0BA; --text-lo: #5F6873;
+    --accent: #3E9DBE; --accent-dim: #2A6478; --warn: #FFB74D;
+    --f-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg-void); color: var(--text-mid);
+         font: 13px/1.5 -apple-system, BlinkMacSystemFont, "Malgun Gothic", sans-serif;
+         word-break: keep-all; font-variant-numeric: tabular-nums; }
+  header { padding: 14px 20px; border-bottom: 1px solid var(--line); display: flex;
+           align-items: baseline; gap: 16px; }
+  h1 { margin: 0; font-size: 13px; font-weight: 500; letter-spacing: 0.14em;
+       text-transform: uppercase; color: var(--text-hi); }
+  .grid { display: grid; grid-template-columns: repeat(3, 1fr); }
+  .cell { position: relative; border-right: 1px solid var(--line);
+          border-bottom: 1px solid var(--line); aspect-ratio: 4 / 3; }
+  .cell canvas { display: block; width: 100%; height: 100%; }
+  .cap { position: absolute; left: 10px; bottom: 8px; font-family: var(--f-mono);
+         font-size: 10px; color: var(--text-lo); pointer-events: none; }
+  .cap b { color: var(--accent); font-weight: 500; }
+  #log { padding: 12px 20px; font-family: var(--f-mono); font-size: 11px;
+         color: var(--text-lo); white-space: pre-wrap; }
+  @media (prefers-reduced-motion: reduce) { * { animation: none !important; } }
+</style>
+<script type="importmap">
+{ "imports": { "three": "./assets/vendor/three.module.js",
+               "three/addons/": "./assets/vendor/" } }
+</script>
+</head>
+<body>
+<header>
+  <h1>M0609 리그 검수</h1>
+  <span style="color:var(--text-lo)">관절이 실제로 도는지, 링크가 벌어지지 않는지 확인한다</span>
+</header>
+<div class="grid" id="grid"></div>
+<div id="log">불러오는 중…</div>
+
+<script type="module">
+import * as THREE from 'three';
+import { loadArmGeometry, buildArm, RIG, TOOL } from './assets/rig/m0609.js';
+
+const log = (s) => { document.getElementById('log').textContent += '\n' + s; };
+document.getElementById('log').textContent = '';
+
+/* 검수할 자세들 — 관절을 하나씩 굽혀본다 */
+const POSES = [
+  { label: '전부 0 (원본 포즈)', q: [0, 0, 0, 0, 0, 0] },
+  { label: 'J1 +60°', q: [1.047, 0, 0, 0, 0, 0] },
+  { label: 'J2 +35°', q: [0, 0.611, 0, 0, 0, 0] },
+  { label: 'J3 −45°', q: [0, 0, -0.785, 0, 0, 0] },
+  { label: 'J5 +50°', q: [0, 0, 0, 0, 0.873, 0] },
+  { label: '복합 자세', q: [0.5, 0.45, -0.7, 0.6, 0.6, 1.2] },
+];
+
+const mats = {
+  dark: new THREE.MeshPhysicalMaterial({ color: 0x22262c, metalness: 0.5, roughness: 0.55 }),
+  arm:  new THREE.MeshPhysicalMaterial({ color: 0xb9c0c8, metalness: 0.35, roughness: 0.38,
+          clearcoat: 0.4, clearcoatRoughness: 0.3, envMapIntensity: 1.1 }),
+  tool: new THREE.MeshPhysicalMaterial({ color: 0x2A3038, metalness: 0.6, roughness: 0.4,
+          envMapIntensity: 1.1 }),
+  pad:  new THREE.MeshPhysicalMaterial({ color: 0x3E9DBE, metalness: 0.1, roughness: 0.75,
+          emissive: 0x143540, emissiveIntensity: 0.6 }),
+};
+
+const parts = await loadArmGeometry('./assets/models/robot_arm.opt.glb');
+log('링크 로드: ' + Object.keys(parts).join(', '));
+for (const [k, g] of Object.entries(parts)) {
+  const n = g.index ? g.index.count / 3 : g.attributes.position.count / 3;
+  log('  ' + k.padEnd(12) + String(Math.round(n)).padStart(7) + ' tri');
+}
+
+function envTexture(renderer) {
+  const pmrem = new THREE.PMREMGenerator(renderer);
+  const s = new THREE.Scene();
+  s.add(new THREE.Mesh(new THREE.SphereGeometry(10, 24, 16),
+    new THREE.MeshBasicMaterial({ color: 0x1A222B, side: THREE.BackSide })));
+  const strip = (x, y, z, c, i) => {
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(7, 2.4), new THREE.MeshBasicMaterial({ color: c }));
+    m.position.set(x, y, z); m.lookAt(0, 0, 0); m.material.color.multiplyScalar(i); s.add(m);
+  };
+  strip(0, 7, 0, 0xffffff, 3.2);
+  strip(-7, 1.5, -3, 0x8FD4EE, 1.4);
+  strip(7, 1.0, -4, 0xEED8B0, 1.0);
+  return pmrem.fromScene(s, 0.03).texture;
+}
+
+const grid = document.getElementById('grid');
+
+for (const pose of POSES) {
+  const cell = document.createElement('div');
+  cell.className = 'cell';
+  const canvas = document.createElement('canvas');
+  cell.appendChild(canvas);
+  const cap = document.createElement('div');
+  cap.className = 'cap';
+  cell.appendChild(cap);
+  grid.appendChild(cell);
+
+  const w = 460, h = 345;
+  const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: false });
+  renderer.setPixelRatio(1);
+  renderer.setSize(w, h, false);
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 1.1;
+  renderer.outputColorSpace = THREE.SRGBColorSpace;
+
+  const scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x0E1216);
+  scene.environment = envTexture(renderer);
+
+  const key = new THREE.DirectionalLight(0xffffff, 2.6); key.position.set(3, 6, 4); scene.add(key);
+  const rimL = new THREE.DirectionalLight(0x6FC6E8, 1.5); rimL.position.set(-6, 1.4, -3); scene.add(rimL);
+  const rimR = new THREE.DirectionalLight(0xE8C79A, 1.1); rimR.position.set(6, 1.0, -4); scene.add(rimR);
+  scene.add(new THREE.HemisphereLight(0x1C242C, 0x04060A, 0.35));
+
+  const gridHelper = new THREE.GridHelper(2, 20, 0x232830, 0x14181D);
+  scene.add(gridHelper);
+
+  const arm = buildArm(parts, mats);
+  scene.add(arm.root);
+  arm.setQ(pose.q);
+
+  // 관절 위치에 표식을 찍어 피벗이 하우징 안에 있는지 본다
+  const dots = new THREE.Group();
+  arm.joints.forEach((j) => {
+    const d = new THREE.Mesh(new THREE.SphereGeometry(0.018, 12, 8),
+      new THREE.MeshBasicMaterial({ color: 0xFFB74D }));
+    j.getWorldPosition(d.position);
+    dots.add(d);
+  });
+  scene.add(dots);
+
+  const box = new THREE.Box3().setFromObject(arm.root);
+  const c = box.getCenter(new THREE.Vector3());
+  const r = box.getBoundingSphere(new THREE.Sphere()).radius;
+  const camera = new THREE.PerspectiveCamera(38, w / h, 0.01, 50);
+  camera.position.set(c.x + r * 1.5, c.y + r * 0.85, c.z + r * 1.7);
+  camera.lookAt(c);
+  renderer.render(scene, camera);
+
+  const deg = pose.q.map((v) => (v * 180 / Math.PI).toFixed(0)).join(' ');
+  cap.innerHTML = '<b>' + pose.label + '</b>  q = [' + deg + ']°';
+}
+
+log('');
+log('주황 점 = 관절 피벗. 하우징 안에 있고, 자세가 바뀌어도 링크가 벌어지지 않아야 한다.');
+
+/* ── 툴 근접 검수 — 패드 면과 회전축이 어디인지 확정한다 ── */
+const VIEWS = [
+  { label: '툴 · 정면', dir: [1.0, 0.35, 0.9] },
+  { label: '툴 · 축 방향', dir: [0.76, 0.65, 0.0] },
+  { label: '툴 · 측면', dir: [-0.2, 0.3, 1.0] },
+];
+
+for (const view of VIEWS) {
+  const cell = document.createElement('div');
+  cell.className = 'cell';
+  const canvas = document.createElement('canvas');
+  cell.appendChild(canvas);
+  const cap = document.createElement('div');
+  cap.className = 'cap';
+  cell.appendChild(cap);
+  grid.appendChild(cell);
+
+  const w = 460, h = 345;
+  const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+  renderer.setPixelRatio(1); renderer.setSize(w, h, false);
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 1.1;
+  renderer.outputColorSpace = THREE.SRGBColorSpace;
+
+  const scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x0E1216);
+  scene.environment = envTexture(renderer);
+  const key = new THREE.DirectionalLight(0xffffff, 2.8); key.position.set(3, 6, 4); scene.add(key);
+  const rim = new THREE.DirectionalLight(0x6FC6E8, 1.6); rim.position.set(-6, 1.4, -3); scene.add(rim);
+  scene.add(new THREE.HemisphereLight(0x1C242C, 0x04060A, 0.4));
+
+  const arm = buildArm(parts, mats);
+  scene.add(arm.root);
+
+  const j6p = new THREE.Vector3().fromArray(RIG.j6.p);
+  const f = arm.padFrame();
+
+  // 리그가 계산한 패드 접촉면(빨강) 과 바깥 법선(주황)
+  const dot = new THREE.Mesh(new THREE.SphereGeometry(0.006, 14, 10),
+    new THREE.MeshBasicMaterial({ color: 0xE8232A }));
+  dot.position.copy(f.position); scene.add(dot);
+  scene.add(new THREE.ArrowHelper(f.normal, f.position, 0.09, 0xFFB74D, 0.022, 0.013));
+  const j6dot = new THREE.Mesh(new THREE.SphereGeometry(0.007, 14, 10),
+    new THREE.MeshBasicMaterial({ color: 0x3DD68C }));
+  j6dot.position.copy(j6p); scene.add(j6dot);
+
+  const camera = new THREE.PerspectiveCamera(30, w / h, 0.005, 20);
+  const d = new THREE.Vector3().fromArray(view.dir).normalize().multiplyScalar(0.62);
+  camera.position.copy(j6p).add(d);
+  camera.lookAt(j6p);
+  renderer.render(scene, camera);
+  cap.innerHTML = '<b>' + view.label + '</b>  초록=j6 · 빨강=패드면 · 주황=법선';
+}
+
+log('초록 점 = j6(플랜지). 주황 화살표 = 툴 회전축 추정. 빨강 점 = 패드 면 중심 추정.');
+log('빨강 점이 디스크 면 한가운데에, 주황 화살표가 디스크 면에 수직이면 맞다.');
+
+/* ── 설비 프롭 검수 — 리프트 / 레일 ── */
+import { GLTFLoader as GL2 } from 'three/addons/loaders/GLTFLoader.js';
+import { MeshoptDecoder as MD2 } from './assets/vendor/meshopt_decoder.mjs';
+
+const propLoader = new GL2().setMeshoptDecoder(MD2);
+const PROPS = [
+  { label: '작업용 리프트 (tele_lift)', url: './assets/models/lift.opt.glb' },
+  { label: '이동 레일 (Rail)', url: './assets/models/rail.opt.glb' },
+];
+
+for (const prop of PROPS) {
+  const cell = document.createElement('div');
+  cell.className = 'cell';
+  const canvas = document.createElement('canvas');
+  cell.appendChild(canvas);
+  const cap = document.createElement('div');
+  cap.className = 'cap';
+  cell.appendChild(cap);
+  grid.appendChild(cell);
+
+  const w = 460, h = 345;
+  const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+  renderer.setPixelRatio(1); renderer.setSize(w, h, false);
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 1.1;
+  renderer.outputColorSpace = THREE.SRGBColorSpace;
+
+  const scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x0E1216);
+  scene.environment = envTexture(renderer);
+  const k2 = new THREE.DirectionalLight(0xffffff, 2.6); k2.position.set(3, 6, 4); scene.add(k2);
+  const r2 = new THREE.DirectionalLight(0x6FC6E8, 1.4); r2.position.set(-6, 1.4, -3); scene.add(r2);
+  scene.add(new THREE.HemisphereLight(0x1C242C, 0x04060A, 0.4));
+
+  const gltf = await propLoader.loadAsync(prop.url);
+  const g = gltf.scene;
+  g.traverse((o) => { if (o.isMesh) o.material = mats.arm; });
+  scene.add(g);
+
+  const box = new THREE.Box3().setFromObject(g);
+  const size = box.getSize(new THREE.Vector3());
+  const c = box.getCenter(new THREE.Vector3());
+  // 1 m 격자로 크기를 눈으로 잴 수 있게 한다
+  const gh = new THREE.GridHelper(Math.max(4, Math.ceil(Math.max(size.x, size.z))), 
+    Math.max(4, Math.ceil(Math.max(size.x, size.z))), 0x3B424C, 0x232830);
+  scene.add(gh);
+
+  const r = box.getBoundingSphere(new THREE.Sphere()).radius;
+  const camera = new THREE.PerspectiveCamera(36, w / h, 0.01, 200);
+  // 경계구가 세로 화각 안에 들어오는 거리. 가로가 더 좁으면 그쪽으로 맞춘다.
+  const vFov = 36 * Math.PI / 180;
+  const hFov = 2 * Math.atan(Math.tan(vFov / 2) * (w / h));
+  const dist = r / Math.sin(Math.min(vFov, hFov) / 2) * 1.15;
+  const dir = new THREE.Vector3(0.72, 0.42, 0.86).normalize();
+  camera.position.copy(c).addScaledVector(dir, dist);
+  camera.lookAt(c);
+  renderer.render(scene, camera);
+
+  const tri = (() => { let n = 0; g.traverse(o => { if (o.isMesh) n += (o.geometry.index ? o.geometry.index.count : o.geometry.attributes.position.count) / 3; }); return Math.round(n); })();
+  cap.innerHTML = '<b>' + prop.label + '</b>  ' +
+    size.toArray().map(v => v.toFixed(2)).join(' × ') + ' m · ' + tri + ' tri';
+  log(prop.label + ': ' + size.toArray().map(v => v.toFixed(3)).join(' × ') + ' m · ' + tri + ' tri (격자 1 m)');
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,17 @@
+{
+  "name": "polytwin",
+  "version": "1.0.0",
+  "private": true,
+  "description": "PolyTwin 관제·설정 웹 콘솔",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node server/server.js",
+    "seed": "node scripts/seed-admin.mjs"
+  },
+  "engines": {
+    "node": "22.x"
+  },
+  "dependencies": {
+    "@libsql/client": "^0.15.0"
+  }
+}

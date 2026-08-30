@@ -1,0 +1,490 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PolyTwin 자산 검수</title>
+
+<style>
+  @font-face {
+    font-family: Pretendard; font-style: normal; font-weight: 300; font-display: swap;
+    src: url("./assets/fonts/Pretendard-300.subset.woff2") format("woff2");
+  }
+  @font-face {
+    font-family: Pretendard; font-style: normal; font-weight: 500; font-display: swap;
+    src: url("./assets/fonts/Pretendard-500.subset.woff2") format("woff2");
+  }
+  @font-face {
+    font-family: Pretendard; font-style: normal; font-weight: 700; font-display: swap;
+    src: url("./assets/fonts/Pretendard-700.subset.woff2") format("woff2");
+  }
+
+  /* DESIGN.md 토큰 — 이 페이지 자체가 토큰 적용 예시다 */
+  :root {
+    --bg-void: #08090B; --bg-base: #0E1216; --bg-panel: #14181D; --bg-raised: #1A1E24;
+    --line: #232830; --line-hi: #3B424C;
+    --text-hi: #F2F4F7; --text-mid: #A8B0BA; --text-lo: #5F6873;
+    --accent: #3E9DBE; --accent-dim: #2A6478;
+    --ok: #3DD68C; --warn: #FFB74D; --crit: #E8232A;
+    --f-sans: Pretendard, -apple-system, "Malgun Gothic", sans-serif;
+    --f-mono: "IBM Plex Mono", ui-monospace, Consolas, monospace;
+    --e-out: cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    background: var(--bg-void); color: var(--text-mid);
+    font-family: var(--f-sans); font-weight: 300; font-size: 13px; line-height: 1.5;
+    word-break: keep-all; overflow: hidden;
+    display: grid; grid-template-columns: 268px 1fr;
+  }
+  ::selection { background: var(--accent); color: var(--bg-void); }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  /* ── 좌측 패널 ── */
+  aside {
+    background: var(--bg-base); border-right: 1px solid var(--line);
+    display: flex; flex-direction: column; overflow-y: auto;
+  }
+  .brand { padding: 18px 16px 14px; border-bottom: 1px solid var(--line); }
+  .brand h1 {
+    font-size: 12px; font-weight: 500; letter-spacing: 0.32em;
+    color: var(--text-hi); text-transform: uppercase;
+  }
+  .brand p { font-size: 11px; color: var(--text-lo); margin-top: 5px; letter-spacing: 0.02em; }
+
+  .group { border-bottom: 1px solid var(--line); padding: 14px 16px; }
+  .group > h2 {
+    font-family: var(--f-mono); font-size: 10px; font-weight: 500;
+    letter-spacing: 0.16em; text-transform: uppercase;
+    color: var(--text-lo); margin-bottom: 10px;
+  }
+
+  .seg { display: grid; grid-auto-flow: column; gap: 1px; background: var(--line); border: 1px solid var(--line); }
+  .seg button {
+    appearance: none; border: 0; cursor: pointer;
+    background: var(--bg-panel); color: var(--text-lo);
+    font-family: var(--f-sans); font-size: 11px; font-weight: 500; letter-spacing: 0.06em;
+    padding: 7px 4px; transition: color 120ms var(--e-out), background 120ms var(--e-out);
+  }
+  .seg button:hover { background: var(--bg-raised); color: var(--text-mid); }
+  .seg button[aria-pressed="true"] { background: var(--accent-dim); color: var(--text-hi); }
+
+  .rows { display: grid; gap: 7px; }
+  .row { display: grid; grid-template-columns: 1fr auto; gap: 10px; align-items: baseline; }
+  .row dt { font-size: 11px; color: var(--text-lo); letter-spacing: 0.02em; }
+  .row dd {
+    font-family: var(--f-mono); font-size: 12px; color: var(--text-hi);
+    font-variant-numeric: tabular-nums;
+  }
+  .row dd small { font-family: var(--f-sans); font-size: 10px; color: var(--text-lo); margin-left: 3px; font-weight: 300; }
+  .row dd.good { color: var(--ok); }
+  .row dd.bad  { color: var(--crit); }
+
+  .bar { height: 3px; background: var(--bg-raised); margin-top: 3px; overflow: hidden; }
+  .bar i { display: block; height: 100%; background: var(--accent); transition: width 300ms var(--e-out); }
+  .bar i.orig { background: var(--crit); }
+
+  label.check {
+    display: flex; align-items: center; gap: 8px; cursor: pointer;
+    font-size: 11px; color: var(--text-mid); padding: 3px 0;
+  }
+  label.check input { accent-color: var(--accent); width: 13px; height: 13px; cursor: pointer; }
+
+  input[type=range] { width: 100%; accent-color: var(--accent); cursor: pointer; }
+
+  .note {
+    font-size: 11px; color: var(--text-lo); line-height: 1.6;
+    border-left: 2px solid var(--line-hi); padding-left: 9px;
+  }
+  .note b { color: var(--warn); font-weight: 500; }
+
+  /* ── 뷰포트 ── */
+  main { position: relative; background: var(--bg-void); }
+  canvas { display: block; width: 100%; height: 100%; }
+
+  .hud {
+    position: absolute; left: 16px; bottom: 14px;
+    font-family: var(--f-mono); font-size: 11px; color: var(--text-lo);
+    font-variant-numeric: tabular-nums; letter-spacing: 0.02em;
+    display: flex; gap: 18px; pointer-events: none;
+  }
+  .hud b { color: var(--text-mid); font-weight: 400; }
+
+  .status {
+    position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+    font-family: var(--f-mono); font-size: 11px; letter-spacing: 0.14em;
+    color: var(--text-lo); text-transform: uppercase; text-align: center;
+  }
+  .status.err { color: var(--crit); text-transform: none; letter-spacing: 0; max-width: 460px; line-height: 1.7; }
+  .status[hidden] { display: none; }
+
+  .tag {
+    position: absolute; right: 16px; top: 14px;
+    font-family: var(--f-mono); font-size: 10px; letter-spacing: 0.16em;
+    text-transform: uppercase; padding: 4px 9px; border: 1px solid var(--line-hi);
+    color: var(--text-lo);
+  }
+  .tag[data-mode="orig"] { color: var(--crit); border-color: var(--crit); }
+  .tag[data-mode="opt"]  { color: var(--ok);   border-color: var(--ok); }
+
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "./assets/vendor/three.module.js",
+    "three/addons/": "./assets/vendor/"
+  }
+}
+</script>
+</head>
+<body>
+
+<aside>
+  <div class="brand">
+    <h1>Asset Check</h1>
+    <p>압축본이 원본과 같은지 눈으로 확인한다</p>
+  </div>
+
+  <div class="group">
+    <h2>모델</h2>
+    <div class="seg" id="pick">
+      <button data-model="car" aria-pressed="true">차체</button>
+      <button data-model="robot_sl" aria-pressed="false">로봇 SL</button>
+      <button data-model="sanding_kit" aria-pressed="false">샌딩킷</button>
+    </div>
+  </div>
+
+  <div class="group">
+    <h2>버전</h2>
+    <div class="seg" id="ver">
+      <button data-ver="opt" aria-pressed="true">압축본</button>
+      <button data-ver="orig" aria-pressed="false">원본</button>
+    </div>
+  </div>
+
+  <div class="group">
+    <h2>측정</h2>
+    <dl class="rows">
+      <div class="row"><dt>파일 크기</dt><dd id="m-size">—</dd></div>
+      <div class="bar"><i id="m-bar" style="width:0"></i></div>
+      <div class="row"><dt>삼각형</dt><dd id="m-tri">—</dd></div>
+      <div class="row"><dt>정점</dt><dd id="m-vert">—</dd></div>
+      <div class="row"><dt>드로우 콜</dt><dd id="m-draw">—</dd></div>
+      <div class="row"><dt>다운로드+파싱</dt><dd id="m-load">—</dd></div>
+      <div class="row"><dt>프레임</dt><dd id="m-fps">—</dd></div>
+    </dl>
+  </div>
+
+  <div class="group">
+    <h2>스캔 연출</h2>
+    <label class="check"><input type="checkbox" id="scan-on" checked> 무광 → 유광 스캔</label>
+    <label class="check"><input type="checkbox" id="scan-loop"> 무한 루프</label>
+    <div style="margin-top:9px">
+      <div class="row"><dt style="font-size:11px;color:var(--text-lo)">스캔 위치</dt><dd id="m-scan" style="font-size:11px">0.00</dd></div>
+      <input type="range" id="scan-pos" min="0" max="1" step="0.001" value="1">
+    </div>
+    <label class="check" style="margin-top:8px"><input type="checkbox" id="spin" checked> 턴테이블 회전</label>
+    <label class="check"><input type="checkbox" id="wire"> 와이어프레임</label>
+  </div>
+
+  <div class="group" style="border-bottom:0">
+    <h2>읽는 법</h2>
+    <p class="note">
+      압축본과 원본을 번갈아 눌러 실루엣이 무너지는지 본다.
+      차체는 삼각형을 50% 줄였다 — <b>차이가 보이면 간략화 비율을 낮춰야 한다.</b>
+      와이어프레임을 켜면 어디가 줄었는지 보인다.
+    </p>
+  </div>
+</aside>
+
+<main>
+  <div class="tag" id="tag" data-mode="opt">압축본</div>
+  <div class="status" id="status">불러오는 중</div>
+  <div class="hud">
+    <span>드래그 <b>회전</b></span>
+    <span>휠 <b>줌</b></span>
+    <span>우클릭 <b>이동</b></span>
+  </div>
+</main>
+
+<script type="module">
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { MeshoptDecoder } from './assets/vendor/meshopt_decoder.mjs';
+
+const $ = (id) => document.getElementById(id);
+const statusEl = $('status'), tagEl = $('tag');
+
+const PATHS = {
+  car:         { opt: './assets/models/car.opt.glb',         orig: './assets/models/_orig/car.glb' },
+  robot_sl:    { opt: './assets/models/robot_sl.opt.glb',    orig: './assets/models/_orig/robot_sl.glb' },
+  sanding_kit: { opt: './assets/models/sanding_kit.opt.glb', orig: './assets/models/_orig/sanding_kit.glb' },
+};
+const ORIG_MAX = 22.19 * 1048576;   // 막대 그래프 기준: 가장 큰 원본
+
+let state = { model: 'car', ver: 'opt' };
+
+/* ── 렌더러 ─────────────────────────────────────── */
+const canvas = document.createElement('canvas');
+document.querySelector('main').appendChild(canvas);
+
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.toneMapping = THREE.ACESFilmicToneMapping;   // DESIGN.md §5
+renderer.toneMappingExposure = 1.1;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x08090B);
+
+const camera = new THREE.PerspectiveCamera(38, 1, 0.01, 1000);
+const controls = new OrbitControls(camera, canvas);
+controls.enableDamping = true;
+controls.dampingFactor = 0.06;
+
+/* 조명 — 형상보다 조명이 중요하다 (DESIGN.md §5) */
+const key = new THREE.DirectionalLight(0xffffff, 2.6);
+key.position.set(3, 6, 4); key.castShadow = true;
+key.shadow.mapSize.set(2048, 2048); key.shadow.bias = -0.0004;
+scene.add(key);
+
+const rimL = new THREE.DirectionalLight(0x6FC6E8, 1.5); rimL.position.set(-6, 1.4, -3); scene.add(rimL);
+const rimR = new THREE.DirectionalLight(0xE8C79A, 1.1); rimR.position.set( 6, 1.0, -4); scene.add(rimR);
+scene.add(new THREE.HemisphereLight(0x1C242C, 0x04060A, 0.35));
+
+/* 환경맵 — 없으면 금속이 금속으로 안 보인다 */
+const pmrem = new THREE.PMREMGenerator(renderer);
+pmrem.compileEquirectangularShader();
+(function buildEnv() {
+  const s = new THREE.Scene();
+  s.add(new THREE.Mesh(
+    new THREE.SphereGeometry(10, 24, 16),
+    new THREE.MeshBasicMaterial({ color: 0x1A222B, side: THREE.BackSide })
+  ));
+  const strip = (x, y, z, c, i) => {
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(7, 2.4),
+      new THREE.MeshBasicMaterial({ color: c }));
+    m.position.set(x, y, z); m.lookAt(0, 0, 0); m.material.color.multiplyScalar(i); s.add(m);
+  };
+  strip(0, 7, 0, 0xffffff, 3.2);
+  strip(-7, 1.5, -3, 0x8FD4EE, 1.4);
+  strip(7, 1.0, -4, 0xEED8B0, 1.0);
+  scene.environment = pmrem.fromScene(s, 0.03).texture;
+})();
+
+/* 바닥 */
+const ground = new THREE.Mesh(
+  new THREE.PlaneGeometry(200, 200),
+  new THREE.MeshStandardMaterial({
+    color: 0x040608, roughness: 0.78, metalness: 0.0, envMapIntensity: 0.05,
+  })
+);
+ground.rotation.x = -Math.PI / 2; ground.receiveShadow = true; scene.add(ground);
+
+/* ── 스캔 셰이더 ─────────────────────────────────
+   스캔면이 지나간 자리는 roughness 0.8 → 0.15 로 바뀐다.
+   PolyTwin의 가치 제안 그 자체이므로 이게 이 뷰어의 핵심이다. */
+const scanU = { uScanZ: { value: 1e9 }, uMinZ: { value: 0 }, uMaxZ: { value: 1 }, uOn: { value: 1 } };
+
+function attachScan(mat) {
+  mat.onBeforeCompile = (shader) => {
+    Object.assign(shader.uniforms, scanU);
+    shader.vertexShader = shader.vertexShader
+      .replace('#include <common>', '#include <common>\nvarying vec3 vScanPos;')
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvScanPos = (modelMatrix * vec4(transformed, 1.0)).xyz;');
+    shader.fragmentShader = shader.fragmentShader
+      .replace('#include <common>',
+        '#include <common>\nvarying vec3 vScanPos;\nuniform float uScanZ;\nuniform float uMinZ;\nuniform float uMaxZ;\nuniform float uOn;')
+      .replace('#include <roughnessmap_fragment>',
+        `#include <roughnessmap_fragment>
+         if (uOn > 0.5) {
+           // 스캔면이 이미 지나간 쪽(z > uScanZ)이 유광이다.
+           float polished = smoothstep(uScanZ - 0.012 * (uMaxZ - uMinZ), uScanZ + 0.012 * (uMaxZ - uMinZ), vScanPos.z);
+           roughnessFactor = mix(0.82, 0.14, polished);
+           float edge = 1.0 - smoothstep(0.0, 0.010 * (uMaxZ - uMinZ), abs(vScanPos.z - uScanZ));
+           diffuseColor.rgb += vec3(0.24, 0.78, 0.94) * edge * 0.85;
+         }`);
+  };
+  mat.needsUpdate = true;
+}
+
+/* ── 로딩 ──────────────────────────────────────── */
+const loader = new GLTFLoader().setMeshoptDecoder(MeshoptDecoder);
+let current = null, bounds = { min: 0, max: 1 };
+
+async function load() {
+  const url = PATHS[state.model][state.ver];
+  statusEl.hidden = false; statusEl.className = 'status'; statusEl.textContent = '불러오는 중';
+  tagEl.textContent = state.ver === 'opt' ? '압축본' : '원본';
+  tagEl.dataset.mode = state.ver;
+
+  const t0 = performance.now();
+  let bytes = 0, gltf;
+  try {
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+    const buf = await res.arrayBuffer();
+    bytes = buf.byteLength;
+    gltf = await loader.parseAsync(buf, '');
+  } catch (err) {
+    statusEl.className = 'status err';
+    statusEl.innerHTML = `모델을 불러오지 못했다 — ${err.message}<br><br>` +
+      `<code>file://</code> 로 열면 fetch가 막힌다. 이 폴더에서 로컬 서버를 띄우고 열어라:<br>` +
+      `<code>npx serve .</code> 또는 <code>python -m http.server</code>`;
+    return;
+  }
+  const ms = performance.now() - t0;
+
+  if (current) { scene.remove(current); disposeTree(current); }
+  current = gltf.scene;
+
+  let tri = 0, vert = 0;
+  const box = new THREE.Box3();
+  current.traverse((o) => {
+    if (!o.isMesh) return;
+    o.castShadow = o.receiveShadow = true;
+    const g = o.geometry;
+    tri += (g.index ? g.index.count : g.attributes.position.count) / 3;
+    vert += g.attributes.position.count;
+    if (!g.attributes.normal) g.computeVertexNormals();
+    o.material = new THREE.MeshStandardMaterial({
+      color: 0x9AA3AC, roughness: 0.8, metalness: 0.9, envMapIntensity: 1.15,
+    });
+    attachScan(o.material);
+    box.expandByObject(o);
+  });
+
+  /* 자동 정렬 — 모델마다 스케일이 제각각이다 */
+  const size = box.getSize(new THREE.Vector3());
+  const ctr = box.getCenter(new THREE.Vector3());
+  const scale = 2.4 / Math.max(size.x, size.y, size.z);
+  current.scale.setScalar(scale);
+  current.position.set(-ctr.x * scale, -box.min.y * scale, -ctr.z * scale);
+  scene.add(current);
+
+  const b2 = new THREE.Box3().setFromObject(current);
+  bounds = { min: b2.min.z, max: b2.max.z };
+  scanU.uMinZ.value = bounds.min; scanU.uMaxZ.value = bounds.max;
+  ground.position.y = b2.min.y - 0.002;
+
+  /* 카메라 자동 프레이밍 — 바운딩 스피어를 화면에 꽉 채운다.
+     모델마다 스케일이 3자릿수 넘게 차이나므로 고정 좌표를 쓰면 안 된다. */
+  const sph = b2.getBoundingSphere(new THREE.Sphere());
+  const fov = THREE.MathUtils.degToRad(camera.fov);
+  const dist = (sph.radius / Math.sin(fov / 2)) * 1.15;
+  const el = THREE.MathUtils.degToRad(17);   // 지면에서 17° — 올려다보는 구도
+  const az = THREE.MathUtils.degToRad(34);
+  camera.position.set(
+    sph.center.x + dist * Math.cos(el) * Math.sin(az),
+    sph.center.y + dist * Math.sin(el),
+    sph.center.z + dist * Math.cos(el) * Math.cos(az),
+  );
+  camera.near = dist / 200; camera.far = dist * 60;
+  camera.updateProjectionMatrix();
+  controls.target.copy(sph.center);
+  controls.minDistance = dist * 0.25;
+  controls.maxDistance = dist * 4;
+  controls.update();
+
+  /* 조명·그림자도 모델 크기에 맞춘다 */
+  const r = sph.radius;
+  key.position.set(sph.center.x + r * 1.2, sph.center.y + r * 2.2, sph.center.z + r * 1.6);
+  key.target.position.copy(sph.center); scene.add(key.target);
+  const c = key.shadow.camera;
+  c.left = -r * 1.6; c.right = r * 1.6; c.top = r * 1.6; c.bottom = -r * 1.6;
+  c.near = r * 0.05; c.far = r * 8; c.updateProjectionMatrix();
+  rimL.position.set(sph.center.x - r * 2.4, sph.center.y + r * 0.6, sph.center.z - r * 1.2);
+  rimR.position.set(sph.center.x + r * 2.4, sph.center.y + r * 0.4, sph.center.z - r * 1.6);
+  ground.scale.setScalar(Math.max(1, r * 4));
+
+  /* 안개로 바닥 끝을 배경에 녹인다 — 없으면 far 평면이 지평선처럼 보인다 */
+  scene.fog = new THREE.FogExp2(0x08090B, 0.052 / Math.max(0.001, r));
+
+  $('m-size').textContent = (bytes / 1048576).toFixed(2);
+  $('m-size').innerHTML = `${(bytes / 1048576).toFixed(2)}<small>MB</small>`;
+  $('m-size').className = state.ver === 'opt' ? 'good' : 'bad';
+  $('m-bar').style.width = Math.min(100, bytes / ORIG_MAX * 100) + '%';
+  $('m-bar').className = state.ver === 'orig' ? 'orig' : '';
+  $('m-tri').textContent = Math.round(tri).toLocaleString('ko-KR');
+  $('m-vert').textContent = vert.toLocaleString('ko-KR');
+  $('m-load').innerHTML = `${ms.toFixed(0)}<small>ms</small>`;
+
+  statusEl.hidden = true;
+  scanT = 0;
+}
+
+function disposeTree(root) {
+  root.traverse((o) => {
+    if (!o.isMesh) return;
+    o.geometry?.dispose();
+    (Array.isArray(o.material) ? o.material : [o.material]).forEach((m) => m?.dispose());
+  });
+}
+
+/* ── 컨트롤 ────────────────────────────────────── */
+function seg(id, key) {
+  $(id).addEventListener('click', (e) => {
+    const btn = e.target.closest('button'); if (!btn) return;
+    [...$(id).children].forEach((b) => b.setAttribute('aria-pressed', String(b === btn)));
+    state[key] = btn.dataset[key === 'model' ? 'model' : 'ver'];
+    load();
+  });
+}
+seg('pick', 'model');
+seg('ver', 'ver');
+
+$('wire').addEventListener('change', (e) => {
+  current?.traverse((o) => { if (o.isMesh) o.material.wireframe = e.target.checked; });
+});
+$('scan-on').addEventListener('change', (e) => { scanU.uOn.value = e.target.checked ? 1 : 0; });
+$('scan-pos').addEventListener('input', (e) => { scanT = parseFloat(e.target.value); manual = true; });
+$('scan-loop').addEventListener('change', () => { manual = false; scanT = 0; });
+
+/* ── 루프 ──────────────────────────────────────── */
+let scanT = 0, manual = false, last = performance.now(), fps = 60, acc = 0, frames = 0;
+
+function tick(now) {
+  const dt = Math.min(0.05, (now - last) / 1000); last = now;
+
+  if (!manual) {
+    const loop = $('scan-loop').checked;
+    if (scanT < 1 || loop) scanT += dt * 0.42;
+    if (scanT > 1) scanT = loop ? 0 : 1;
+    $('scan-pos').value = scanT.toFixed(3);
+  }
+  $('m-scan').textContent = scanT.toFixed(2);
+  scanU.uScanZ.value = bounds.min + (bounds.max - bounds.min) * (1 - scanT) - 0.001;
+
+  if ($('spin').checked && current) current.rotation.y += dt * 0.32;
+
+  controls.update();
+  renderer.render(scene, camera);
+
+  acc += dt; frames++;
+  if (acc >= 0.5) { fps = frames / acc; acc = 0; frames = 0; $('m-fps').innerHTML = `${fps.toFixed(0)}<small>fps</small>`; }
+  $('m-draw').textContent = renderer.info.render.calls;
+
+  requestAnimationFrame(tick);
+}
+
+function resize() {
+  const m = document.querySelector('main');
+  renderer.setSize(m.clientWidth, m.clientHeight, false);
+  camera.aspect = m.clientWidth / m.clientHeight;
+  camera.updateProjectionMatrix();
+}
+addEventListener('resize', resize);
+resize();
+
+await load();
+requestAnimationFrame(tick);
+</script>
+</body>
+</html>
