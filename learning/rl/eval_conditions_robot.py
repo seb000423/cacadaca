@@ -26,6 +26,10 @@ parser.add_argument("--num_envs", type=int, default=8)
 parser.add_argument("--episodes", type=int, default=2)
 parser.add_argument("--recipe_json", type=str, default=None,
                     help="env recipe 재정의 — 로봇 레시피 스크리닝용")
+parser.add_argument("--surface_kind", default="flat",
+                    choices=["flat", "cylinder", "sphere"],
+                    help="Gate 4: 작업면 곡률 종류 (WORKLOG 9.22)")
+parser.add_argument("--curvature_radius", type=float, default=0.5)
 parser.add_argument("--contact_mode", type=str, default="physical",
                     choices=["physical", "model"],
                     help="physical=PhysX 센서힘(검증 완료, C단계 기본) / model=가상 스프링힘")
@@ -140,6 +144,8 @@ def main():
         conds.append((name.strip(), ckpt.strip() or None))
 
     env_cfg = RobotPolishEnvCfg()
+    env_cfg.surface_kind = args.surface_kind
+    env_cfg.curvature_radius_m = args.curvature_radius
     if args.recipe_json:
         env_cfg.recipe_json_path = args.recipe_json
         print(f"[cfg] recipe_json = {args.recipe_json}")

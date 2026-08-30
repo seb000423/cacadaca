@@ -38,6 +38,10 @@ parser.add_argument("--freeze_actor_iters", type=int, default=0,
                     help="첫 N iter 동안 actor 동결 — critic 워밍업. bootstrap_bc 는 critic 을 "
                          "랜덤인 채 저장하므로, 워밍업 없이 미세조정하면 초기 advantage 노이즈가 "
                          "BC 정책을 먼저 파괴할 수 있다 (WORKLOG 9장).")
+parser.add_argument("--surface_kind", default="flat",
+                    choices=["flat", "cylinder", "sphere"],
+                    help="Gate 4: 작업면 곡률 종류 (WORKLOG 9.22)")
+parser.add_argument("--curvature_radius", type=float, default=0.5)
 parser.add_argument("--contact_mode", type=str, default="physical",
                     choices=["physical", "model"],
                     help="physical=PhysX 센서힘(검증 완료, C단계 기본) / model=가상 스프링힘")
@@ -63,6 +67,8 @@ from learning.rl.ppo_cfg import PolishPPORunnerCfg  # noqa: E402
 
 def main():
     env_cfg = RobotPolishEnvCfg()
+    env_cfg.surface_kind = args.surface_kind
+    env_cfg.curvature_radius_m = args.curvature_radius
     env_cfg.scene.num_envs = args.num_envs
     env_cfg.seed = args.seed
     env_cfg.enable_pad_physical_contact = (args.contact_mode == "physical")
