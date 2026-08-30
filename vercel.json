@@ -2,6 +2,7 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "cleanUrls": false,
   "trailingSlash": false,
+  "regions": ["icn1"],
   "headers": [
     {
       "source": "/assets/(.*)",
