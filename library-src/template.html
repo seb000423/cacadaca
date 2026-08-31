@@ -39,9 +39,9 @@
     --text-mid:   #A8B0BA;
     --text-lo:    #5F6873;
     /* 액센트 — 1개 */
-    --accent:     #3E9DBE;
-    --accent-ch:  62 157 190;
-    --accent-dim: #2A6478;
+    --accent:     #9BC33A;
+    --accent-ch:  155 195 58;
+    --accent-dim: #59721A;
     /* 의미색 — 상태 전용 */
     --ok:         #3DD68C;
     --warn:       #FFB74D;
@@ -107,9 +107,22 @@
 
       <div style="flex: none; padding: 22px 30px 16px; border-bottom: 1px solid var(--line)">
         <div style="display: flex; align-items: baseline; gap: 18px; margin-bottom: 18px">
-          <div style="font-size: 12px; font-weight: 300; letter-spacing: 0.3em">POLYTWIN</div>
+          <div style="display: inline-flex; align-items: center; gap: 9px; font-size: 12px; font-weight: 300; letter-spacing: 0.3em">
+            <svg viewBox="0 0 130 78" width="28" height="16.8" aria-hidden="true" focusable="false" style="flex: none">
+              <path style="fill: currentColor" d="M29.1 4.25Q33 2 36.9 4.25L62.4 19Q65 20.5 62.76 22.49C53.5 30.5 53.5 47.5 62.76 55.51Q65 57.5 62.4 59L36.9 73.75Q33 76 29.1 73.75L4.9 59.75Q1 57.5 1 53L1 25Q1 20.5 4.9 18.25Z"/>
+              <path style="fill: var(--accent)" d="M100.9 4.25Q97 2 93.1 4.25L67.6 19Q65 20.5 67.24 22.49C76.5 30.5 76.5 47.5 67.24 55.51Q65 57.5 67.6 59L93.1 73.75Q97 76 100.9 73.75L125.1 59.75Q129 57.5 129 53L129 25Q129 20.5 125.1 18.25Z"/>
+            </svg>
+            <span>POLY<span style="color: var(--accent)">TWIN</span></span>
+          </div>
           <div style="font-size: 11px; color: var(--text-lo)">숙련공 정답 데이터</div>
           <div style="flex: 1"></div>
+          <!-- 여기 링크가 없어서 ④ 는 막다른 화면이었다 -->
+          <nav style="display: flex; align-items: baseline; gap: 18px">
+            <a href="PolyTwin%20Console.html" style="font-size: 11px; color: var(--text-lo); transition: color var(--t-base) var(--e-out); word-break: keep-all" style-hover="color: var(--text-mid)">① 설정</a>
+            <a href="monitor.html" style="font-size: 11px; color: var(--text-lo); transition: color var(--t-base) var(--e-out); word-break: keep-all" style-hover="color: var(--text-mid)">② 공정 감시</a>
+            <a href="PolyTwin%20Save.html" style="font-size: 11px; color: var(--text-lo); transition: color var(--t-base) var(--e-out); word-break: keep-all" style-hover="color: var(--text-mid)">③ 결과 저장</a>
+            </nav>
+          <div style="width: 1px; height: 12px; background: var(--line)"></div>
           <div style="font-family: var(--f-mono); font-size: 11px; color: var(--text-lo); font-variant-numeric: tabular-nums">{{ shownCount }} / {{ totalCount }}건</div>
         </div>
 
@@ -304,7 +317,7 @@
                   </div>
                   <div style="flex: 1"></div>
                   <div style="display: flex; gap: 8px; align-items: stretch">
-                    <button type="button" sc-camel-on-click="{{ c.load }}" style="flex: 1; padding: 10px 0; background: var(--accent-dim); border: 1px solid var(--accent); font-size: 12px; font-weight: 500; color: var(--text-hi); text-align: center; cursor: pointer; transition: background var(--t-fast) var(--e-out), color var(--t-fast) var(--e-out)" style-hover="background: var(--accent); color: var(--bg-void)">불러오기</button>
+                    <button type="button" sc-camel-on-click="{{ c.load }}" style="flex: 1; padding: 10px 0; background: rgb(var(--accent-ch) / 0.14); border: 1px solid var(--accent); font-size: 12px; font-weight: 500; color: var(--text-hi); text-align: center; cursor: pointer; transition: background var(--t-fast) var(--e-out), color var(--t-fast) var(--e-out)" style-hover="background: var(--accent); color: var(--bg-void)">불러오기</button>
                     <button type="button" sc-camel-on-click="{{ c.viz }}" style="flex: 1; padding: 10px 0; border: 1px solid {{ c.vizBorder }}; background: {{ c.vizBg }}; font-size: 12px; color: {{ c.vizColor }}; text-align: center; cursor: pointer; transition: background-color var(--t-fast) var(--e-out), border-color var(--t-fast) var(--e-out), color var(--t-fast) var(--e-out)" style-hover="border-color: var(--text-lo)">{{ c.vizLabel }}</button>
                   </div>
                 </div>
@@ -343,7 +356,7 @@
                 <div style="font-family: var(--f-mono); font-size: 11px; color: var(--text-lo); font-variant-numeric: tabular-nums">{{ c.date }}</div>
                 <div style="display: flex; justify-content: flex-end; gap: 8px">
                   <button type="button" sc-camel-on-click="{{ c.viz }}" style="padding: 6px 12px; border: 1px solid {{ c.vizBorder }}; background: {{ c.vizBg }}; font-size: 11px; color: {{ c.vizColor }}; cursor: pointer">{{ c.vizLabel }}</button>
-                  <button type="button" sc-camel-on-click="{{ c.load }}" style="padding: 6px 14px; background: var(--accent-dim); border: 1px solid var(--accent); color: var(--text-hi); font-size: 11px; font-weight: 500; cursor: pointer; transition: background var(--t-fast) var(--e-out), color var(--t-fast) var(--e-out)" style-hover="background: var(--accent); color: var(--bg-void)">불러오기</button>
+                  <button type="button" sc-camel-on-click="{{ c.load }}" style="padding: 6px 14px; background: rgb(var(--accent-ch) / 0.14); border: 1px solid var(--accent); color: var(--text-hi); font-size: 11px; font-weight: 500; cursor: pointer; transition: background var(--t-fast) var(--e-out), color var(--t-fast) var(--e-out)" style-hover="background: var(--accent); color: var(--bg-void)">불러오기</button>
                 </div>
               </div>
             </sc-for>
@@ -406,6 +419,7 @@
           <div style="flex: none; display: flex; align-items: center; gap: 12px">
             <button type="button" sc-camel-on-click="{{ cancelLoad }}" style="font-size: 11px; color: var(--text-lo); cursor: pointer; background: transparent; border: 0" style-hover="color: var(--text-hi)">취소</button>
             <a href="monitor.html" style="font-size: 11px; color: var(--text-lo); margin-left: 18px; transition: color var(--t-base) var(--e-out)">② 공정 감시 →</a>
+            <a href="PolyTwin%20Save.html" style="font-size: 11px; margin-left: 18px; color: var(--text-lo); transition: color var(--t-base) var(--e-out); word-break: keep-all" style-hover="color: var(--text-mid)">③ 결과 저장 →</a>
             <div style="flex: 1"></div>
             <a href="PolyTwin%20Console.html" style="padding: 13px 26px; border: 1px solid {{ goBorder }}; background: {{ goBg }}; font-size: 12px; letter-spacing: 0.12em; color: {{ goColor }}; transition: background-color var(--t-base) var(--e-out), border-color var(--t-base) var(--e-out), color var(--t-base) var(--e-out)">① 콘솔로 이동</a>
           </div>
@@ -560,7 +574,14 @@ class Component extends DCLogic {
     const end = Math.min(sg.byteEnd - 1, sg.byteStart + CSV_BYTES - 1);
     const ctl = (typeof AbortController !== 'undefined') ? new AbortController() : null;
     this._abort = ctl;
-    fetch(sg.file, { headers: { Range: 'bytes=' + sg.byteStart + '-' + end }, signal: ctl && ctl.signal })
+    /* 원본 sweep_traj_csv 는 183 MB 라 배포에 못 싣는다. Range 로 읽던 그 구간을
+       make_traces.py 가 그대로 잘라 둔 게 sliceFile 이다 — 바이트가 같으므로
+       마지막 잘린 줄까지 동일하다. 원본이 있으면 원본에 Range 를 건다. */
+    const useSlice = !!sg.sliceFile;
+    const req = useSlice
+      ? fetch(sg.sliceFile, { signal: ctl && ctl.signal })
+      : fetch(sg.file, { headers: { Range: 'bytes=' + sg.byteStart + '-' + end }, signal: ctl && ctl.signal });
+    req
       .then((r) => { if (r.status !== 206 && r.status !== 200) throw new Error('HTTP ' + r.status); return r.text(); })
       .then((text) => {
         const lines = text.split('\n');
@@ -726,7 +747,7 @@ class Component extends DCLogic {
       points: AXES.map((ax, k) => ptAt(k, ax.f(u.sg, u))).join(' '),
     }));
     const radarNote = pinned.length
-      ? ('0~1 정규화 · 힘 안정성은 CV ' + CV_FULL + '% 를 0 점, baseline 개선은 +'
+      ? ('0–1 정규화 · 힘 안정성은 CV ' + CV_FULL + '% 를 0 점, baseline 개선은 +'
          + (DELTA_FULL * 100).toFixed(0) + '%p 를 만점으로 본다')
       : '';
 
@@ -753,8 +774,8 @@ class Component extends DCLogic {
     });
     const paramHead = pinned.map((u, i) => ({ name: u.name, color: SERIES[i] || 'var(--text-lo)' }));
     const paramNote = pinned.length > 1
-      ? '값이 갈리는 항목만 강조했습니다.'
-      : '두 장 이상 고르면 차이가 나는 항목을 짚어 줍니다.';
+      ? '값이 갈리는 항목만 강조했다.'
+      : '두 장 이상 고르면 차이가 나는 항목을 짚어 준다.';
 
     const vizStats = pinned.map((u, i) => ({
       name: u.name,
@@ -809,7 +830,7 @@ class Component extends DCLogic {
       isEmpty: cards.length === 0,
       emptyText: s.seedErr
         ? ('데이터셋을 읽지 못했습니다 — ' + s.seedErr + '. 데이터셋/seg_best_kpi.json 이 있는지 확인하세요.')
-        : (s.seed ? '조건에 맞는 세그먼트가 없습니다' : '데이터셋을 읽는 중…'),
+        : (s.seed ? '조건에 맞는 세그먼트가 없다' : '데이터셋을 읽는 중…'),
 
       query: s.query,
       setQuery: (e) => this.setState({ query: e.target.value }),

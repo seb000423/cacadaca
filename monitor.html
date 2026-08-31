@@ -6,7 +6,7 @@
 <title>공정 모니터링 · PolyTwin</title>
 <meta name="description" content="폴리싱 공정 실시간 관제 — 진행률 · 접촉력 · 커버리지 · 제거량 히트맵 · 이벤트 로그.">
 <meta name="theme-color" content="#0E1216">
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' fill='%2308090B'/%3E%3Ctext x='32' y='44' font-family='Arial,sans-serif' font-size='30' font-weight='700' text-anchor='middle' fill='%233E9DBE'%3EPT%3C/text%3E%3C/svg%3E">
+<link rel="icon" href="assets/favicon.svg">
 
 <link rel="preload" href="assets/fonts/Pretendard-300.subset.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="assets/fonts/Pretendard-500.subset.woff2" as="font" type="font/woff2" crossorigin>
@@ -18,6 +18,12 @@
   src: url(assets/fonts/Pretendard-500.subset.woff2) format('woff2'); }
 @font-face { font-family: Pretendard; font-weight: 700; font-display: swap;
   src: url(assets/fonts/Pretendard-700.subset.woff2) format('woff2'); }
+@font-face { font-family: 'Pretendard Full'; font-weight: 300; font-display: swap;
+  src: url(assets/fonts/Pretendard-300.full-ko.woff2) format('woff2'); }
+@font-face { font-family: 'Pretendard Full'; font-weight: 500; font-display: swap;
+  src: url(assets/fonts/Pretendard-500.full-ko.woff2) format('woff2'); }
+@font-face { font-family: 'Pretendard Full'; font-weight: 700; font-display: swap;
+  src: url(assets/fonts/Pretendard-700.full-ko.woff2) format('woff2'); }
 
 :root {
   /* DESIGN.md §1 — 확정 토큰 15개. 여기 없는 색은 쓰지 않는다 */
@@ -30,8 +36,8 @@
   --text-hi:   #F2F4F7;
   --text-mid:  #A8B0BA;
   --text-lo:   #5F6873;
-  --accent:    #3E9DBE;
-  --accent-dim:#2A6478;
+  --accent:    #9BC33A;
+  --accent-dim:#59721A;
   --ok:        #3DD68C;
   --warn:      #FFB74D;
   --crit:      #E8232A;
@@ -43,7 +49,9 @@
   --t-fast: 120ms;
   --t-base: 200ms;
 
-  --f-sans: Pretendard, -apple-system, BlinkMacSystemFont, "Malgun Gothic", sans-serif;
+  /* 서브셋에 없는 글자는 full-ko 로 받는다. 이 폴백이 없으면
+     서브셋 밖 한글이 시스템 폰트로 튄다 */
+  --f-sans: Pretendard, "Pretendard Full", -apple-system, BlinkMacSystemFont, "Malgun Gothic", sans-serif;
   --f-mono: "IBM Plex Mono", ui-monospace, Consolas, monospace;
 
   --bar-h: 44px;
@@ -253,6 +261,7 @@ button { font: inherit; color: inherit; background: none; border: 0; cursor: poi
   <button class="btn" id="hold" data-on="0">일시정지</button>
   <button class="btn" id="stop">정지</button>
   <a class="btn" href="PolyTwin Console.html">① 설정</a>
+  <a class="btn" href="PolyTwin Save.html">③ 결과 저장</a>
   <a class="btn" href="PolyTwin Library.html">④ 라이브러리</a>
 </div>
 
@@ -279,7 +288,7 @@ button { font: inherit; color: inherit; background: none; border: 0; cursor: poi
 
   <aside class="panel">
     <section class="sec">
-      <h2>접촉력 — 목표대역 2.5–14.0 N</h2>
+      <h2>접촉력 — 목표대역 3–8 N</h2>
       <div id="forces"></div>
     </section>
 
@@ -348,11 +357,14 @@ function lcg(seed) {
 
 /* ══ 공정 상태 ══════════════════════════════════════ */
 const ROBOTS = [
-  { id: 'C',  name: '천장',  seed: 7717, target: 7.8 },
-  { id: 'SL', name: '좌측',  seed: 3391, target: 8.4 },
-  { id: 'SR', name: '우측',  seed: 5023, target: 7.1 },
+  /* target 은 seg_best_kpi.json 의 실제 최적 파라미터다 — C14 · SL4 · SL2 */
+  { id: 'C',  name: '천장',  seed: 7717, target: 5.6 },
+  { id: 'SL', name: '좌측',  seed: 3391, target: 5.2 },
+  { id: 'SR', name: '우측',  seed: 5023, target: 4.5 },
 ];
-const BAND = [2.5, 14.0];
+// 데이터셋 seg_best_kpi.json 의 목표 접촉력 분포 3.29~8.22 N 기준.
+// sub.html 의 '작업 대역 3~8 N' 과 같은 값이다
+const BAND = [3.0, 8.0];
 const CYCLE = 168;                 // 초 — 전체 공정 길이
 const HIST = 96;                   // 차트가 들고 있는 표본 수
 
@@ -418,8 +430,8 @@ async function boot() {
   key.shadow.mapSize.set(2048, 2048);
   key.shadow.bias = -0.0006;
   scene.add(key, key.target);
-  const rimL = new THREE.DirectionalLight(0x6FC6E8, 1.45);
-  const rimR = new THREE.DirectionalLight(0xE8C79A, 1.05);
+  const rimL = new THREE.DirectionalLight(0x94B6C3, 1.45);
+  const rimR = new THREE.DirectionalLight(0xDBC5A7, 1.05);
   scene.add(rimL, rimR, new THREE.HemisphereLight(0x243039, 0x06090D, 0.55));
 
   /* 환경맵 — 없으면 금속이 금속이 아니다 */
@@ -435,8 +447,8 @@ async function boot() {
       m.material.color.multiplyScalar(i); s.add(m);
     };
     strip(0, 18, 0, 0xffffff, 3.0);
-    strip(-18, 4, -8, 0x8FD4EE, 1.35);
-    strip(18, 3, -10, 0xEED8B0, 0.95);
+    strip(-18, 4, -8, 0xACC7D1, 1.35);
+    strip(18, 3, -10, 0xE3D5BB, 0.95);
     scene.environment = pmrem.fromScene(s, 0.03).texture;
   }
 
@@ -447,8 +459,8 @@ async function boot() {
     arm:   new THREE.MeshPhysicalMaterial({ color: 0xB9C0C8, metalness: 0.35, roughness: 0.38,
              clearcoat: 0.4, clearcoatRoughness: 0.3, envMapIntensity: 1.1 }),
     tool:  new THREE.MeshPhysicalMaterial({ color: 0x2A3038, metalness: 0.6, roughness: 0.4, envMapIntensity: 1.1 }),
-    pad:   new THREE.MeshPhysicalMaterial({ color: 0x3E9DBE, metalness: 0.1, roughness: 0.75,
-             emissive: 0x143540, emissiveIntensity: 0.6 }),
+    pad:   new THREE.MeshPhysicalMaterial({ color: 0x9BC33A, metalness: 0.1, roughness: 0.75,
+             emissive: 0x334014, emissiveIntensity: 0.6 }),
   };
 
   cell = new THREE.Group();
@@ -758,10 +770,13 @@ function tickData(p, dt) {
   /* ── 접촉력 ── 목표 주변을 걷되 가끔 대역을 벗어난다 ── */
   ROBOTS.forEach((r, i) => {
     const rnd = S.rnd[i];
-    const drift = (rnd() - 0.5) * 1.9;
+    /* 노이즈 폭은 목표 대역에 맞춰 잡는다. 옛 대역(2.5~14.0 N)용 값을
+       그대로 두면 3~8 N 에서는 10% 넘게 이탈해 경보가 끊이지 않는다.
+       아래 값이면 이탈이 0.6~1.5% — 최적 run 의 in-band 0.95 와 같은 수준이다 */
+    const drift = (rnd() - 0.5) * 1.0;
     let v = S.cur[i] + drift;
-    if (rnd() > 0.975) v += (rnd() > 0.5 ? 1 : -1) * (4 + rnd() * 4);
-    v = Math.max(0, Math.min(19, v * 0.82 + r.target * 0.18));
+    if (rnd() > 0.985) v += (rnd() > 0.5 ? 1 : -1) * (1.8 + rnd() * 1.6);
+    v = Math.max(0, Math.min(12, v * 0.82 + r.target * 0.18));
     if (!S.running || S.done) v = S.done ? 0 : v;
     S.cur[i] = v;
 
@@ -817,7 +832,7 @@ function tickData(p, dt) {
       const names = ['HOME', 'SLIDE', 'APPROACH', 'POLISH', 'POLISH', 'RETRACT'];
       setState(names[Math.min(5, phase)]);
       if (phase === 1) addEvent('C', '레일 이송 시작 — 구간 1/6', 'info');
-      if (phase === 3) addEvent('SL', '접촉 확립 · 목표 1.5N 추종 개시', 'info');
+      if (phase === 3) addEvent('SL', '접촉 확립 · 목표 5.2 N 추종 개시', 'info');
       if (phase === 5) addEvent('SR', '마지막 구간 후퇴 — 리프트 하강', 'info');
     }
   }
@@ -839,7 +854,7 @@ function fitCanvas(c) {
 function drawForce(c, hist, out) {
   const g = fitCanvas(c); if (!g) return;
   const { x, w, h } = g;
-  const MAX = 19;
+  const MAX = 11;   // 대역 3~8 N 이 캔버스 가운데 45% 를 차지한다
   const y = (v) => h - (v / MAX) * h;
 
   // 목표 대역
@@ -897,7 +912,7 @@ function drawHeat(p) {
         /* 가장자리는 덜 깎인다 — 곡률이 급해 패드가 덜 닿는다 */
         const edge = 1 - Math.abs((j + 0.5) / HZ - 0.5) * 1.4;
         const v = HEAT[j][i] * edge * done;
-        x.fillStyle = `rgba(62, 157, 190, ${(0.10 + v * 0.85).toFixed(3)})`;
+        x.fillStyle = `rgba(155, 195, 58, ${(0.10 + v * 0.85).toFixed(3)})`;
       }
       x.fillRect(i * cw, j * ch, cw - 1, ch - 1);
     }

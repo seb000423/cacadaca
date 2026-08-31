@@ -33,8 +33,8 @@
   --text-hi:    #F2F4F7;
   --text-mid:   #A8B0BA;
   --text-lo:    #5F6873;
-  --accent:     #3E9DBE;
-  --accent-dim: #2A6478;
+  --accent:     #9BC33A;
+  --accent-dim: #59721A;
   --ok:         #3DD68C;
   --warn:       #FFB74D;
   --crit:       #E8232A;
@@ -107,7 +107,11 @@ button, input, select { font: inherit; color: inherit; }
   background: var(--bg-void);
   border-bottom: 1px solid var(--line);
 }
-.mark { font-size: 14px; font-weight: 300; letter-spacing: 0.28em; color: var(--text-hi); }
+.mark { display: inline-flex; align-items: center; gap: 9px;
+  font-size: 14px; font-weight: 300; letter-spacing: 0.28em; color: var(--text-hi); }
+.mark__sig { flex: none; width: 32px; height: 19.2px; }
+.mark__sig .a { fill: currentColor; }
+.mark__sig .b { fill: var(--accent); }
 .mark b { font-weight: 300; color: var(--accent); }
 .hdr__sep { width: 1px; height: 18px; background: var(--line); }
 .hdr__here { font-size: 12px; color: var(--text-lo); }
@@ -334,7 +338,13 @@ td.c-act { text-align: right; white-space: nowrap; }
 <a class="skip" href="#main">본문으로 건너뛰기</a>
 
 <header class="hdr">
-  <a class="mark" href="/">Poly<b>Twin</b></a>
+  <a class="mark" href="/" aria-label="PolyTwin 홈">
+    <svg class="mark__sig" viewBox="0 0 130 78" aria-hidden="true" focusable="false">
+      <path class="a" d="M29.1 4.25Q33 2 36.9 4.25L62.4 19Q65 20.5 62.76 22.49C53.5 30.5 53.5 47.5 62.76 55.51Q65 57.5 62.4 59L36.9 73.75Q33 76 29.1 73.75L4.9 59.75Q1 57.5 1 53L1 25Q1 20.5 4.9 18.25Z"/>
+      <path class="b" d="M100.9 4.25Q97 2 93.1 4.25L67.6 19Q65 20.5 67.24 22.49C76.5 30.5 76.5 47.5 67.24 55.51Q65 57.5 67.6 59L93.1 73.75Q97 76 100.9 73.75L125.1 59.75Q129 57.5 129 53L129 25Q129 20.5 125.1 18.25Z"/>
+    </svg>
+    <span>Poly<b>Twin</b></span>
+  </a>
   <span class="hdr__sep" aria-hidden="true"></span>
   <p class="hdr__here">계정 관리</p>
   <div class="hdr__end">

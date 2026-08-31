@@ -9,19 +9,36 @@ _probe.html
 
 # 원본 보관본 (비교용 — CLAUDE.md '배포 제외')
 assets/models/_orig/
+
+# 배포되는 화면 중 아무도 로드하지 않는다 (asset-check.html 전용, 그것도 제외 대상).
+# 1.66MB 로 3D 예산 3MB 의 절반을 혼자 먹고 있었다.
+# 콘솔·모니터가 쓰는 건 robot_arm · lift · rail · car 넷뿐이다.
+assets/models/robot_sl.opt.glb
 assets/img/_orig_light/
 
 # HTML 5장 어디서도 참조하지 않는다 (2026-08-31 grep 확인)
 assets/new_img/
+
+# 검수 후 격리본 (2026-08-31) — 미참조 이미지 · 픽셀 편집 전 원본 · 옛 폰트 서브셋
+assets/img/_unused/
+assets/img/_prepatch_2026-08-31/
+assets/img/_precyan_2026-08-31/
+assets/img/_prebright_2026-08-31/
+assets/fonts/_prepatch_2026-08-31/
 
 # 로컬 DB
 data/
 
 # 소스·도구 — 사이트가 fetch 하지 않는다
 console-src/
+library-src/
+save-src/
 polytwin_sourcecode/
+scripts/
 
 # 데이터셋: 사이트가 읽는 건 *.json 2개뿐 (아래 예외 참고)
+# 원본 183MB 에 Range 를 걸던 걸 데이터셋/traces/ 로 잘라 뒀다(make_traces.py).
+# traces/ 는 3.87MB 이고 배포에 반드시 들어가야 한다 — 빼면 ④ 불러오기가 404 로 죽는다.
 데이터셋/sweep_traj_csv/
 데이터셋/sweep_traj_csv.zip
 데이터셋/sweep_분석_0827/
@@ -32,6 +49,7 @@ polytwin_sourcecode/
 
 # 검수 도구 — 배포 대상 아님
 asset-check.html
+clip.js
 rig-check.html
 clip-check.html
 

@@ -10,7 +10,7 @@
 <meta property="og:title" content="PolyTwin — 로봇 폴리싱 공정 디지털 트윈">
 <meta property="og:description" content="공정을 지켜보고, 잘 된 설정을 저장하고, 다음 공정에서 다시 꺼내 쓴다.">
 <meta property="og:image" content="assets/img/wide_system.webp">
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' fill='%2308090B'/%3E%3Ctext x='32' y='44' font-family='Arial,sans-serif' font-size='30' font-weight='700' text-anchor='middle' fill='%233E9DBE'%3EPT%3C/text%3E%3C/svg%3E">
+<link rel="icon" href="assets/favicon.svg">
 
 <link rel="preload" href="assets/fonts/Pretendard-300.subset.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="assets/fonts/Pretendard-500.subset.woff2" as="font" type="font/woff2" crossorigin>
@@ -53,8 +53,8 @@
   --text-mid:  #A8B0BA;
   --text-lo:   #5F6873;
   /* 액센트 — 1개 */
-  --accent:     #3E9DBE;
-  --accent-dim: #2A6478;
+  --accent:     #9BC33A;
+  --accent-dim: #59721A;
   /* 의미색 — 상태 전용 */
   --ok:   #3DD68C;
   --warn: #FFB74D;
@@ -154,6 +154,7 @@ a { color: inherit; text-decoration: none; }
 }
 .mark {
   grid-column: 2; justify-self: center;
+  display: inline-flex; align-items: center; gap: 12px;
   font-size: 17px; font-weight: 500; letter-spacing: 0.3em;
   color: var(--text-hi); text-transform: uppercase; white-space: nowrap;
   padding-block: 8px;
@@ -161,6 +162,11 @@ a { color: inherit; text-decoration: none; }
   padding-inline-start: 0.3em;
 }
 .mark b { font-weight: 700; color: var(--accent); }
+/* 심벌 — 육각 두 면. 왼쪽 면은 바탕을 따라 뒤집히고(다크 = 흰색, 반전 = 검정),
+   오른쪽 면은 어느 바탕에서나 브랜드 연두다. */
+.mark__sig { flex: none; width: 40px; height: 24px; }
+.mark__sig .a { fill: currentColor; }
+.mark__sig .b { fill: var(--accent); }
 
 /* ── 오른쪽 플로팅 독 ────────────────────────────────────────
    화면을 선으로 가르지 않고 콘텐츠 위에 떠 있는다.
@@ -281,8 +287,8 @@ a { color: inherit; text-decoration: none; }
      면   = --text-hi   (#F2F4F7)
      글자 = --bg-void   (#08090B) → 18.1:1
      보조 = --text-lo   (#5F6873) →  5.1:1
-     강조 = --accent-dim(#2A6478) →  6.0:1
-   --accent 는 이 면 위에서 2.8:1 로 미달이라 쓰지 않는다.
+     강조 = --accent-dim(#59721A) →  4.9:1
+   --accent 는 이 면 위에서 1.9:1 로 미달이라 쓰지 않는다.
    ══════════════════════════════════════════════════════════════ */
 .drawer {
   --hair: rgb(var(--bg-void-ch) / 0.14);
@@ -383,7 +389,12 @@ a { color: inherit; text-decoration: none; }
   border-bottom-color: rgb(var(--bg-void-ch) / 0.14);
 }
 [data-menu="open"] .mark { color: var(--bg-void); }
-[data-menu="open"] .mark b { color: var(--accent-dim); }
+/* 로고는 반전면에서도 브랜드 원색을 쓴다. WCAG 1.4.3 은 로고타입을 대비
+   요건에서 제외한다 — 흰 면 위 1.9:1 이지만 이건 글이 아니라 상표다.
+   심벌만 원색으로 올리고 TWIN 을 내리면 두 초록이 어긋나 고장난 것처럼 보인다.
+   로고 밖의 글자(대제목 hover, 역할 배지)는 그대로 --accent-dim 을 쓴다. */
+[data-menu="open"] .mark b { color: var(--accent); }
+[data-menu="open"] .mark__sig .b { fill: var(--accent); }
 [data-menu="open"] .menu-btn { color: var(--bg-void); }
 [data-menu="open"] .menu-btn:hover { background: rgb(var(--bg-void-ch) / 0.06); }
 [data-menu="open"] .lang a { color: var(--text-lo); }
@@ -885,7 +896,13 @@ section { position: relative; scroll-margin-top: var(--header-h); }
       </svg>
     </button>
 
-    <a class="mark" href="#top">Poly<b>Twin</b></a>
+    <a class="mark" href="#top" aria-label="PolyTwin 홈">
+      <svg class="mark__sig" viewBox="0 0 130 78" aria-hidden="true" focusable="false">
+        <path class="a" d="M29.1 4.25Q33 2 36.9 4.25L62.4 19Q65 20.5 62.76 22.49C53.5 30.5 53.5 47.5 62.76 55.51Q65 57.5 62.4 59L36.9 73.75Q33 76 29.1 73.75L4.9 59.75Q1 57.5 1 53L1 25Q1 20.5 4.9 18.25Z"/>
+        <path class="b" d="M100.9 4.25Q97 2 93.1 4.25L67.6 19Q65 20.5 67.24 22.49C76.5 30.5 76.5 47.5 67.24 55.51Q65 57.5 67.6 59L93.1 73.75Q97 76 100.9 73.75L125.1 59.75Q129 57.5 129 53L129 25Q129 20.5 125.1 18.25Z"/>
+      </svg>
+      <span>Poly<b>Twin</b></span>
+    </a>
 
     <div class="hdr__end">
       <div class="hdr__auth" data-auth-slot>
@@ -1185,7 +1202,7 @@ section { position: relative; scroll-margin-top: var(--header-h); }
           <h3>파라미터 대신 작업 환경을 구축한다</h3>
           <p>값을 손으로 맞추지 않는다. 3D 뷰어에서 설비 구성만 정하면 탐색은 학습이 맡는다.</p>
           <ul>
-            <li>로봇 팔 대수 (1~3대) 지정</li>
+            <li>로봇 팔 대수 (1–3대) 지정</li>
             <li>이동 레일 유무 설정</li>
             <li>작업용 리프트 토글</li>
           </ul>
@@ -1197,12 +1214,12 @@ section { position: relative; scroll-margin-top: var(--header-h); }
           </figcaption>
           <div class="panel__body">
             <div class="metrics">
-              <div><span class="label">압력</span><span class="v">12.4<small>N</small></span></div>
-              <div><span class="label">속도</span><span class="v">180<small>mm/s</small></span></div>
+              <div><span class="label">접촉력</span><span class="v">5.6<small>N</small></span></div>
+              <div><span class="label">이송</span><span class="v">30<small>mm/s</small></span></div>
               <div><span class="label">토크</span><span class="v">2.7<small>Nm</small></span></div>
             </div>
             <svg class="spark" viewBox="0 0 320 68" preserveAspectRatio="none" role="img"
-                 aria-label="최근 60초 압력 추이. 11에서 13뉴턴 사이를 유지하다 끝부분에서 소폭 상승.">
+                 aria-label="최근 60초 접촉력 추이. 4.5에서 6.5뉴턴 사이를 유지하다 끝부분에서 소폭 상승.">
               <line class="grid" x1="0" y1="17" x2="320" y2="17"/>
               <line class="grid" x1="0" y1="34" x2="320" y2="34"/>
               <line class="grid" x1="0" y1="51" x2="320" y2="51"/>
@@ -1245,9 +1262,9 @@ section { position: relative; scroll-margin-top: var(--header-h); }
             <div class="field">
               <span class="label">포함된 파라미터</span>
               <div class="chips">
-                <span class="chip">압력 <span class="num">12.4N</span></span>
-                <span class="chip">속도 <span class="num">180mm/s</span></span>
-                <span class="chip">중첩 <span class="num">35%</span></span>
+                <span class="chip">접촉력 <span class="num">5.6 N</span></span>
+                <span class="chip">이송 <span class="num">30 mm/s</span></span>
+                <span class="chip">오버랩 <span class="num">40%</span></span>
                 <span class="chip">패드 <span class="num">P2000</span></span>
                 <span class="chip">경로 <span class="num">S-3</span></span>
                 <span class="chip">각도 <span class="num">12°</span></span>
@@ -1307,8 +1324,8 @@ section { position: relative; scroll-margin-top: var(--header-h); }
 
   <!-- ══════════ 사양 ══════════
        네 값 모두 실측이다. 근거는 각각:
-       2.15MB·92.5% = ASSETS.md (28.69MB → 2.15MB, meshopt)
-       171KB        = assets/fonts/Pretendard-{300,500,700}.subset.woff2 합계
+       1.41MB = car+robot_arm+lift+rail .opt.glb 실측 1,447.56KB (2026-08-31) · 93.5% = 차체 4,097.52KB → 264.44KB
+       192KB        = assets/fonts/Pretendard-{300,500,700}.subset.woff2 합계 (928자, 2026-08-31 재생성)
        6종          = 위 02 패널의 프리셋 칩 개수와 같다
        근거 없는 수치는 여기 올리지 않는다. -->
   <section class="sec sec--tight spec" id="spec">
@@ -1319,20 +1336,20 @@ section { position: relative; scroll-margin-top: var(--header-h); }
       </div>
       <div class="spec__grid rise" style="--d:60ms">
       <div>
-        <span class="spec__v">2.15<small>MB</small></span>
-        <span class="label">3D 모델 3종 합계</span>
+        <span class="spec__v">1.41<small>MB</small></span>
+        <span class="label">3D 모델 4종 합계</span>
       </div>
       <div>
-        <span class="spec__v">92.5<small>%</small></span>
-        <span class="label">모델 용량 감축</span>
+        <span class="spec__v">93.5<small>%</small></span>
+        <span class="label">차체 모델 압축률</span>
       </div>
       <div>
         <span class="spec__v">6<small>종</small></span>
         <span class="label">한 프리셋에 묶이는 값</span>
       </div>
       <div>
-        <span class="spec__v">171<small>KB</small></span>
-        <span class="label">폰트 서브셋 3벌</span>
+        <span class="spec__v">192<small>KB</small></span>
+        <span class="label">폰트 서브셋 3벌 · 928자</span>
       </div>
       </div>
     </div>
@@ -1542,7 +1559,7 @@ window.__heroVideoOK = false;
   const rules = {
     authId: (v) => {
       if (!v) return 'ID를 입력하세요.';
-      if (mode === 'signup' && !ID_RE.test(v)) return '영문·숫자와 . _ - 만 쓸 수 있고 4~32자여야 합니다.';
+      if (mode === 'signup' && !ID_RE.test(v)) return '영문·숫자와 . _ - 만 쓸 수 있고 4–32자여야 합니다.';
       if (v.length < 4) return 'ID는 4자 이상이어야 합니다.';
       return '';
     },
@@ -1821,8 +1838,8 @@ async function boot() {
   key.shadow.bias = -0.0004;
   scene.add(key, key.target);
 
-  const rimL = new THREE.DirectionalLight(0x6FC6E8, 1.5); scene.add(rimL);
-  const rimR = new THREE.DirectionalLight(0xE8C79A, 1.1); scene.add(rimR);
+  const rimL = new THREE.DirectionalLight(0x94B6C3, 1.5); scene.add(rimL);
+  const rimR = new THREE.DirectionalLight(0xDBC5A7, 1.1); scene.add(rimR);
   scene.add(new THREE.HemisphereLight(0x1C242C, 0x04060A, 0.35));
 
   /* 환경맵 — 없으면 금속이 금속으로 안 보인다 */
@@ -1839,8 +1856,8 @@ async function boot() {
       m.position.set(x, y, z); m.lookAt(0, 0, 0); m.material.color.multiplyScalar(i); s.add(m);
     };
     strip(0, 7, 0, 0xffffff, 3.2);
-    strip(-7, 1.5, -3, 0x8FD4EE, 1.4);
-    strip(7, 1.0, -4, 0xEED8B0, 1.0);
+    strip(-7, 1.5, -3, 0xACC7D1, 1.4);
+    strip(7, 1.0, -4, 0xE3D5BB, 1.0);
     scene.environment = pmrem.fromScene(s, 0.03).texture;
   }
 

@@ -42,9 +42,9 @@
     --text-mid:   #A8B0BA;
     --text-lo:    #5F6873;
     /* 액센트 — 1개 */
-    --accent:     #3E9DBE;
-    --accent-ch:  62 157 190;
-    --accent-dim: #2A6478;
+    --accent:     #9BC33A;
+    --accent-ch:  155 195 58;
+    --accent-dim: #59721A;
     /* 의미색 — 상태 전용 */
     --ok:         #3DD68C;
     --ok-ch:      61 214 140;
@@ -116,7 +116,13 @@
 
   <main style="position: relative; overflow: hidden">
     <header style="position: absolute; top: 0; left: 0; right: 0; z-index: 10; display: flex; align-items: baseline; gap: 20px; padding: 22px 26px; pointer-events: none">
-      <div style="font-size: 12px; font-weight: 300; letter-spacing: 0.3em">POLYTWIN</div>
+      <div style="display: inline-flex; align-items: center; gap: 9px; font-size: 12px; font-weight: 300; letter-spacing: 0.3em">
+        <svg viewBox="0 0 130 78" width="28" height="16.8" aria-hidden="true" focusable="false" style="flex: none">
+          <path style="fill: currentColor" d="M29.1 4.25Q33 2 36.9 4.25L62.4 19Q65 20.5 62.76 22.49C53.5 30.5 53.5 47.5 62.76 55.51Q65 57.5 62.4 59L36.9 73.75Q33 76 29.1 73.75L4.9 59.75Q1 57.5 1 53L1 25Q1 20.5 4.9 18.25Z"/>
+          <path style="fill: var(--accent)" d="M100.9 4.25Q97 2 93.1 4.25L67.6 19Q65 20.5 67.24 22.49C76.5 30.5 76.5 47.5 67.24 55.51Q65 57.5 67.6 59L93.1 73.75Q97 76 100.9 73.75L125.1 59.75Q129 57.5 129 53L129 25Q129 20.5 125.1 18.25Z"/>
+        </svg>
+        <span>POLY<span style="color: var(--accent)">TWIN</span></span>
+      </div>
       <div style="font-size: 11px; color: var(--text-lo)">차량 3D · 파라미터 설정</div>
       <div style="flex: 1"></div>
       <div style="font-family: var(--f-mono); font-size: 11px; color: var(--text-mid)">{{ vehicleName }}</div>
@@ -197,7 +203,7 @@
       <div style="padding: 16px; background: rgb(var(--accent-ch) / 0.06); border: 1px solid var(--line)">
         <div style="font-size: 11px; color: var(--accent); margin-bottom: 8px">RL 최적화 안내</div>
         <div style="font-size: 11px; color: var(--text-mid); line-height: 1.5">
-          환경 설정 후 공정을 시작하면, AI가 해당 하드웨어 조건에서 최적의 폴리싱 파라미터(압력, 속도 등)를 탐색합니다.
+          환경 설정 후 공정을 시작하면, AI가 해당 하드웨어 조건에서 최적의 폴리싱 파라미터(압력, 속도 등)를 탐색한다.
         </div>
       </div>
     </div>
@@ -295,6 +301,7 @@
       <div sc-camel-on-click="{{ toggleRun }}" style="padding: 17px 0; border: 1px solid {{ runBorder }}; background: {{ runBg }}; font-size: 13px; font-weight: 500; letter-spacing: 0.18em; text-transform: uppercase; color: var(--text-hi); text-align: center; cursor: pointer; transition: background-color 220ms cubic-bezier(0.4,0,0.2,1), border-color 220ms cubic-bezier(0.4,0,0.2,1), color 220ms cubic-bezier(0.4,0,0.2,1)">{{ runLabel }}</div>
       <div style="display: flex; gap: 10px">
         <a href="monitor.html" style="flex: 1; padding: 10px 0; font-size: 11px; letter-spacing: 0.06em; color: var(--text-lo); text-align: center; transition: color var(--t-base) var(--e-out); word-break: keep-all">② 공정 감시 →</a>
+        <a href="PolyTwin%20Save.html" style="flex: 1; padding: 10px 0; font-size: 11px; letter-spacing: 0.06em; text-align: center; color: var(--text-lo); transition: color var(--t-base) var(--e-out); word-break: keep-all" style-hover="color: var(--text-mid)">③ 결과 저장 →</a>
         <div sc-camel-on-click="{{ goLibrary }}" tabindex="0" style="flex: 1; padding: 10px 0; font-size: 11px; letter-spacing: 0.06em; color: var(--text-lo); text-align: center; cursor: pointer; transition: color var(--t-base) var(--e-out); word-break: keep-all" style-hover="color: var(--text-mid)">④ 라이브러리 →</div>
       </div>
     </div>
@@ -406,10 +413,12 @@ const CARS = [
 // 숙련자만 쓴다. 듀얼은 자국을 남기지 않는 대신 시간이 더 걸린다.
 // 접촉력이 일정한 로봇에는 그 숙련도 제약이 없다 — 이 화면이 고르게 하는 이유다.
 // 경로 간격 = 패드 지름 x (1 - 오버랩). 라이브러리 레시피와 같은 규칙.
+// force 는 3~8 N 대역 안이어야 한다 — 이탈하면 접촉 게이트가 실행을 막는다.
+// 값은 데이터셋 목표 접촉력 분포(3.29~8.22 N, 중앙값 4.46)를 따른다.
 const TOOLS = [
-  { id: 'dual',   label: '듀얼', pad: 110, overlap: 40, rpm: 3000, force: 8.0, feed: 0.030,
+  { id: 'dual',   label: '듀얼', pad: 110, overlap: 40, rpm: 3000, force: 5.6, feed: 0.030,
     note: '기계자국과 홀로그램을 남기지 않는다. 대신 같은 면적에 시간이 더 걸린다.' },
-  { id: 'single', label: '싱글', pad: 140, overlap: 35, rpm: 2400, force: 9.0, feed: 0.030,
+  { id: 'single', label: '싱글', pad: 140, overlap: 35, rpm: 2400, force: 7.2, feed: 0.030,
     note: '연마력이 월등하고 빠르다. 사람에게는 홀로그램 위험 때문에 숙련자 전용이지만, 접촉력이 일정한 로봇에는 그 제약이 없다.' },
 ];
 const toolOf = (id) => TOOLS.find((t) => t.id === id) || TOOLS[0];
@@ -645,7 +654,7 @@ class Component extends DCLogic {
       monTotal: mmss(Math.round(s.runMs / 1000)),
       monForce: m.force.toFixed(2),
       monTarget: m.target.toFixed(1),
-      monDev: (m.force >= m.target ? '+' : '−') + m.dev.toFixed(2),
+      monDev: (m.force >= m.target ? '+' : '–') + m.dev.toFixed(2),
       monRpm: String(m.rpm),
       monFeed: m.feed.toFixed(0),
       monCov: m.cov.toFixed(1),
@@ -655,7 +664,7 @@ class Component extends DCLogic {
       /* 미도달이 남는 것은 결함이 아니라 이 구성의 사실이다. 그대로 적는다 */
       monReachNote: m.points > 0
         ? ('도달 ' + m.assigned.toLocaleString() + ' / ' + m.points.toLocaleString()
-           + ' pt · 미도달 구간은 검증 리포트로 남습니다')
+           + ' pt · 미도달 구간은 검증 리포트로 남는다')
         : '',
       monStateLabel: warn ? '접촉력 이탈' : '정상 추종',
       monStateColor: stateColor,
@@ -846,9 +855,9 @@ class Component extends DCLogic {
       carLiftLabel: s.carLift ? (s.carLift + ' mm') : '내림',
       carLiftColor: s.carLift ? 'var(--accent)' : 'var(--text-lo)',
       carLiftNote: s.carLift
-        ? ('차체를 ' + s.carLift + ' mm 올려 도어·펜더가 팔의 도달 범위에 들어옵니다. '
-           + '대신 루프가 그만큼 높아집니다.')
-        : '차체가 내려와 있어 옆면 하단은 팔이 닿지 않습니다. 올리면 측면 경로가 배정됩니다.',
+        ? ('차체를 ' + s.carLift + ' mm 올려 도어·펜더가 팔의 도달 범위에 들어온다. '
+           + '대신 루프가 그만큼 높아진다.')
+        : '차체가 내려와 있어 옆면 하단은 팔이 닿지 않는다. 올리면 측면 경로가 배정된다.',
       liftBg: s.hasLift ? 'var(--accent)' : 'var(--line)',
       liftDotLeft: s.hasLift ? '20px' : '2px',
       spacing: String(spacing),
@@ -877,8 +886,8 @@ class Component extends DCLogic {
         ? ('숙련공 정답 데이터를 읽지 못했습니다'
            + (s.seedErr ? ' (' + s.seedErr + ')' : '')
            + '. 데이터셋/seg_best_kpi.json 이 있는지 확인하세요 — 없으면 데이터셋/make_seed.py 로 만듭니다.')
-        : ('RL 이 이 환경에서 찾은 파라미터를, 같은 세그먼트에서 숙련공이 낸 정답과 항목별로 맞춰 봅니다. '
-           + '전부 허용 오차 안에 들어야 라이브러리에 저장합니다.'),
+        : ('RL 이 이 환경에서 찾은 파라미터를, 같은 세그먼트에서 숙련공이 낸 정답과 항목별로 맞춰 본다. '
+           + '전부 허용 오차 안에 들어야 라이브러리에 저장한다.'),
       evalSource: ref ? (ref.file + '  ·  run ' + ref.bestRun + '  ·  ' + ref.steps + ' steps') : '',
       evalLeftBorder: noSeed ? 'var(--bg-panel)' : (evOk ? 'var(--ok)' : 'var(--crit)'),
       verdictBorder: noSeed ? 'var(--line)' : (evOk ? 'rgb(var(--ok-ch) / 0.45)' : 'rgb(var(--crit-ch) / 0.45)'),
@@ -886,16 +895,16 @@ class Component extends DCLogic {
       verdictColor: noSeed ? 'var(--text-mid)' : (evOk ? 'var(--ok)' : 'var(--crit)'),
       verdictTitle: noSeed ? '판정 불가' : (s.evalSaved ? '저장 완료' : (evOk ? '일치' : '불일치')),
       verdictText: noSeed
-        ? '대조할 정답이 없어 저장하지 않습니다.'
+        ? '대조할 정답이 없어 저장하지 않는다.'
         : (s.evalSaved
-            ? ('라이브러리에 저장했습니다. 세그먼트 ' + ref.seg + ' 의 원본 CSV 와 함께 04 화면에서 열립니다.')
+            ? ('라이브러리에 저장했다. 세그먼트 ' + ref.seg + ' 의 원본 CSV 와 함께 04 화면에서 열린다.')
             : (evOk
                 ? (qr.length
-                    ? '품질 ' + qr.length + '개 항목이 기준을 넘겼고, 파라미터 ' + ev.length + '개도 허용 오차 안입니다. 라이브러리에 저장할 수 있습니다.'
-                    : '5개 항목 모두 허용 오차 안입니다. 라이브러리에 저장할 수 있습니다.')
+                    ? '품질 ' + qr.length + '개 항목이 기준을 넘겼고, 파라미터 ' + ev.length + '개도 허용 오차 안이다. 라이브러리에 저장할 수 있다.'
+                    : '5개 항목 모두 허용 오차 안이다. 라이브러리에 저장할 수 있다.')
                 : ([qFailed ? ('품질 ' + qFailed + '개 항목이 기준 미달') : '',
                     failed ? ('파라미터 ' + failed + '개 항목이 허용 오차 밖') : '']
-                    .filter(Boolean).join(', ') + '입니다. 저장하지 않습니다.'))),
+                    .filter(Boolean).join(', ') + '이다. 저장하지 않는다.'))),
       btnLeftLabel: s.evalSaved ? '닫기' : '파기',
       btnRightLabel: s.evalSaved ? '라이브러리 열기' : (evOk ? '합격 (저장)' : '저장 불가'),
       btnRightAction: s.evalSaved
