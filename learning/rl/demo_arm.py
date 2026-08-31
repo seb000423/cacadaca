@@ -743,7 +743,7 @@ def _quat_to_R_np(q):
         [2 * (x * z - w * y), 2 * (y * z + w * x), 1 - 2 * (x * x + y * y)]])
 
 
-def _attach_polish_pads(num_envs, radius=0.035, thickness=0.012):
+def _attach_polish_pads(num_envs, radius=0.038, thickness=0.022):
     """샌더 최하단 가시 메쉬(백킹 플레이트) 바로 아래에 폴리싱 패드(폼 디스크)를 모든 env 의
     link_6 자식으로 생성하고, 패드 바닥 중심의 link_6 로컬 오프셋을 반환한다.
     자산에는 스펀지 패드가 없어(원본 v5 는 코드로 생성) 접촉이 보이지 않던 문제의 해결."""
