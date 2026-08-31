@@ -43,6 +43,10 @@ CELL_SIZE_M = 0.12            # 학습/판정 patch 와 동일
 PHYSICS_DT = 1.0 / 60.0
 DECIMATION = 3                # 20 Hz 제어 (polish_env 와 동일)
 SIDE_TILT_DEG = 45.0          # 판정 파이프라인의 side 정의
+# 시간 스케일: 원코드의 경로 전진(데모 속도, ~0.45 m/s)은 레시피 이송(~5.7 mm/s)보다 수십 배
+# 빠르다. 로봇은 데모 속도로 움직이되 해석 품질 모델은 "레시피 시간"으로 스텝한다 —
+# dt_model = dt_ctrl × (레시피 이송 / 실제 이송). 셀당 노출(제거량)이 레시피와 같아진다.
+TIME_SCALE_MAX = float(os.environ.get("POLISH_RL_TIME_SCALE_MAX", "200.0"))
 
 
 # ── 1. 셀 격자 ────────────────────────────────────────────────────────────
@@ -213,6 +217,7 @@ class AgentRLState:
         self.feed_scale = 1.0
         self.fp = (0.0, 0.0, 0.0, 20.0, PC.AMBIENT_TEMPERATURE_C, PC.AMBIENT_TEMPERATURE_C, 0.0)
         self.sim_t = 0.0
+        self.time_scale = 1.0
 
 
 class ResidualPolicyBridge:
@@ -255,16 +260,21 @@ class ResidualPolicyBridge:
         s.force_accum = 0.0
         recipe = self.recipe_for(is_side)
 
-        # ── 품질 모델 스텝 (달성 힘, 명령 아님) ──
+        # ── 품질 모델 스텝 (달성 힘, 명령 아님; 레시피 시간으로 스케일) ──
         cell, uv = self.reg.lookup(pad_xyz)
+        recipe_feed = (recipe.feed_speed_mm_s / 1000.0) * s.feed_scale
+        time_scale = float(np.clip(recipe_feed / max(float(feed_mps), 1e-4), 0.05, TIME_SCALE_MAX)) \
+            if feed_mps > 0 else 1.0
+        s.time_scale = time_scale
         if cell is not None and in_contact:
             self.reg.model.step(cell.surface, ContactState(
                 pad_center_uv_m=uv, contact_force_n=s.force_mean, rpm=recipe.rpm,
-                feed_speed_m_s=float(feed_mps)), dt_s=PHYSICS_DT * DECIMATION, sim_time_s=s.sim_t)
+                feed_speed_m_s=recipe_feed), dt_s=PHYSICS_DT * DECIMATION * time_scale,
+                sim_time_s=s.sim_t * time_scale)
             s.fp = footprint_stats(cell.surface, uv, CLEARCOAT_SAFE_MIN_UM)
             cell.visits += 1
             cell.force_sum += s.force_mean
-            cell.feed_sum += float(feed_mps)
+            cell.feed_sum += recipe_feed
             cell.a_sum += s.action
             if s.force_mean > FORCE_HARD_LIMIT_N:
                 cell.hard_violated = True
@@ -291,6 +301,10 @@ class ResidualPolicyBridge:
             tail += [0.0, 0.0, 0.0, 0.0]        # spatial lookahead 는 원코드 경로에선 미정의
         obs = np.array(core + [s.prev_action[0], s.prev_action[1]] + tail, dtype=np.float32)
         a = self.policy(obs)
+        s.n_ctrl = getattr(s, "n_ctrl", 0) + 1
+        if os.environ.get("POLISH_RL_DEBUG") and s.n_ctrl % 100 == 0:
+            print(f"[rl_bridge][{label}] ctrl {s.n_ctrl} feed_v5={feed_mps*1000:.1f}mm/s ts={time_scale:.1f} "
+                  f"in_contact={in_contact} obs={np.round(obs, 2).tolist()} a={np.round(a, 2).tolist()}", flush=True)
         s.prev_action = s.action
         s.action = np.asarray(a, dtype=np.float32)
         s.force_scale = float(1.0 + a[0] * FORCE_RATIO_LIMIT)
