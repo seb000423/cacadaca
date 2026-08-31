@@ -171,6 +171,7 @@ def main():
                                 args.curvature_radius, WORK_TOP)
     print(f"[demo] 작업면 배정: " + ", ".join(f"{k}x{kind_of.count(k)}" for k in KINDS))
 
+    _pad_off = _attach_polish_pads(E)      # 리셋 전에 USD 로 부착 → 링크를 따라 렌더됨
     if args.record:
         _setup_record(scene.env_origins)   # 반드시 sim.reset() 이전 (이후 생성 시 빈 프레임)
     sim.reset()
@@ -259,11 +260,8 @@ def main():
     # 2026-08-31: 녹화 프레임에서 패드가 작업면 위 3~4cm 에 떠 있는 것이 확인됨 → 위 상수는
     # 보이는 샌더 메쉬의 바닥이 아니었다. 런타임에 link_6 로컬 프레임에서 가시 메쉬 bbox 를
     # 실측해 접촉면 오프셋(XY 중심, 최저 Z)을 덮어쓴다.
-    _meas = _measure_pad_offset("/World/envs/env_0/Robot")
-    if _meas is not None:
-        print(f"[demo] 패드 접촉면 오프셋 실측(link_6 프레임): {np.round(_meas, 4)}  "
-              f"(기존 상수 {PAD_OFFSET_LINK6})")
-        PAD_OFFSET_LINK6 = _meas
+    if _pad_off is not None:
+        PAD_OFFSET_LINK6 = _pad_off       # 접촉면 = 부착한 패드의 바닥
 
     def _quat_to_R(q):                      # q = (w, x, y, z)
         w, x, y, z = [float(v) for v in q]
@@ -439,7 +437,9 @@ def main():
                   f"각오차={np.degrees(2*np.arccos(min(_dot,1.0))):.1f}°", flush=True)
             print(f"[demo] 패드면 법선(세계) {np.round(_ny,3)}  ·down={float(-_ny[2]):.3f} "
                   f"(1.000 이면 면접촉)", flush=True)
-            print(f"[demo] actual_clearance mean={float(contact.actual_clearance.mean())*100:.2f}cm", flush=True)
+            print(f"[demo] actual_clearance mean={float(contact.actual_clearance.mean())*100:.2f}cm  "
+                  f"link6 z−WORK_TOP={float(robot.data.body_pose_w.torch[0, ee_body, 2])-WORK_TOP:+.4f}m "
+                  f"(목표 {float(targets[0, 2]) - WORK_TOP:+.4f})", flush=True)
             print(f"[demo] t={sim_t:.0f}s  진행 {min(arc.min().item()/path_len,1)*100:.0f}%  "
                   f"F={contact.filtered.max().item():.1f}N  "
                   f"추종오차={float((robot.data.body_pose_w.torch[:, ee_body, 0:3] - (targets[:, 0:3] + scene.env_origins)).norm(dim=1).max())*100:.1f}cm", flush=True)
@@ -569,9 +569,12 @@ def _close_eye_target(env_origins, env_ids, D):
     # 팔이 작업면을 가리지 않게 한다 → 두 대가 나란히 보이는 구도.
     if len(p) >= 2:
         d = p[-1, :2] - p[0, :2]; d = d / max(np.linalg.norm(d), 1e-6)
+        horiz = np.array([1.0, 0.0]) - 0.12 * d      # 거의 정면, 살짝만 비켜 깊이감
     else:
-        d = np.array([0.0, 1.0])
-    horiz = np.array([1.0, 0.0]) - 0.12 * d          # 거의 정면, 살짝만 비켜 깊이감
+        # 1대: 옆(−y)·앞(+x) 사이 높은 각도에서 내려다봐 팔에 가리지 않고 패드·자국이 보이게
+        horiz = np.array([0.5, -0.85]); horiz = horiz / np.linalg.norm(horiz)
+        eye = target + np.array([horiz[0] * D * 0.75, horiz[1] * D * 0.75, 0.72 * D])
+        return eye, target
     horiz = horiz / np.linalg.norm(horiz)
     eye = target + np.array([horiz[0] * D * 0.88, horiz[1] * D * 0.88, 0.48 * D])
     return eye, target
@@ -740,28 +743,50 @@ def _quat_to_R_np(q):
         [2 * (x * z - w * y), 2 * (y * z + w * x), 1 - 2 * (x * x + y * y)]])
 
 
-def _measure_pad_offset(robot_prim_path):
-    """link_6 로컬 프레임에서 가시(visible) 자손 메쉬의 bbox → (XY 중심, 최저 Z).
-    숨긴 복제 샌더는 visibility 로 제외된다. 실패 시 None."""
-    try:
-        import omni.usd
-        from pxr import Usd, UsdGeom
-        stage = omni.usd.get_context().get_stage()
-        root = stage.GetPrimAtPath(robot_prim_path)
-        link6 = None
+def _attach_polish_pads(num_envs, radius=0.035, thickness=0.012):
+    """샌더 최하단 가시 메쉬(백킹 플레이트) 바로 아래에 폴리싱 패드(폼 디스크)를 모든 env 의
+    link_6 자식으로 생성하고, 패드 바닥 중심의 link_6 로컬 오프셋을 반환한다.
+    자산에는 스펀지 패드가 없어(원본 v5 는 코드로 생성) 접촉이 보이지 않던 문제의 해결."""
+    import omni.usd
+    from pxr import Gf, Usd, UsdGeom
+    stage = omni.usd.get_context().get_stage()
+    link6_paths = []
+    for i in range(num_envs):
+        root = stage.GetPrimAtPath(f"/World/envs/env_{i}/Robot")
         for prim in Usd.PrimRange(root):
             if prim.GetName() == "link_6":
-                link6 = prim; break
-        if link6 is None:
-            print("[demo] ⚠ link_6 프림을 찾지 못함"); return None
-        cache = UsdGeom.BBoxCache(Usd.TimeCode.Default(),
-                                  [UsdGeom.Tokens.default_, UsdGeom.Tokens.render],
-                                  useExtentsHint=False, ignoreVisibility=False)
-        box = cache.ComputeRelativeBound(link6, link6).ComputeAlignedRange()
-        lo, hi = box.GetMin(), box.GetMax()
-        return np.array([0.5 * (lo[0] + hi[0]), 0.5 * (lo[1] + hi[1]), float(lo[2])])
-    except Exception as exc:
-        print(f"[demo] ⚠ 패드 오프셋 실측 실패: {exc}"); return None
+                link6_paths.append(prim.GetPath()); break
+    if not link6_paths:
+        print("[demo] ⚠ link_6 프림을 찾지 못함 — 패드 미부착"); return None
+    # env_0 에서 가시 메쉬 중 최저 z 인 것(백킹 플레이트)의 바닥·중심을 측정
+    link6 = stage.GetPrimAtPath(link6_paths[0])
+    cache = UsdGeom.BBoxCache(Usd.TimeCode.Default(),
+                              [UsdGeom.Tokens.default_, UsdGeom.Tokens.render],
+                              useExtentsHint=False, ignoreVisibility=False)
+    best = None
+    for prim in Usd.PrimRange(link6, Usd.TraverseInstanceProxies()):
+        if prim.IsA(UsdGeom.Gprim) and UsdGeom.Imageable(prim).ComputeVisibility() != "invisible":
+            r = cache.ComputeRelativeBound(prim, link6).ComputeAlignedRange()
+            if r.IsEmpty():
+                continue
+            if best is None or r.GetMin()[2] < best[0]:
+                best = (float(r.GetMin()[2]),
+                        0.5 * (r.GetMin()[0] + r.GetMax()[0]), 0.5 * (r.GetMin()[1] + r.GetMax()[1]))
+    if best is None:
+        print("[demo] ⚠ 샌더 메쉬 측정 실패 — 패드 미부착"); return None
+    z_plate, cx, cy = best
+    mat = sim_utils.PreviewSurfaceCfg(diffuse_color=(0.93, 0.55, 0.16), roughness=0.9)
+    mat.func("/World/Looks/polish_pad_mat", mat)
+    for p in link6_paths:
+        pad = UsdGeom.Cylinder.Define(stage, p.AppendChild("polish_pad"))
+        pad.CreateAxisAttr("Z"); pad.CreateRadiusAttr(radius); pad.CreateHeightAttr(thickness)
+        xf = UsdGeom.Xformable(pad.GetPrim()); xf.ClearXformOpOrder()
+        xf.AddTranslateOp().Set(Gf.Vec3d(cx, cy, z_plate - thickness / 2))
+        sim_utils.bind_visual_material(p.AppendChild("polish_pad").pathString, "/World/Looks/polish_pad_mat")
+    off = np.array([cx, cy, z_plate - thickness])
+    print(f"[demo] 폴리싱 패드 부착: {len(link6_paths)}대, 백킹 플레이트 z={z_plate:+.4f} → "
+          f"패드 바닥 오프셋(link_6) {np.round(off, 4)}")
+    return off
 
 
 def _spawn_curved_plate(prim_path, kind, R, work_top, seed=0, thickness=0.05):

@@ -766,3 +766,9 @@ demo_arm 확장 (`--surface_kinds flat,cylinder,sphere,freeform` env 순환 배�
 D=3.4m)에서 시작해 `--cam_zoom_start/end`(시뮬 s) 구간 동안 smoothstep 으로 전체 격자
 시점(far, dist 1.25)까지 이동. 49대 4종 혼합, 2패스, 1080p, record_dt 0.75 (15fps 인코딩
 = 11배속). 산출 `~/Desktop/polish_demo_7x7_zoomout.mp4`.
+
+**v4 (패드 가시화 + 1대 시작)**: 자산에 스펀지 패드가 없어(원본 v5 는 `sponge_visual` 을
+코드로 생성) 샌더 하우징만 보였고, 최하단 가시 메쉬(백킹 플레이트 z −0.0902)가 얇고 어두워
+"안 닿는" 것처럼 보였음. `_attach_polish_pads`: 모든 env 의 link_6 자식으로 폼 디스크
+(Ø70×12mm, 주황)를 백킹 플레이트 아래에 USD 로 부착(리셋 전) → 패드 바닥(−0.1022)을
+접촉면으로 사용. 줌아웃 시작 시점을 1대(env 1 원통, 옆·위 각도, D=2.0)로 변경.
