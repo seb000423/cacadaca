@@ -58,6 +58,11 @@ parser.add_argument("--cam_zoom_start", type=float, default=200.0, help="줌아�
 parser.add_argument("--cam_zoom_end", type=float, default=350.0, help="줌아웃 종료 시뮬 시각(s)")
 parser.add_argument("--cam_close_envs", type=str, default="0,1", help="근접 시점이 잡을 env 인덱스")
 parser.add_argument("--cam_close_dist", type=float, default=2.6, help="근접 시점 카메라 거리(m)")
+parser.add_argument("--return_lift", type=float, default=0.03,
+                    help="패스 경계 복귀 스트로크: 패드를 들어올리는 높이(m). 0 이면 비활성")
+parser.add_argument("--return_time", type=float, default=3.0, help="복귀 스트로크 시간(s)")
+parser.add_argument("--debug_return_at", type=float, default=None,
+                    help="(테스트) 지정 시각(s)에 복귀 스트로크를 강제로 1회 실행")
 parser.add_argument("--n_passes", type=int, default=1,
                     help="래스터 패스 수 (판정 레시피=2; 기본 1은 짧은 GUI 시연용)")
 AppLauncher.add_app_launcher_args(parser)
@@ -323,6 +328,12 @@ def main():
     print(f"[demo] recipe {recipe} | path {path_len:.2f} m | {E} envs | {policy_desc}")
     print(f"[demo] surface seeds: {seeds}")
     force_accum = torch.zeros(E, device=sim.device)
+    # 패스 경계 복귀 스트로크 상태: 끝점 → 시작점으로 패드를 들고 이동 (그동안 연마 없음)
+    one_pass = float(line_len.sum())
+    returning = torch.zeros(E, dtype=torch.bool, device=sim.device)
+    ret_t = torch.zeros(E, device=sim.device)
+    ret_from = np.array(lines[-1][1], dtype=float); ret_to = np.array(lines[0][0], dtype=float)
+    _dbg_ret_done = False
     sub = 0
     while app.is_running():
         # 초기 viewport가 검게 남는 Isaac Lab 3 Kit 초기화 순서에 대비해 몇 차례 재적용.
@@ -337,6 +348,8 @@ def main():
             obs = _build_obs(surfaces, arc, f_mean, feed_cmd, prev_force, prev_action,
                              pos_at_arc, path_len, force_cmd, env_cfg, sim.device)
             for i in range(E):
+                if bool(returning[i]):
+                    continue                       # 복귀 스트로크 중 — 패드가 떠 있어 연마 없음
                 uv = pos_at_arc(float(arc[i]))
                 model.step(surfaces[i], ContactState(uv, float(f_mean[i]), recipe.rpm,
                                                      float(feed_cmd[i])), 0.05, sim_t)
@@ -358,7 +371,20 @@ def main():
         # ── 60Hz physics substep ──
         f = contact.step(force_cmd, is_side)
         force_accum += f
-        arc += feed_cmd * (1 / 60)
+        if args.return_lift > 0:
+            ret_t[returning] -= 1 / 60
+            returning &= ret_t > 0
+            new_arc = arc + feed_cmd * (1 / 60) * (~returning).float()
+            crossed = (torch.floor(new_arc / one_pass) > torch.floor(arc / one_pass)) & (new_arc < path_len)
+            if args.debug_return_at is not None and not _dbg_ret_done and sim_t >= args.debug_return_at:
+                crossed[:] = True; _dbg_ret_done = True
+            if bool(crossed.any()):
+                returning |= crossed
+                ret_t[crossed] = args.return_time
+                new_arc[crossed] = torch.floor(new_arc[crossed] / one_pass) * one_pass   # 경계에 고정
+            arc = new_arc
+        else:
+            arc += feed_cmd * (1 / 60)
         sim_t += 1 / 60
 
         # 패드 목표: 경로점 + z = clearance (팔이 어드미턴스 압입을 그대로 재현)
@@ -367,7 +393,14 @@ def main():
         targets = torch.zeros(E, 7, device=sim.device)
         quat_cmd_np = np.zeros((E, 4)); quat_cmd_np[:, 0] = 1.0
         for i in range(E):
-            uv = pos_at_arc(float(arc[i]))
+            if bool(returning[i]):                 # 복귀 스트로크: 들어올린 직선 경로
+                s_ret = 1.0 - float(ret_t[i]) / max(args.return_time, 1e-6)
+                s_ret = min(max(s_ret, 0.0), 1.0)
+                uv = tuple(ret_from + (ret_to - ret_from) * s_ret)
+                clearance = args.return_lift * float(np.sin(np.pi * s_ret))
+            else:
+                uv = pos_at_arc(float(arc[i]))
+                clearance = float(contact.actual_clearance[i].clamp(-0.003, 0.0))
             h, nrm = curve_height_normal(kind_of[i], args.curvature_radius, PATCH_SIZE,
                                          uv[0], uv[1])
             q = _quat_from_z_to(nrm)
@@ -377,8 +410,7 @@ def main():
             # 접촉 모델의 actual_clearance 는 원 시뮬의 추종지연 규약상 +2~4cm 로 떠 있다
             # (contact.py: mean(actual−cmd)=+0.019m) — 힘·품질은 그 모델이 계산하므로, 시각 목표는
             # 표면 위로 뜨지 않게 0 이하로 묶는다 (살짝 눌림 −3mm 까지 허용).
-            targets[i, 2] = (WORK_TOP + h + float(contact.actual_clearance[i].clamp(-0.003, 0.0))
-                             - off[2])
+            targets[i, 2] = WORK_TOP + h + clearance - off[2]
             quat_cmd_np[i] = q
         quat_cmd = torch.tensor(quat_cmd_np, dtype=torch.float32, device=sim.device)
         # world → base frame
