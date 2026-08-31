@@ -43,6 +43,8 @@ parser.add_argument("--num_sequences", type=int, default=3,
                     help="env 당 반복할 (새 표면 → 재폴리싱 완료까지) 시퀀스 수")
 parser.add_argument("--max_passes", type=int, default=6)
 parser.add_argument("--cooldown_s", type=float, default=20.0)
+parser.add_argument("--pass_time_factor", type=float, default=1.7,
+                    help="pass 시간 여유계수 — dwell 정책은 공칭보다 오래 걸림 (9.25 타임아웃 2건 교정)")
 parser.add_argument("--max_control_steps", type=int, default=200000,
                     help="안전 상한 — 이 스텝 안에 목표 시퀀스 수를 못 채우면 중단")
 parser.add_argument("--out", type=str,
@@ -94,7 +96,7 @@ def main():
     # 한 시퀀스(최대 pass 수)를 다 담을 수 있도록 넉넉히: 공칭 1 pass 완주 시간(BO recipe
     # 기준 raster 총 길이/feed, 대략 200~250s) + pass당 냉각시간을 max_passes 배 확보.
     nominal_pass_s = 260.0
-    env_cfg.episode_length_s = args.max_passes * (nominal_pass_s + args.cooldown_s) + 60.0
+    env_cfg.episode_length_s = args.max_passes * (nominal_pass_s * args.pass_time_factor + args.cooldown_s) + 60.0
 
     env = RobotPolishEnv(env_cfg, render_mode=None)
     env._repolish_mode = True

@@ -85,7 +85,7 @@ INPUT_COLUMNS = [
     "position_x_m", "position_y_m", "position_z_m",
     "normal_x", "normal_y", "normal_z",
     "init_roughness_um", "init_scratch_um", "init_ra_um", "init_rz_um",
-    "init_clearcoat_um", "init_gu_proxy", "surface_seed",
+    "init_clearcoat_um", "init_gu_proxy", "surface_seed", "init_scratch_count",
 ]
 
 OUTPUT_COLUMNS = [
@@ -165,14 +165,15 @@ def load_bc_policy(ckpt_path: str, obs_dim: int | None = None, act_dim: int = 2)
 
 
 def synthesize_cell_patch(seed: int, ra_target_um: float, scratch_max_um: float,
-                          clearcoat_mean_um: float):
+                          clearcoat_mean_um: float, n_scratches: int | None = None):
     """검사 시스템 입력(Ra·최대 scratch·clearcoat 평균)에 맞춘 대표 patch 합성.
 
     입력의 roughness(Rq)/Rz/GU 는 참고값 — 합성 표면에서 twin 이 재계산한 값을 출력한다
     (전/후가 같은 정의로 비교되도록). scratch 는 절차 생성 후 최대 깊이를 목표값으로 스케일.
     """
     st = make_flat_patch(PATCH_SIZE, RESOLUTION_M, seed=seed,
-                         target_ra_um=ra_target_um, with_scratches=scratch_max_um > 0.0)
+                         target_ra_um=ra_target_um, with_scratches=scratch_max_um > 0.0,
+                         n_scratches=n_scratches)
     if scratch_max_um > 0.0 and st.initial_scratch_depth_um.max() > 1e-9:
         k = scratch_max_um / float(st.initial_scratch_depth_um.max())
         # micro = base − scratch 이므로, scratch 를 k 배로 바꾸면 micro 에 (1−k)·scratch 를 더한다
@@ -268,7 +269,9 @@ def run_cell_episode(row: dict, recipe: Recipe, policy, cal, max_repolish: int =
     tilt_deg = math.degrees(math.acos(np.clip(n[2], -1.0, 1.0)))
     is_side = tilt_deg > 45.0            # PLAN 7-1 정의 — 문/펜더 수직면은 side 접촉 상수
 
-    st = synthesize_cell_patch(seed, ra0, scr0, cc0)
+    n_scr = row.get("init_scratch_count")
+    st = synthesize_cell_patch(seed, ra0, scr0, cc0,
+                               n_scratches=int(n_scr) if n_scr not in (None, "",) else None)
     model = LiteraturePolishingModel(cal)
     gloss = LiteratureGlossProxyModel()
 

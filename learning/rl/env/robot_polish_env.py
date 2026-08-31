@@ -251,6 +251,7 @@ class RobotPolishEnv(PolishEnv):
         self._pad_gap_m = torch.full((self.num_envs,), 0.20, device=self.device)
         self._pad_in_patch = torch.zeros(self.num_envs, dtype=torch.bool, device=self.device)
         self._force_sensor_n = torch.zeros(self.num_envs, device=self.device)   # raw normal force
+        self._force_raw_peak_n = torch.zeros(self.num_envs, device=self.device)  # 순간힘 피크 (감시)
         self._force_sensor_filt_n = torch.zeros(self.num_envs, device=self.device)
         self._force_model_n = torch.zeros(self.num_envs, device=self.device)
         self._force_used_n = torch.zeros(self.num_envs, device=self.device)
@@ -354,6 +355,10 @@ class RobotPolishEnv(PolishEnv):
             raw = torch.zeros(self.num_envs, device=self.device)
         self._sensor_fault = fault
         self._force_sensor_n = raw
+        # raw 순간힘 14N 감시 (9.25 교정) — 평균화가 짧은 스파이크를 은폐하지 않게
+        # 물리스텝 단위로 즉시 위반 기록. 판정·학습 공통의 안전 의미론.
+        self._force_raw_peak_n = torch.maximum(self._force_raw_peak_n, raw)
+        self._force_hard_violated |= raw > self.cfg.force_hard_limit_n
         alpha = float(self.cfg.sensor_filter_alpha)
         self._force_sensor_filt_n = alpha * raw + (1.0 - alpha) * self._force_sensor_filt_n
         # 진단: 패드↔작업면 pair 분리힘. net 과 큰 차이가 나면 다른 물체와의 허위 접촉.
@@ -623,6 +628,7 @@ class RobotPolishEnv(PolishEnv):
         else:
             ids = torch.as_tensor(env_ids, device=self.device).long()
         super()._reset_idx(ids)
+        self._force_raw_peak_n[ids] = 0.0
         self._reset_robot_pose(ids)
         # 새 표면(다음 재폴리싱 시퀀스) 시작 — 작업 카운터 초기화. _repolish_log 는
         # 외부 루프가 아직 못 읽었을 수 있으니 지우지 않는다.
@@ -722,10 +728,21 @@ class RobotPolishEnv(PolishEnv):
             return True
         prev = self._repolish_prev_metrics.get(i)
         if prev is not None:
+            # 회귀 가드 (9.25 교정): 품질 지표가 나빠졌으면 계속 닦을 근거가 없다.
+            regressed = (
+                (prev["gu"] - fin["gu"]) > cfg.repolish_gu_improve_eps
+                or (fin["ra"] - prev["ra"]) > cfg.repolish_ra_improve_eps_um
+                or (fin["rz"] - prev["rz"]) > cfg.repolish_rz_improve_eps_um
+            )
+            if regressed:
+                _finish("fail_quality_regression")
+                return True
+            # 계속 조건: GU/Ra/Rz 중 하나가 실질 개선 — scratch 단독 개선은 제외
+            # (scratch 만 줄고 Ra 악화 중인 표면을 계속 갈아내는 병리 차단).
             improved = (
                 (fin["gu"] - prev["gu"]) > cfg.repolish_gu_improve_eps
-                or (prev["scratch"] - fin["scratch"]) > cfg.repolish_scratch_improve_eps_um
                 or (prev["ra"] - fin["ra"]) > cfg.repolish_ra_improve_eps_um
+                or (prev["rz"] - fin["rz"]) > cfg.repolish_rz_improve_eps_um
             )
             if not improved:
                 _finish("fail_no_improvement")
@@ -749,7 +766,8 @@ class RobotPolishEnv(PolishEnv):
             return True
 
         base_force = self.recipe.target_contact_force_n
-        hard_cap = cfg.repolish_force_cap_ratio * cfg.force_hard_limit_n
+        hard_cap = (cfg.repolish_force_cap_ratio * cfg.force_hard_limit_n
+                    / (1.0 + cfg.force_ratio_limit))   # 정책 +30% 얹어도 14N 미만 (9.25 교정)
         gu_gap = max(0.0, cfg.repolish_target_gu - fin["gu"]) / max(cfg.repolish_target_gu, 1e-6)
         ra_gap = max(0.0, fin["ra"] - cfg.t_ra_pass_max_um) / max(cfg.t_ra_pass_max_um, 1e-6)
         rz_gap = max(0.0, fin["rz"] - cfg.t_rz_pass_max_um) / max(cfg.t_rz_pass_max_um, 1e-6)

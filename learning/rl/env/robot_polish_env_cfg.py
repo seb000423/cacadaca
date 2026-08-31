@@ -105,6 +105,7 @@ class RobotPolishEnvCfg(PolishEnvCfg):
     repolish_scratch_improve_eps_um: float = 0.02  # 이 미만 개선이면 "더 이상 개선 없음"
     repolish_gu_improve_eps: float = 0.3
     repolish_ra_improve_eps_um: float = 0.005
+    repolish_rz_improve_eps_um: float = 0.02
     repolish_max_passes: int = 6
     repolish_cooldown_s: float = 20.0            # pass 사이 무가공 냉각 시간
     # 접촉 불안정 하드컷 — 과부하(force_hard_limit_n)와 별개로, 순간 힘이 크게
@@ -122,3 +123,5 @@ class RobotPolishEnvCfg(PolishEnvCfg):
     # (거의 다 왔는데 조기 실패 처리하는 것을 막는 완충값).
     repolish_infeasible_shortfall: float = 0.05
     repolish_force_cap_ratio: float = 0.85        # force_hard_limit_n 대비 상한 (과부하 재트립 방지)
+    # ⚠ 상한은 정책 잔차 최대치까지 감안해야 한다 (9.25 실측: 기본힘 11.9N + 잔차 +30%
+    #   = 15.5N 명령 → 14N 위반 2건). 적용식: cap = ratio×hard/(1+force_ratio_limit) ≈ 9.15N

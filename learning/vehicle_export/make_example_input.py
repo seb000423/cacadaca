@@ -34,10 +34,42 @@ REGIONS = [
 GRID = 5
 
 
+# ── 시나리오 프로파일 ──────────────────────────────────────────────────────
+# correction(기본): 보정 대상 손상차 — 기존 분포 유지.
+# new_car: 신차 PDI — 구조 자체가 다름 (2026-08-30 설계 논의):
+#   · 스월 = 전면 분산 미세결함 → "스크래치 띠"가 아니라 거칠기장 Ra 로 표현.
+#     Ra ≈ 0.12 는 L-DERIVED: 스월+개별자국 **합산** 초기 GU proxy 가 67.7 (Coatings
+#     2021 의 B-세그먼트 신차 평균 20° 광택 앵커)이 되도록 역산한 값.
+#     (1차 보정 0.235 는 무스크래치 기준이라 자국 감점이 겹쳐 초기 GU 58.5 로 과손상 —
+#      합산 기준으로 재보정. 우리 proxy 의 q_scratch 가중상 자국이 결손 대부분을 차지)
+#   · 개별 자국 = 띠 1~3개, 얕음(0.1~0.6μm) — 취급/운송 경미 자국 (PT-DESIGN)
+#   · 깊은 꼬리 = 15% 셀에 0.6~1.5μm — 운송/상하차 손상 (PT-DESIGN, 실측 분포 부재)
+NEW_CAR_SWIRL_RA = 0.12       # L-DERIVED (신차 합산 GU 67.7 앵커 역산, 2차 보정)
+
+def draw_initial_state(rng, profile: str):
+    """프로파일별 (ra, scratch_max, n_scratches, clearcoat)."""
+    cc0 = float(rng.uniform(40.0, 50.0))
+    if profile == "new_car":
+        ra0 = float(np.clip(rng.normal(NEW_CAR_SWIRL_RA, 0.012), 0.09, 0.16))
+        if rng.uniform() < 0.15:                      # 운송 손상 꼬리
+            scr0, n_scr = float(rng.uniform(0.5, 1.5)), int(rng.integers(2, 5))
+        else:                                          # 세차 마링 (L-DERIVED ≤0.5μm, NIST 2018)
+            scr0, n_scr = float(rng.uniform(0.05, 0.5)), int(rng.integers(1, 4))
+    else:  # correction (기존)
+        ra0 = float(np.clip(rng.normal(0.08, 0.012), 0.05, 0.12))
+        scr0, n_scr = float(rng.uniform(0.4, 1.9)), None
+    return ra0, scr0, n_scr, cc0
+
+
 def main():
+    import argparse
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--profile", default="correction", choices=["correction", "new_car"])
+    args = ap.parse_args()
     rng = np.random.default_rng(2026)
     gloss = LiteratureGlossProxyModel()
-    out = os.path.join(_HERE, "vehicle_150_cells.csv")
+    suffix = "" if args.profile == "correction" else "_newcar"
+    out = os.path.join(_HERE, f"vehicle_150_cells{suffix}.csv")
     rows = []
     for rid, rname, origin, u, v, normal in REGIONS:
         origin, u, v = map(np.asarray, (origin, u, v))
@@ -47,10 +79,8 @@ def main():
                 cell = i * GRID + j
                 pos = origin + u * ((i + 0.5) / GRID) + v * ((j + 0.5) / GRID)
                 seed = 7000 + 101 * int(rid[1]) + cell     # export 기본 seed 와 동일 규칙
-                ra0 = float(np.clip(rng.normal(0.08, 0.012), 0.05, 0.12))
-                scr0 = float(rng.uniform(0.4, 1.9))
-                cc0 = float(rng.uniform(40.0, 50.0))
-                st = synthesize_cell_patch(seed, ra0, scr0, cc0)
+                ra0, scr0, n_scr, cc0 = draw_initial_state(rng, args.profile)
+                st = synthesize_cell_patch(seed, ra0, scr0, cc0, n_scratches=n_scr)
                 rows.append({
                     "region_id": rid, "region_name": rname, "cell_id": cell,
                     "position_x_m": f"{pos[0]:.3f}", "position_y_m": f"{pos[1]:.3f}",
@@ -63,6 +93,7 @@ def main():
                     "init_clearcoat_um": f"{cc0:.2f}",
                     "init_gu_proxy": f"{gloss.evaluate(st)['summary']['gu_mean']:.2f}",
                     "surface_seed": seed,
+                    "init_scratch_count": "" if n_scr is None else n_scr,
                 })
         print(f"  {rid} {rname}: {GRID*GRID} cells")
     with open(out, "w", newline="", encoding="utf-8") as f:
