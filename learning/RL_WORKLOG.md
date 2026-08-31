@@ -761,3 +761,8 @@ demo_arm 확장 (`--surface_kinds flat,cylinder,sphere,freeform` env 순환 배�
 패드 접촉면 오프셋은 런타임 bbox 실측으로 교체(z −0.0904, 기존 상수와 일치 — 오프셋은
 원인 아님). ② 자국이 '휙' 사라짐 → 최대 잔여 기준을 **평균 잔여 비율**로, 밝기 8단계
 (은색→도장색) 페이드 + 폭 축소, 마커 갱신 0.2s 마다로 점진적 소멸.
+
+**v3 (7x7 줌아웃 단일 영상)**: `--cam_anim zoomout` — env 0(평면)·1(원통) 근접 시점(정면 +x,
+D=3.4m)에서 시작해 `--cam_zoom_start/end`(시뮬 s) 구간 동안 smoothstep 으로 전체 격자
+시점(far, dist 1.25)까지 이동. 49대 4종 혼합, 2패스, 1080p, record_dt 0.75 (15fps 인코딩
+= 11배속). 산출 `~/Desktop/polish_demo_7x7_zoomout.mp4`.
