@@ -41,6 +41,19 @@ parser.add_argument("--record", type=str, default=None,
                          "종료 후 ffmpeg 로 mp4 병합). --enable_cameras 와 함께 사용")
 parser.add_argument("--max_seconds", type=float, default=None,
                     help="시뮬 시간 상한 (기본: 에피소드 완주까지)")
+parser.add_argument("--surface_kinds", type=str, default="flat",
+                    help="env 별 순환 배정할 작업면 (쉼표): flat,cylinder,sphere,freeform")
+parser.add_argument("--curvature_radius", type=float, default=0.3)
+parser.add_argument("--env_spacing", type=float, default=2.5)
+parser.add_argument("--record_dt", type=float, default=0.1,
+                    help="녹화 프레임 간 시뮬 시간(s). 0.1=실시간 10fps, 0.6=6배속 타임랩스")
+parser.add_argument("--record_res", type=str, default="1280x720")
+parser.add_argument("--cam_preset", type=str, default="auto", choices=["auto", "close", "far"])
+parser.add_argument("--cam_focal", type=float, default=18.0)
+parser.add_argument("--cam_dist_scale", type=float, default=1.0)
+parser.add_argument("--no_status", action="store_true", help="환경 상태등(구슬) 표시 안 함")
+parser.add_argument("--n_passes", type=int, default=1,
+                    help="래스터 패스 수 (판정 레시피=2; 기본 1은 짧은 GUI 시연용)")
 AppLauncher.add_app_launcher_args(parser)
 args = parser.parse_args()
 if args.checkpoint is None:
@@ -66,7 +79,8 @@ from learning.polytwin import config as PC  # noqa: E402
 from learning.polytwin.gloss_proxy import LiteratureGlossProxyModel  # noqa: E402
 from learning.polytwin.path_executor import load_calibrated_config, raster_waypoints  # noqa: E402
 from learning.polytwin.polishing_model import ContactState, LiteraturePolishingModel  # noqa: E402
-from learning.polytwin.surface_state import make_flat_patch  # noqa: E402
+from learning.polytwin.surface_state import (  # noqa: E402
+    curve_height_normal, make_curved_patch, make_flat_patch)
 from learning.rl.env.contact import VirtualPadContact  # noqa: E402
 from learning.rl.env.polish_env import _load_recipe  # noqa: E402
 from learning.rl.env.polish_env_cfg import PolishEnvCfg  # noqa: E402
@@ -107,7 +121,7 @@ def main():
     # 16대 GUI에서도 초기화가 빠른 Fabric을 사용한다. 뷰포트는 아래에서 별도 USD 카메라에
     # 직접 연결하므로 기본 Perspective 카메라 동기화 문제에 의존하지 않는다.
     sim = SimulationContext(sim_utils.SimulationCfg(dt=1 / 60, use_fabric=True))
-    scene_cfg = DemoSceneCfg(num_envs=E, env_spacing=2.5)
+    scene_cfg = DemoSceneCfg(num_envs=E, env_spacing=args.env_spacing)
     scene = InteractiveScene(scene_cfg)
     sim_utils.GroundPlaneCfg().func("/World/ground", sim_utils.GroundPlaneCfg())
     light = sim_utils.DomeLightCfg(intensity=5000.0, color=(0.9, 0.93, 1.0))
@@ -137,11 +151,18 @@ def main():
         size=(PATCH_SIZE[0] + 0.04, PATCH_SIZE[1] + 0.04, 0.05),
         visual_material=sim_utils.PreviewSurfaceCfg(
             diffuse_color=(0.05, 0.12, 0.35), roughness=0.15, metallic=0.6))
+    KINDS = [k.strip() for k in args.surface_kinds.split(",") if k.strip()]
+    kind_of = [KINDS[i % len(KINDS)] for i in range(E)]
     for i in range(E):
         pedestal.func(f"/World/envs/env_{i}/Pedestal", pedestal,
                       translation=(PATCH_CENTER[0], PATCH_CENTER[1], (WORK_TOP - 0.05) / 2))
-        plate.func(f"/World/envs/env_{i}/Workpiece", plate,
-                   translation=(PATCH_CENTER[0], PATCH_CENTER[1], WORK_TOP - 0.025))
+        if kind_of[i] == "flat":
+            plate.func(f"/World/envs/env_{i}/Workpiece", plate,
+                       translation=(PATCH_CENTER[0], PATCH_CENTER[1], WORK_TOP - 0.025))
+        else:
+            _spawn_curved_plate(f"/World/envs/env_{i}/Workpiece", kind_of[i],
+                                args.curvature_radius, WORK_TOP)
+    print(f"[demo] 작업면 배정: " + ", ".join(f"{k}x{kind_of.count(k)}" for k in KINDS))
 
     if args.record:
         _setup_record(scene.env_origins)   # 반드시 sim.reset() 이전 (이후 생성 시 빈 프레임)
@@ -187,7 +208,7 @@ def main():
     env_cfg = PolishEnvCfg()
     recipe = _load_recipe(env_cfg.recipe_json_path)
     from dataclasses import replace as _dc_replace
-    recipe = _dc_replace(recipe, n_passes=1)     # 시연용 — 판정 숫자는 eval_ppo(2pass) 기준
+    recipe = _dc_replace(recipe, n_passes=args.n_passes)   # 판정 레시피는 2패스
     contact = VirtualPadContact(E, sim.device, dt=1 / 60, lag_offset=0.0)
     is_side = torch.zeros(E, dtype=torch.bool, device=sim.device)
     contact.reset(is_side=is_side)
@@ -197,8 +218,14 @@ def main():
     # 기본 비교는 같은 표면, 병렬 정책 재생은 서로 다른 seed의 손상·clearcoat 맵을 사용한다.
     seeds = ([args.surface_seed] * E if args.same_surface or not args.all_policy
              else [args.surface_seed + 97 * i for i in range(E)])
-    surfaces = [make_flat_patch(PATCH_SIZE, 0.002, seed=seed, with_scratches=True)
-                for seed in seeds]
+    surfaces = []
+    for i, seed in enumerate(seeds):
+        if kind_of[i] == "flat":
+            surfaces.append(make_flat_patch(PATCH_SIZE, 0.002, seed=seed, with_scratches=True))
+        else:
+            surfaces.append(make_curved_patch(
+                kind=kind_of[i], curvature_radius_m=args.curvature_radius,
+                patch_size_m=PATCH_SIZE, resolution_m=0.002, seed=seed, with_scratches=True))
     scratch_specs = [_extract_scratch_segments(surface) for surface in surfaces]
 
     spacing = recipe.step_over_spacing_ratio * PC.PAD_DIAMETER_M
@@ -241,13 +268,11 @@ def main():
     # ── 정책 로드 (legacy 11-D / thermal 14-D 자동 판별) ──
     policy = _load_policy(args.checkpoint, sim.device)
 
-    # ── 스크래치 마커: 잔여 비율별 색 프로토타입 5단계 ──
-    colors = [(0.9, 0.1, 0.1), (0.95, 0.5, 0.1), (0.95, 0.85, 0.1),
-              (0.55, 0.9, 0.2), (0.1, 0.85, 0.3)]
-    proto = {f"lv{k}": sim_utils.CuboidCfg(
-        size=(1.0, 0.004, 0.002),
-        visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=c, emissive_color=tuple(0.3*x for x in c)))
-        for k, c in enumerate(colors)}
+    # ── 스크래치 마커: 실제 자국처럼 — 은색 선이 잔여 깊이 비율만큼 가늘어지다 사라진다 ──
+    proto = {"line": sim_utils.CuboidCfg(
+        size=(1.0, 0.005, 0.002),
+        visual_material=sim_utils.PreviewSurfaceCfg(
+            diffuse_color=(0.82, 0.85, 0.90), emissive_color=(0.25, 0.26, 0.28), roughness=0.4))}
     markers = VisualizationMarkers(VisualizationMarkersCfg(prim_path="/Visuals/scratches", markers=proto))
 
     # 환경 상태등: 파랑=실행 중, 초록=전체 통과, 노랑=재폴리싱 필요, 빨강=안전 실패.
@@ -261,9 +286,10 @@ def main():
         "unsafe": sim_utils.SphereCfg(radius=0.08, visual_material=sim_utils.PreviewSurfaceCfg(
             diffuse_color=(1.0, 0.08, 0.05), emissive_color=(0.7, 0.02, 0.01))),
     }
-    status_markers = VisualizationMarkers(VisualizationMarkersCfg(
+    status_markers = None if args.no_status else VisualizationMarkers(VisualizationMarkersCfg(
         prim_path="/Visuals/env_status", markers=status_proto))
-    _update_status_markers(status_markers, scene.env_origins, [0] * E)
+    if not args.no_status:
+        _update_status_markers(status_markers, scene.env_origins, [0] * E)
 
     arc = torch.zeros(E, device=sim.device)
     prev_force = torch.zeros(E, device=sim.device)
@@ -305,8 +331,9 @@ def main():
             force_cmd = recipe.target_contact_force_n * (1 + a[:, 0] * env_cfg.force_ratio_limit)
             feed_cmd = (recipe.feed_speed_mm_s / 1000.0) * (1 + a[:, 1] * env_cfg.feed_ratio_limit)
             control_n += 1
-            if control_n % 40 == 0:   # 2초마다 스크래치 마커 갱신
-                _update_markers(markers, scratch_specs, surfaces, scene.env_origins)
+            if control_n % 20 == 0:   # 1초마다 스크래치 마커 갱신
+                _update_markers(markers, scratch_specs, surfaces, scene.env_origins,
+                                kind_of, args.curvature_radius)
 
         # ── 60Hz physics substep ──
         f = contact.step(force_cmd, is_side)
@@ -315,22 +342,27 @@ def main():
         sim_t += 1 / 60
 
         # 패드 목표: 경로점 + z = clearance (팔이 어드미턴스 압입을 그대로 재현)
+        # 접촉점 = 경로점의 곡면 높이 + 어드미턴스 clearance, 자세 = 국소 법선 정렬
+        # (평면이면 h=0, 법선=+z → 항등 자세: 기존 동작과 동일)
         targets = torch.zeros(E, 7, device=sim.device)
+        quat_cmd_np = np.zeros((E, 4)); quat_cmd_np[:, 0] = 1.0
         for i in range(E):
             uv = pos_at_arc(float(arc[i]))
-            targets[i, 0] = uv[0] - PATCH_SIZE[0] / 2 + PATCH_CENTER[0]
-            targets[i, 1] = uv[1] - PATCH_SIZE[1] / 2 + PATCH_CENTER[1]
-            targets[i, 2] = WORK_TOP + float(contact.actual_clearance[i].clamp(min=-0.003))
-        # 접촉면 목표 → tool0 원점 목표 (자세가 고정이므로 상수 오프셋)
-        targets[:, 0] -= float(tool_offset_world[0])
-        targets[:, 1] -= float(tool_offset_world[1])
-        targets[:, 2] -= float(tool_offset_world[2])
-        # world → base frame, 자세는 홈 기준 고정
+            h, nrm = curve_height_normal(kind_of[i], args.curvature_radius, PATCH_SIZE,
+                                         uv[0], uv[1])
+            q = _quat_from_z_to(nrm)
+            off = _quat_to_R_np(q) @ PAD_OFFSET_LINK6      # 자세에 맞게 회전된 도구 오프셋
+            targets[i, 0] = uv[0] - PATCH_SIZE[0] / 2 + PATCH_CENTER[0] - off[0]
+            targets[i, 1] = uv[1] - PATCH_SIZE[1] / 2 + PATCH_CENTER[1] - off[1]
+            targets[i, 2] = (WORK_TOP + h + float(contact.actual_clearance[i].clamp(min=-0.003))
+                             - off[2])
+            quat_cmd_np[i] = q
+        quat_cmd = torch.tensor(quat_cmd_np, dtype=torch.float32, device=sim.device)
+        # world → base frame
         root = robot.data.root_pose_w.torch
-        ident = torch.zeros(E, 4, device=sim.device); ident[:, 0] = 1.0
-        tgt_b_pos, _ = subtract_frame_transforms(
-            root[:, 0:3], root[:, 3:7], targets[:, 0:3] + scene.env_origins, ident)
-        ik.set_command(torch.cat([tgt_b_pos, quat_ref_b], dim=1))
+        tgt_b_pos, tgt_b_quat = subtract_frame_transforms(
+            root[:, 0:3], root[:, 3:7], targets[:, 0:3] + scene.env_origins, quat_cmd)
+        ik.set_command(torch.cat([tgt_b_pos, tgt_b_quat], dim=1))
 
         jac = robot.data.body_link_jacobian_w.torch[:, ee_jacobi_idx, :, :][:, :, arm_joints]
         ee_w = robot.data.body_pose_w.torch[:, ee_body]
@@ -347,7 +379,8 @@ def main():
         robot.set_joint_position_target_index(
             target=torch.zeros((E, 1), device=sim.device), joint_ids=[pad_joint])
         scene.write_data_to_sim()
-        _rendered = (sub % args.render_every == 0)
+        _stride = max(1, int(round(args.record_dt * 60))) if args.record else args.render_every
+        _rendered = (sub % _stride == 0)
         sim.step(render=_rendered)
         scene.update(1 / 60)
         if _rendered and "_REC" in globals():
@@ -419,7 +452,8 @@ def main():
         print(f"  env{i:02d} {name:8s} [{status:6s}] | GU {gu:5.2f} | "
               f"Ra {ra:.3f} | Rz {rz:.3f} μm | scratch {scratch:.3f} μm | "
               f"CC {cc:.2f} μm | peak {peak_c:.2f}°C | damage {damage:.4f}")
-    _update_status_markers(status_markers, scene.env_origins, final_status)
+    if not args.no_status:
+        _update_status_markers(status_markers, scene.env_origins, final_status)
     print("[demo] 상태등: 초록=전체 통과, 노랑=재폴리싱 필요, 빨강=과열/clearcoat 안전 실패")
     if sim.has_gui:
         print("[demo] GUI 유지 중 — 창을 닫으면 종료됩니다.")
@@ -459,12 +493,22 @@ def _overview_eye_target(env_origins):
     span_y = float(np.ptp(p[:, 1])) if len(p) > 1 else 0.0
     span = max(span_x, span_y, 2.5)
     target = (float(center[0] + PATCH_CENTER[0]), float(center[1]), 0.42)
-    if len(p) <= 2:
-        eye = (target[0] + 0.75, target[1] - 0.85, 1.15)
+    preset = args.cam_preset
+    if preset == "auto":
+        preset = "close" if len(p) <= 2 else "far"
+    s = args.cam_dist_scale
+    if preset == "close":
+        # 로봇 정면(+x) 쪽 3/4 각도에서 작업면들을 내려다본다 — 팔·패드·자국이 모두 보이는 구도
+        spread = max(span_x, span_y)
+        D = s * (0.9 * spread + 1.3)
+        if span_x > span_y:      # 환경이 x 로 퍼져 있으면 옆(-y)에서
+            eye = (target[0] + 0.35 * D, target[1] - 0.94 * D, 0.42 + 0.6 * D)
+        else:
+            eye = (target[0] + 0.82 * D, target[1] - 0.57 * D, 0.42 + 0.6 * D)
     else:
-        eye = (target[0] + 0.92 * span,
-               target[1] - 1.08 * span,
-               max(6.5, 0.95 * span))
+        eye = (target[0] + 0.92 * span * s,
+               target[1] - 1.08 * span * s,
+               max(6.5 * s, 0.95 * span * s))
     return eye, target
 
 
@@ -506,10 +550,12 @@ def _setup_record(env_origins):
     from isaaclab.sensors import Camera, CameraCfg
     _os2.makedirs(args.record, exist_ok=True)
     eye, tgt = _overview_eye_target(env_origins)
+    _w, _h = [int(v) for v in args.record_res.lower().split("x")]
     cam = Camera(CameraCfg(
-        prim_path="/World/RecCam", update_period=0.0, height=720, width=1280,
+        prim_path="/World/RecCam", update_period=0.0, height=_h, width=_w,
         data_types=["rgb"],
-        spawn=sim_utils.PinholeCameraCfg(focal_length=18.0, clipping_range=(0.05, 1000.0)),
+        spawn=sim_utils.PinholeCameraCfg(focal_length=args.cam_focal,
+                                         clipping_range=(0.05, 1000.0)),
         offset=CameraCfg.OffsetCfg(pos=tuple(float(v) for v in eye), rot=(1.0, 0.0, 0.0, 0.0),
                                    convention="world")))
     globals()["_REC"] = {"cam": cam, "eye": eye, "tgt": tgt, "dir": args.record,
@@ -578,25 +624,106 @@ def _extract_scratch_segments(surface):
     return segs
 
 
-def _update_markers(markers, segs_by_env, surfaces, env_origins, WORK_TOP=0.40):
-    pos, quat, scale, idx = [], [], [], []
+def _update_markers(markers, segs_by_env, surfaces, env_origins, kind_of, R, WORK_TOP=0.40):
+    """자국 = 은색 선. 잔여 깊이 비율(rem/init)만큼 폭·높이가 줄어 6% 미만이면 사라진다.
+    곡면에서는 선 중심의 곡면 높이에 놓고 국소 법선에 맞춰 기울인다."""
+    pos, quat, scale = [], [], []
     for e, surf in enumerate(surfaces):
         remaining_map = np.clip(surf.initial_scratch_depth_um - surf.cumulative_removal_um, 0, None)
+        ox, oy = float(env_origins[e][0]), float(env_origins[e][1])
         for s in segs_by_env[e]:
             init = surf.initial_scratch_depth_um[s["cells"]].max()
             rem = remaining_map[s["cells"]].max()
-            ratio = float(rem / max(init, 1e-6))
-            level = min(4, int((1.0 - ratio) * 5))         # 0=빨강(온전) → 4=초록(제거)
-            ox, oy = float(env_origins[e][0]), float(env_origins[e][1])
-            pos.append([s["center"][0] - PATCH_SIZE[0] / 2 + PATCH_CENTER[0] + ox,
-                        s["center"][1] - PATCH_SIZE[1] / 2 + PATCH_CENTER[1] + oy, WORK_TOP + 0.003])
+            ratio = float(np.clip(rem / max(init, 1e-6), 0.0, 1.0))
+            cu, cv = float(s["center"][0]), float(s["center"][1])
+            h, nrm = curve_height_normal(kind_of[e], R, PATCH_SIZE, cu, cv)
+            pos.append([cu - PATCH_SIZE[0] / 2 + PATCH_CENTER[0] + ox,
+                        cv - PATCH_SIZE[1] / 2 + PATCH_CENTER[1] + oy, WORK_TOP + h + 0.0015])
             half = s["angle"] / 2.0
-            quat.append([np.cos(half), 0.0, 0.0, np.sin(half)])
-            scale.append([s["length"], 1.0, 1.0])
-            idx.append(level)
+            q_yaw = np.array([np.cos(half), 0.0, 0.0, np.sin(half)])
+            quat.append(_quat_mul(_quat_from_z_to(nrm), q_yaw).tolist())
+            if ratio < 0.06 or rem < 0.15:
+                scale.append([1e-4, 1e-4, 1e-4])   # 제거/가시 한계(0.15μm) 미만 → 보이지 않게
+            else:
+                scale.append([s["length"], ratio, ratio])
     import torch as th
     markers.visualize(translations=th.tensor(pos), orientations=th.tensor(quat),
-                      scales=th.tensor(scale), marker_indices=th.tensor(idx))
+                      scales=th.tensor(scale),
+                      marker_indices=th.zeros(len(pos), dtype=th.int32))
+
+
+def _quat_from_z_to(n):
+    """세계 +z 를 단위벡터 n 으로 보내는 최소 회전 (w,x,y,z)."""
+    n = np.asarray(n, float); n = n / np.linalg.norm(n)
+    axis = np.cross(np.array([0.0, 0.0, 1.0]), n)
+    s = np.linalg.norm(axis); c = float(n[2])
+    if s < 1e-9:
+        return np.array([1.0, 0.0, 0.0, 0.0]) if c > 0 else np.array([0.0, 1.0, 0.0, 0.0])
+    ang = np.arctan2(s, c); axis /= s
+    return np.array([np.cos(ang / 2), *(axis * np.sin(ang / 2))])
+
+
+def _quat_mul(a, b):
+    w1, x1, y1, z1 = a; w2, x2, y2, z2 = b
+    return np.array([w1*w2 - x1*x2 - y1*y2 - z1*z2, w1*x2 + x1*w2 + y1*z2 - z1*y2,
+                     w1*y2 - x1*z2 + y1*w2 + z1*x2, w1*z2 + x1*y2 - y1*x2 + z1*w2])
+
+
+def _quat_to_R_np(q):
+    w, x, y, z = [float(v) for v in q]
+    return np.array([
+        [1 - 2 * (y * y + z * z), 2 * (x * y - w * z), 2 * (x * z + w * y)],
+        [2 * (x * y + w * z), 1 - 2 * (x * x + z * z), 2 * (y * z - w * x)],
+        [2 * (x * z - w * y), 2 * (y * z + w * x), 1 - 2 * (x * x + y * y)]])
+
+
+def _spawn_curved_plate(prim_path, kind, R, work_top, seed=0, thickness=0.05):
+    """곡면 도장 패널 시각 메쉬 (61x61 상면 + 측면 스커트). 상면 중심 z = work_top."""
+    import omni.usd
+    from pxr import Gf, UsdGeom
+    stage = omni.usd.get_context().get_stage()
+    n, m = 61, 0.02
+    us = np.linspace(-m, PATCH_SIZE[0] + m, n); vs = np.linspace(-m, PATCH_SIZE[1] + m, n)
+    x0 = PATCH_CENTER[0] - PATCH_SIZE[0] / 2; y0 = PATCH_CENTER[1] - PATCH_SIZE[1] / 2
+    pts, nrm = [], []
+    for u in us:
+        for v in vs:
+            h, nv = curve_height_normal(kind, R, PATCH_SIZE, float(u), float(v), freeform_seed=seed)
+            pts.append(Gf.Vec3f(x0 + float(u), y0 + float(v), work_top + float(h)))
+            nrm.append(Gf.Vec3f(*[float(c) for c in nv]))
+    idx = []
+    for i in range(n - 1):
+        for j in range(n - 1):
+            a = i * n + j; b = a + 1; c = a + n; d = c + 1
+            idx += [a, d, b, a, c, d]
+    top = UsdGeom.Mesh.Define(stage, prim_path)
+    top.CreatePointsAttr(pts)
+    top.CreateFaceVertexCountsAttr([3] * (len(idx) // 3))
+    top.CreateFaceVertexIndicesAttr(idx)
+    top.CreateNormalsAttr(nrm); top.SetNormalsInterpolation("vertex")
+    top.CreateSubdivisionSchemeAttr("none")
+    top.CreateDoubleSidedAttr(True)
+    # 스커트: 테두리 → 바닥(work_top - thickness)
+    border = ([i * n + 0 for i in range(n)] + [(n - 1) * n + j for j in range(1, n)]
+              + [i * n + (n - 1) for i in range(n - 2, -1, -1)] + [0 * n + j for j in range(n - 2, 0, -1)])
+    spts, sidx = [], []
+    for k, bi in enumerate(border):
+        p = pts[bi]
+        spts += [Gf.Vec3f(p[0], p[1], p[2]), Gf.Vec3f(p[0], p[1], work_top - thickness)]
+    nb = len(border)
+    for k in range(nb):
+        a = 2 * k; b = a + 1; c = 2 * ((k + 1) % nb); d = c + 1
+        sidx += [a, c, d, a, d, b]
+    skirt = UsdGeom.Mesh.Define(stage, prim_path + "_skirt")
+    skirt.CreatePointsAttr(spts)
+    skirt.CreateFaceVertexCountsAttr([3] * (len(sidx) // 3))
+    skirt.CreateFaceVertexIndicesAttr(sidx)
+    skirt.CreateSubdivisionSchemeAttr("none")
+    skirt.CreateDoubleSidedAttr(True)
+    mat = sim_utils.PreviewSurfaceCfg(diffuse_color=(0.05, 0.12, 0.35), roughness=0.15, metallic=0.6)
+    mat.func(prim_path + "_mat", mat)
+    sim_utils.bind_visual_material(prim_path, prim_path + "_mat")
+    sim_utils.bind_visual_material(prim_path + "_skirt", prim_path + "_mat")
 
 
 def _update_status_markers(markers, env_origins, status_indices):

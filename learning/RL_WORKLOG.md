@@ -739,3 +739,18 @@ q_clearcoat 의 성격(광택 물리 아님 — 실측 광택계는 표면 기�
   --record learning/rl/logs/demo_rec/frames --max_seconds 60 --render_every 6
 ffmpeg -framerate 10 -i frames/frame_%05d.png -c:v libx264 -pix_fmt yuv420p out.mp4
 ```
+
+### 9.31 시연 영상 2종 — 곡면 혼합 + 실제 자국 소멸 시각화 (2026-08-31)
+
+demo_arm 확장 (`--surface_kinds flat,cylinder,sphere,freeform` env 순환 배정,
+`--curvature_radius`, `--env_spacing`, `--record_dt`(타임랩스), `--record_res`,
+`--cam_preset close|far`, `--cam_focal`, `--cam_dist_scale`, `--no_status`):
+- **곡면 작업물**: 61×61 상면 메쉬(해석 법선 제공) + 측면 스커트, 도장 재질 바인딩.
+  패드 IK 목표 = 경로점의 곡면 높이 + clearance, **자세 = 국소 법선 정렬**(도구 오프셋도
+  자세에 맞게 회전). 평면이면 항등 → 기존 동작과 동일. 추종오차 0.3cm/0.3° 유지.
+- **자국 시각화**: 색 5단계 마커 폐기 → 은색 선 1종이 잔여 깊이 비율(rem/init)만큼 폭·높이가
+  줄어 6% 미만이면 소멸(실제 지워지는 인상). 곡면에서는 중심 높이·법선에 맞춰 부착.
+- 1패스 시연에서는 자국이 가늘어질 뿐 남았음(잔여 0.7~1.2μm) → `--n_passes 2`(판정 레시피
+  동일)로 재녹화. 소멸 기준 = 잔여 <0.15μm(마링 가시 한계 ~수백 nm, NIST 2018) 또는 <6%.
+- 산출: `~/Desktop/polish_demo_close_2robots.mp4` (평면+원통, 1080p, 2패스, 9배속),
+  `~/Desktop/polish_demo_far_50robots.mp4` (50대, 4종 곡면 혼합, 1080p, 2패스, 13배속).
