@@ -105,7 +105,7 @@ OUTPUT_COLUMNS = [
     "gu_proxy_before", "gu_proxy_after",
     # 판정
     "gu_target_pass", "ra_target_pass", "rz_target_pass", "warranty_removal_ok",
-    "scratch_improved", "clearcoat_safe", "overall_pass", "failure_reason",
+    "scratch_improved", "clearcoat_safe", "overall_pass", "failure_reason", "disposition",
     # 추적·한계 명시
     "tilt_deg", "is_side", "evaluation_mode", "surface_seed",
     "process_time_s", "episode_completed", "repolish_episodes",
@@ -442,6 +442,17 @@ def run_cell_episode(row: dict, recipe: Recipe, policy, cal, max_repolish: int =
         and completed and not hard_violated
     if budget_exhausted and not overall:
         reasons.append("clearcoat_budget_exhausted")
+    # 처분(disposition) — 실패를 현장 행동으로 번역 (2026-08-31, WORKLOG 9.29):
+    #   spot_repaint_review = 예산 소진/바닥 근접 — 폴리싱으로 더 못 가는 셀.
+    #     (q_clearcoat 는 광학이 아니라 "보전 위험" 항 — 얇게 출고된 셀은 표면이 좋아도
+    #      여기 걸린다. 산업 관행상 스팟 재도장 검토가 올바른 처분)
+    #   rework_candidate = 예산 여유가 남은 근소 미달 — 재작업/공정조정 후보.
+    if overall:
+        disposition = "pass"
+    elif budget_exhausted or (after["cc_remaining_min"] - CLEARCOAT_SAFE_MIN_UM) < 1.0             or hard_violated:
+        disposition = "spot_repaint_review"
+    else:
+        disposition = "rework_candidate"
 
     return {
         "region_id": row["region_id"], "region_name": row.get("region_name", ""),
@@ -471,6 +482,7 @@ def run_cell_episode(row: dict, recipe: Recipe, policy, cal, max_repolish: int =
         "scratch_improved": scr_improved, "clearcoat_safe": cc_safe,
         "overall_pass": overall,
         "failure_reason": ";".join(reasons) if reasons else "",
+        "disposition": disposition,
         "tilt_deg": f"{tilt_deg:.1f}", "is_side": is_side,
         "evaluation_mode": EVALUATION_MODE, "surface_seed": seed,
         "process_time_s": f"{sim_t:.1f}", "episode_completed": completed,
