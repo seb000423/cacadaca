@@ -104,7 +104,7 @@ OUTPUT_COLUMNS = [
     "clearcoat_remaining_um", "clearcoat_remaining_min_um",
     "gu_proxy_before", "gu_proxy_after",
     # 판정
-    "gu_target_pass", "ra_target_pass", "rz_target_pass",
+    "gu_target_pass", "ra_target_pass", "rz_target_pass", "warranty_removal_ok",
     "scratch_improved", "clearcoat_safe", "overall_pass", "failure_reason",
     # 추적·한계 명시
     "tilt_deg", "is_side", "evaluation_mode", "surface_seed",
@@ -426,6 +426,9 @@ def run_cell_episode(row: dict, recipe: Recipe, policy, cal, max_repolish: int =
     rz_pass = after["rz"] <= RZ_PASS_MAX_UM
     scr_improved = (before["scratch"] < 0.05) or (after["scratch"] < before["scratch"])
     cc_safe = after["cc_remaining_min"] >= CLEARCOAT_SAFE_MIN_UM
+    # OEM 보증 제거한도 (L-INDUSTRY, WORKLOG 9.27): Ford 0.3mil=7.5μm (최엄격 기준 채택).
+    # 판정 5종과 별개의 정보 플래그 — 통과셀의 보증 준수 여부를 명시 (기준 아님).
+    warranty_ok = (float(row["init_clearcoat_um"]) - after["cc_remaining_min"]) <= 7.5
     reasons = []
     if not gu_pass: reasons.append(f"gu_below_target({after['gu']:.1f}<{GU_PASS_MIN:.0f})")
     if not ra_pass: reasons.append(f"ra_above_target({after['ra']:.3f}>{RA_PASS_MAX_UM:.2f})")
@@ -464,6 +467,7 @@ def run_cell_episode(row: dict, recipe: Recipe, policy, cal, max_repolish: int =
         "clearcoat_remaining_min_um": f"{after['cc_remaining_min']:.2f}",
         "gu_proxy_before": f"{before['gu']:.2f}", "gu_proxy_after": f"{after['gu']:.2f}",
         "gu_target_pass": gu_pass, "ra_target_pass": ra_pass, "rz_target_pass": rz_pass,
+        "warranty_removal_ok": warranty_ok,
         "scratch_improved": scr_improved, "clearcoat_safe": cc_safe,
         "overall_pass": overall,
         "failure_reason": ";".join(reasons) if reasons else "",
