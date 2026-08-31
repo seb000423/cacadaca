@@ -787,3 +787,29 @@ D=3.4m)에서 시작해 `--cam_zoom_start/end`(시뮬 s) 구간 동안 smoothste
 body +Z, y 부호 동일 — sander_pad body 실측). 매핑 (−x, y, −z) 로 하우징 바닥 측정값을 body
 오프셋으로 변환하니 패드가 하우징 바로 아래·표면 위에 정렬. usdrt world pose 속성은 이 빌드에서
 비어 있어 사용 불가.
+
+### 9.32 원코드(v5) 이식 — Isaac Sim 6 API + 잔차 정책 브리지 + 차 전체 셀 (2026-08-31)
+
+**목표**: 학습한 잔차 정책을 원래 차 폴리싱 시뮬(`scripts/polishing_v5.py`, 로봇 3대: 천장 C·
+좌우 SL/SR, 스캔 점군 위 래스터 경로, 가상 스프링 접촉)에 이식하고 차 전체를 셀 단위로 판정.
+
+**① API 이식**: `omni.isaac.*` 15곳 → `isaacsim.core.api/prims/utils`, `isaacsim.sensors.physics`
+(deprecated ext 라 `enable_extension` 명시), ROS 브릿지 `isaacsim.ros2.bridge` 예외 처리,
+헤드리스 종료 `MAX_SIM_STEPS` / `POLISH_EXIT_WHEN_DONE=1`. 11개 파일 컴파일 통과.
+
+**② `rl_bridge.py`** (신규): `CellRegistry` — 스캔 점군(11만 점) → 법선 PCA → 윗면/좌·우
+측면/전·후면 분류 → 12 cm 셀 **483개**(top 205, side 99+99, front 48, rear 32), 셀마다 판정
+파이프라인과 동일한 트윈 패치(신차 프로파일) 합성, `lookup(xyz)→(cell,(u,v))`.
+`ResidualPolicyBridge` — 챔피언 14ch 로드, 로봇별 20 Hz 관측 조립(측정 힘·힘오차·이송·진행률·
+셀 footprint 7통계·이전 행동) → [Δforce, Δfeed], 같은 주기로 셀 품질 모델을 **달성 힘**으로
+스텝. `judge_cells` — 5종 판정 + warranty 플래그 + disposition(pass / rework_candidate /
+spot_repaint_review / not_reached) CSV.
+
+**③ agent.py 훅 3곳**: 목표 힘 결정 직후 `×(1+a0·0.30)`, 힘 필터 직후 브리지 substep 호출
+(패드 실측 접촉점 `actual_pad_pos`, `polish_contact_verified` 를 in_contact 로), 경로 전진
+`×(1+a1·0.50)`. 이송 m/s 환산 = 전진량(wp/step) × 웨이포인트 간격 × 60. `POLISH_RL=1` 일 때만
+활성(원코드 동작 기본 유지). runner: 셀 격자·브리지 생성, 3000 스텝마다·종료 시 판정 CSV.
+
+**CPU 단독 테스트**: 셀 격자 4초 생성, 윗면 셀 1개 가짜 궤적 2패스 → 정책 출력 정상(힘 ×1.30,
+이송 ×0.94), 판정 PASS. 접촉은 v5 가상 스프링(CPU) 그대로 = 해석식 트랙 정책과 같은 규약.
+실행 검증(Isaac): 녹화 종료 후 `MAX_SIM_STEPS=600 POLISH_RL=1 ... --headless`.
