@@ -89,6 +89,7 @@ ROBOT_USD = _os.path.join(_REPO_ROOT, "usd", "env", "Collected_m0609_with_polish
                           "m0609_with_polisher.usd")
 PATCH_SIZE = (0.20, 0.20)   # 시연용 확대 — 학습/판정은 0.12 (정책은 국소 관측이라 무관)
 PATCH_CENTER = (0.45, 0.0)          # 로봇 베이스 기준 앞쪽 45cm (M0609 도달반경 내)
+SCRATCH_LEVELS = 8                  # 자국 마커 밝기 단계 (은색→도장색 페이드)
 E = args.num_envs
 if E < 1:
     parser.error("--num_envs must be >= 1")
@@ -249,6 +250,14 @@ def main():
     #     패드 중심 XY = (0.0000, −0.0156),  접촉면 Z = −0.0902,  지름 ≈ 0.070 m
     #   → 접촉축은 link_6 로컬 −Z. 수평 패널이면 −Z 가 세계 −Z 를 향하면 되므로 자세는 항등.
     PAD_OFFSET_LINK6 = np.array([0.0, -0.0156, -0.0902])
+    # 2026-08-31: 녹화 프레임에서 패드가 작업면 위 3~4cm 에 떠 있는 것이 확인됨 → 위 상수는
+    # 보이는 샌더 메쉬의 바닥이 아니었다. 런타임에 link_6 로컬 프레임에서 가시 메쉬 bbox 를
+    # 실측해 접촉면 오프셋(XY 중심, 최저 Z)을 덮어쓴다.
+    _meas = _measure_pad_offset("/World/envs/env_0/Robot")
+    if _meas is not None:
+        print(f"[demo] 패드 접촉면 오프셋 실측(link_6 프레임): {np.round(_meas, 4)}  "
+              f"(기존 상수 {PAD_OFFSET_LINK6})")
+        PAD_OFFSET_LINK6 = _meas
 
     def _quat_to_R(q):                      # q = (w, x, y, z)
         w, x, y, z = [float(v) for v in q]
@@ -269,10 +278,17 @@ def main():
     policy = _load_policy(args.checkpoint, sim.device)
 
     # ── 스크래치 마커: 실제 자국처럼 — 은색 선이 잔여 깊이 비율만큼 가늘어지다 사라진다 ──
-    proto = {"line": sim_utils.CuboidCfg(
-        size=(1.0, 0.005, 0.002),
-        visual_material=sim_utils.PreviewSurfaceCfg(
-            diffuse_color=(0.82, 0.85, 0.90), emissive_color=(0.25, 0.26, 0.28), roughness=0.4))}
+    #   밝기 8단계: 은색(온전) → 도장색(사라짐) 보간. 폭도 잔여 비율로 줄어든다.
+    _silver, _paint = np.array([0.82, 0.85, 0.90]), np.array([0.05, 0.12, 0.35])
+    proto = {}
+    for k in range(SCRATCH_LEVELS):
+        f = 1.0 - k / (SCRATCH_LEVELS - 1)              # 1=온전 … 0=거의 사라짐
+        c = _paint + (_silver - _paint) * f
+        proto[f"lv{k}"] = sim_utils.CuboidCfg(
+            size=(1.0, 0.005, 0.002),
+            visual_material=sim_utils.PreviewSurfaceCfg(
+                diffuse_color=tuple(float(v) for v in c),
+                emissive_color=tuple(float(v) for v in (0.3 * f * c)), roughness=0.4))
     markers = VisualizationMarkers(VisualizationMarkersCfg(prim_path="/Visuals/scratches", markers=proto))
 
     # 환경 상태등: 파랑=실행 중, 초록=전체 통과, 노랑=재폴리싱 필요, 빨강=안전 실패.
@@ -331,7 +347,7 @@ def main():
             force_cmd = recipe.target_contact_force_n * (1 + a[:, 0] * env_cfg.force_ratio_limit)
             feed_cmd = (recipe.feed_speed_mm_s / 1000.0) * (1 + a[:, 1] * env_cfg.feed_ratio_limit)
             control_n += 1
-            if control_n % 20 == 0:   # 1초마다 스크래치 마커 갱신
+            if control_n % 4 == 0:    # 0.2초마다 스크래치 마커 갱신 (페이드가 부드럽게)
                 _update_markers(markers, scratch_specs, surfaces, scene.env_origins,
                                 kind_of, args.curvature_radius)
 
@@ -354,7 +370,10 @@ def main():
             off = _quat_to_R_np(q) @ PAD_OFFSET_LINK6      # 자세에 맞게 회전된 도구 오프셋
             targets[i, 0] = uv[0] - PATCH_SIZE[0] / 2 + PATCH_CENTER[0] - off[0]
             targets[i, 1] = uv[1] - PATCH_SIZE[1] / 2 + PATCH_CENTER[1] - off[1]
-            targets[i, 2] = (WORK_TOP + h + float(contact.actual_clearance[i].clamp(min=-0.003))
+            # 접촉 모델의 actual_clearance 는 원 시뮬의 추종지연 규약상 +2~4cm 로 떠 있다
+            # (contact.py: mean(actual−cmd)=+0.019m) — 힘·품질은 그 모델이 계산하므로, 시각 목표는
+            # 표면 위로 뜨지 않게 0 이하로 묶는다 (살짝 눌림 −3mm 까지 허용).
+            targets[i, 2] = (WORK_TOP + h + float(contact.actual_clearance[i].clamp(-0.003, 0.0))
                              - off[2])
             quat_cmd_np[i] = q
         quat_cmd = torch.tensor(quat_cmd_np, dtype=torch.float32, device=sim.device)
@@ -421,6 +440,7 @@ def main():
                   f"각오차={np.degrees(2*np.arccos(min(_dot,1.0))):.1f}°", flush=True)
             print(f"[demo] 패드면 법선(세계) {np.round(_ny,3)}  ·down={float(-_ny[2]):.3f} "
                   f"(1.000 이면 면접촉)", flush=True)
+            print(f"[demo] actual_clearance mean={float(contact.actual_clearance.mean())*100:.2f}cm", flush=True)
             print(f"[demo] t={sim_t:.0f}s  진행 {min(arc.min().item()/path_len,1)*100:.0f}%  "
                   f"F={contact.filtered.max().item():.1f}N  "
                   f"추종오차={float((robot.data.body_pose_w.torch[:, ee_body, 0:3] - (targets[:, 0:3] + scene.env_origins)).norm(dim=1).max())*100:.1f}cm", flush=True)
@@ -627,14 +647,16 @@ def _extract_scratch_segments(surface):
 def _update_markers(markers, segs_by_env, surfaces, env_origins, kind_of, R, WORK_TOP=0.40):
     """자국 = 은색 선. 잔여 깊이 비율(rem/init)만큼 폭·높이가 줄어 6% 미만이면 사라진다.
     곡면에서는 선 중심의 곡면 높이에 놓고 국소 법선에 맞춰 기울인다."""
-    pos, quat, scale = [], [], []
+    pos, quat, scale, idx = [], [], [], []
     for e, surf in enumerate(surfaces):
         remaining_map = np.clip(surf.initial_scratch_depth_um - surf.cumulative_removal_um, 0, None)
         ox, oy = float(env_origins[e][0]), float(env_origins[e][1])
         for s in segs_by_env[e]:
-            init = surf.initial_scratch_depth_um[s["cells"]].max()
-            rem = remaining_map[s["cells"]].max()
-            ratio = float(np.clip(rem / max(init, 1e-6), 0.0, 1.0))
+            init_cells = surf.initial_scratch_depth_um[s["cells"]]
+            rem_cells = remaining_map[s["cells"]]
+            rem = float(rem_cells.max())
+            # 평균 잔여 비율: 패드가 선을 지나가는 동안 점진적으로 내려간다 (최대값 기준은 '휙' 사라짐)
+            ratio = float(np.clip(rem_cells.mean() / max(float(init_cells.mean()), 1e-6), 0.0, 1.0))
             cu, cv = float(s["center"][0]), float(s["center"][1])
             h, nrm = curve_height_normal(kind_of[e], R, PATCH_SIZE, cu, cv)
             pos.append([cu - PATCH_SIZE[0] / 2 + PATCH_CENTER[0] + ox,
@@ -642,14 +664,14 @@ def _update_markers(markers, segs_by_env, surfaces, env_origins, kind_of, R, WOR
             half = s["angle"] / 2.0
             q_yaw = np.array([np.cos(half), 0.0, 0.0, np.sin(half)])
             quat.append(_quat_mul(_quat_from_z_to(nrm), q_yaw).tolist())
-            if ratio < 0.06 or rem < 0.15:
-                scale.append([1e-4, 1e-4, 1e-4])   # 제거/가시 한계(0.15μm) 미만 → 보이지 않게
+            if ratio < 0.08 or rem < 0.15:
+                scale.append([1e-4, 1e-4, 1e-4]); idx.append(SCRATCH_LEVELS - 1)   # 가시 한계 미만 → 소멸
             else:
-                scale.append([s["length"], ratio, ratio])
+                scale.append([s["length"], 0.35 + 0.65 * ratio, 0.35 + 0.65 * ratio])
+                idx.append(min(SCRATCH_LEVELS - 1, int((1.0 - ratio) * SCRATCH_LEVELS)))
     import torch as th
     markers.visualize(translations=th.tensor(pos), orientations=th.tensor(quat),
-                      scales=th.tensor(scale),
-                      marker_indices=th.zeros(len(pos), dtype=th.int32))
+                      scales=th.tensor(scale), marker_indices=th.tensor(idx, dtype=th.int32))
 
 
 def _quat_from_z_to(n):
@@ -675,6 +697,30 @@ def _quat_to_R_np(q):
         [1 - 2 * (y * y + z * z), 2 * (x * y - w * z), 2 * (x * z + w * y)],
         [2 * (x * y + w * z), 1 - 2 * (x * x + z * z), 2 * (y * z - w * x)],
         [2 * (x * z - w * y), 2 * (y * z + w * x), 1 - 2 * (x * x + y * y)]])
+
+
+def _measure_pad_offset(robot_prim_path):
+    """link_6 로컬 프레임에서 가시(visible) 자손 메쉬의 bbox → (XY 중심, 최저 Z).
+    숨긴 복제 샌더는 visibility 로 제외된다. 실패 시 None."""
+    try:
+        import omni.usd
+        from pxr import Usd, UsdGeom
+        stage = omni.usd.get_context().get_stage()
+        root = stage.GetPrimAtPath(robot_prim_path)
+        link6 = None
+        for prim in Usd.PrimRange(root):
+            if prim.GetName() == "link_6":
+                link6 = prim; break
+        if link6 is None:
+            print("[demo] ⚠ link_6 프림을 찾지 못함"); return None
+        cache = UsdGeom.BBoxCache(Usd.TimeCode.Default(),
+                                  [UsdGeom.Tokens.default_, UsdGeom.Tokens.render],
+                                  useExtentsHint=False, ignoreVisibility=False)
+        box = cache.ComputeRelativeBound(link6, link6).ComputeAlignedRange()
+        lo, hi = box.GetMin(), box.GetMax()
+        return np.array([0.5 * (lo[0] + hi[0]), 0.5 * (lo[1] + hi[1]), float(lo[2])])
+    except Exception as exc:
+        print(f"[demo] ⚠ 패드 오프셋 실측 실패: {exc}"); return None
 
 
 def _spawn_curved_plate(prim_path, kind, R, work_top, seed=0, thickness=0.05):
