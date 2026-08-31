@@ -9,14 +9,17 @@ from isaacsim.core.prims import SingleArticulation
 from isaacsim.core.api.objects import VisualCuboid, VisualCylinder
 from isaacsim.core.utils.prims import create_prim
 from isaacsim.core.utils.types import ArticulationAction
-try:
-    from isaacsim.sensors.physics import ContactSensor
-except ImportError:
-    # Isaac Sim 6: the ContactSensor wrapper extension is not loaded by the default
-    # python experience (bootstrap enables it; this is the fallback for other entry points).
-    from isaacsim.core.utils.extensions import enable_extension
-    enable_extension("isaacsim.sensors.physics")
-    from isaacsim.sensors.physics import ContactSensor
+# ContactSensor 는 선택 사항: 이 프로젝트는 가상 접촉(USE_PHYSICAL_CONTACT_SENSOR=False)이 기본이고,
+# Isaac Sim 6 에서는 구 래퍼(isaacsim.sensors.physics, deprecated)가 기본 로드되지 않는다.
+ContactSensor = None
+for _mod in ("isaacsim.sensors.physics", "isaacsim.sensors.experimental.physics"):
+    try:
+        ContactSensor = getattr(__import__(_mod, fromlist=["ContactSensor"]), "ContactSensor")
+        break
+    except Exception:
+        continue
+if ContactSensor is None:
+    print("[agent] ContactSensor 사용 불가 — 가상 접촉만 사용 (물리 센서 비활성)")
 
 from .common import *
 from .common import _SCRIPT_DIR, _SRC_DIR, ROBOT_USD_PATH
@@ -210,6 +213,7 @@ class RailRobotAgent:
     def setup(self, world, stage, physics_material_path):
         import omni.usd
         from pxr import UsdShade, UsdPhysics, PhysxSchema
+        self._physx_schema = PhysxSchema
 
         # 로봇 USD 로드
         create_prim(
@@ -224,6 +228,20 @@ class RailRobotAgent:
             prim_path=self.robot_root_path,
             name=f"m0609_rail_{self.label}",
         )
+
+        if USE_PHYSICAL_CONTACT_SENSOR:   # ★ 실접촉: 관절 솔버 반복↑ (로봇 트랙 8/2)
+
+            try:
+
+                _art = PhysxSchema.PhysxArticulationAPI.Apply(stage.GetPrimAtPath(self.robot_root_path))
+
+                _art.CreateSolverPositionIterationCountAttr().Set(8)
+
+                _art.CreateSolverVelocityIterationCountAttr().Set(2)
+
+            except Exception as _exc:
+
+                print(f'[Rail {self.label}] ⚠ 솔버 반복 설정 실패: {_exc}')
 
         # 영상 기준 기존 흰 원형 패드가 커 보이고 실제 접촉패드와 겹쳐 보여 숨긴다.
         self._remove_sander_parts(stage, {"tn__114555_", "tn__104327_"})
@@ -282,12 +300,20 @@ class RailRobotAgent:
                 report_api = PhysxSchema.PhysxContactReportAPI.Apply(pad_prim)
                 report_api.CreateThresholdAttr().Set(0.0)
 
-        self.contact_sensor = ContactSensor(
-            prim_path=contact_report_path + "/contact_sensor",
-            name=f"pad_contact_sensor_rail_{self.label}",
-            frequency=60,
-            translation=np.array([0, 0, 0]),
-        )
+        self.contact_sensor = None
+        self._pad_reporter = None
+        if USE_PHYSICAL_CONTACT_SENSOR:
+            # Isaac Sim 6: omni.physx 접촉 리포트로 패드 순접촉력을 읽는다 (pad_contact.py)
+            from .pad_contact import PadContactReporter
+            self._pad_reporter = PadContactReporter.get(1.0 / 60.0)
+            self._pad_reporter.register(self.pad_path)
+        if False and USE_PHYSICAL_CONTACT_SENSOR and ContactSensor is not None:
+            self.contact_sensor = ContactSensor(
+                prim_path=contact_report_path + "/contact_sensor",
+                name=f"pad_contact_sensor_rail_{self.label}",
+                frequency=60,
+                translation=np.array([0, 0, 0]),
+            )
 
         if self.is_overhead:
             self._setup_gantry_visuals(world)
@@ -354,7 +380,8 @@ class RailRobotAgent:
 
     def initialize(self):
         self.articulation.initialize()
-        self.contact_sensor.initialize()
+        if self.contact_sensor is not None:
+            self.contact_sensor.initialize()
         self.controller = RMPFlowController(
             name=f"polishing_controller_{self.idx}",
             robot_articulation=self.articulation,
@@ -1727,7 +1754,12 @@ class RailRobotAgent:
             sensor_model_gate = max(CONTACT_FORCE_THRESHOLD, 0.35 * self._target_force)
 
             # 접촉력 읽기
-            contact_reading = self.contact_sensor.get_current_frame()
+            contact_reading = (self.contact_sensor.get_current_frame()
+                               if self.contact_sensor is not None else None)
+            if self._pad_reporter is not None:
+                # 접촉 리포트 순접촉력 → 표면 법선 성분 (로봇 트랙과 동일: F_n = |F·n|)
+                _fv = self._pad_reporter.force(self.pad_path)
+                contact_reading = {"force": np.array([abs(float(np.dot(_fv, normal))), 0.0, 0.0])}
             sensor_measured_force = (
                 np.linalg.norm(contact_reading["force"])
                 if contact_reading and "force" in contact_reading else 0.0
@@ -1772,6 +1804,10 @@ class RailRobotAgent:
                 self.z_offset <= (_contact_dist + z_sensor_margin) and
                 command_virtual_force >= sensor_model_gate
             )
+            if self._pad_reporter is not None and sensor_measured_force > 0.0:
+                # ★ 실접촉: PhysX 접촉 리포트에 힘이 있으면 물리적으로 닿은 것 — 스캔 점군 기준
+                #   기하 게이트(충돌체 껍데기와 점군의 간격)에 막혀 버리지 않게 유효로 인정
+                sensor_force_is_valid = True
             sensor_raw_force = (
                 min(sensor_measured_force, hard_force_limit)
                 if sensor_force_is_valid else 0.0

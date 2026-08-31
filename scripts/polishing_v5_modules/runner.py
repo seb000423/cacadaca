@@ -293,9 +293,23 @@ def main(simulation_app, obj_name="car"):
                 mc = UsdPhysics.MeshCollisionAPI.Apply(prim)
                 # "none"(정확 삼각망)은 compliant 접촉 미지원 → rigid 슬램(차체에선 1000N+ 검증됨).
                 # convexDecomposition이 그나마 슬램이 작아 유지. (옛 v1이 none에서 OK였던 건 작은 마우스라서)
-                mc.CreateApproximationAttr().Set("convexDecomposition")
+                # 실접촉 모드 기본 "none"(정확 삼각망): convexDecomposition 껍데기는 점군보다 바깥에
+                # 부풀어 패드가 표면 위 수 cm 에서 먼저 닿는다(힘 게이트 탈락·슬램). 환경변수로 재정의.
+                mc.CreateApproximationAttr().Set(os.environ.get(
+                    "POLISH_CAR_COLLIDER", "none" if USE_PHYSICAL_CONTACT_SENSOR else "convexDecomposition"))
+                _car_mat = "/World/NoBounceMaterial"
+                if USE_PHYSICAL_CONTACT_SENSOR:
+                    # ★ 실접촉: 차체 쪽에도 순응 접촉 재질 (양쪽 순응이어야 PhysX compliant contact 유효)
+                    _cm = UsdShade.Material.Define(stage, "/World/PhysicsMaterials/car_compliant")
+                    _um = UsdPhysics.MaterialAPI.Apply(_cm.GetPrim())
+                    _um.CreateStaticFrictionAttr().Set(0.0); _um.CreateDynamicFrictionAttr().Set(0.0)
+                    _um.CreateRestitutionAttr().Set(0.0)
+                    _pm = PhysxSchema.PhysxMaterialAPI.Apply(_cm.GetPrim())
+                    _pm.CreateCompliantContactStiffnessAttr().Set(float(PAD_COMPLIANT_STIFFNESS_N_M))
+                    _pm.CreateCompliantContactDampingAttr().Set(float(PAD_COMPLIANT_DAMPING_N_S_M))
+                    _car_mat = "/World/PhysicsMaterials/car_compliant"
                 UsdShade.MaterialBindingAPI.Apply(prim).Bind(
-                    UsdShade.Material(stage.GetPrimAtPath("/World/NoBounceMaterial")),
+                    UsdShade.Material(stage.GetPrimAtPath(_car_mat)),
                     UsdShade.Tokens.weakerThanDescendants, "physics",
                 )
 

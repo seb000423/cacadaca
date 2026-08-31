@@ -70,8 +70,18 @@ def adaptive_target_force(tilt_deg, mode="top"):
 CONTACT_FORCE_THRESHOLD = 0.5
 CONTACT_GEOMETRY_MAX_OFFSET = 0.08   # 실제 센서를 (멀지 않으면) 항상 사용 — 측면도 닿는 zoff에서 인식
 USE_VIRTUAL_SOFT_PAD = True   # 가상모델로 안정 제어/진행/마킹. 장애물OFF+convexDecomp라 평형 압입 시 디스크가 실제 표면 접촉→실센서 N도 읽힘(터미널 표시)
+# ★ PhysX 실접촉 모드 (2026-08-31, 원코드 이식): POLISH_PHYSICAL_CONTACT=1 이면 패드 충돌체 ON,
+#   힘 = omni.physx 접촉 리포트(pad_contact.py), 가상 스프링 OFF. 로봇 트랙(robot_polish_env)에서
+#   검증된 안정화 레시피(접촉 오프셋 2cm, 순응 재질 2000 N/m·200 N·s/m, 관입속도 상한 0.5 m/s) 적용.
+POLISH_PHYSICAL_CONTACT = os.environ.get("POLISH_PHYSICAL_CONTACT", "0") == "1"
+if POLISH_PHYSICAL_CONTACT:
+    USE_VIRTUAL_SOFT_PAD = False
+PAD_COMPLIANT_STIFFNESS_N_M = float(os.environ.get("POLISH_PAD_STIFFNESS", "2000.0"))
+PAD_COMPLIANT_DAMPING_N_S_M = float(os.environ.get("POLISH_PAD_DAMPING", "200.0"))
+PAD_MAX_DEPENETRATION_VEL = float(os.environ.get("POLISH_PAD_MAX_DEPEN_VEL", "0.5"))
+POLISH_APPROACH_VEL = float(os.environ.get("POLISH_APPROACH_VEL", "0.006"))   # 실접촉 어드미턴스 z 속도 상한 (m/s)
 PAD_ONLY_ROBOT_COLLISIONS = True  # 팔/샌더 본체 collision은 끄고 폴리싱 패드만 차체와 접촉시킴
-USE_PHYSICAL_CONTACT_SENSOR = False  # 디스크 충돌 off → 물리센서값은 잔여 아티팩트라 무시. 힘=실측위치 가상스프링만
+USE_PHYSICAL_CONTACT_SENSOR = POLISH_PHYSICAL_CONTACT  # 기본 False: 디스크 충돌 off, 힘=실측위치 가상스프링. POLISH_PHYSICAL_CONTACT=1 → 실접촉
 TOP_SENSOR_VALID_GAP = 0.025   # 좁힘: 패드가 실제로 닿았을 때만 센서 유효(안 닿으면 정직하게 스킵)
 SIDE_SENSOR_VALID_GAP = 0.035  # 좁힘: 측면도 실제 접촉 근처에서만 인정
 TOP_SENSOR_Z_MARGIN = -0.005
@@ -100,7 +110,7 @@ MAX_PRESS_VELOCITY = 0.025  # 0.008 -> 0.025 (표면 굴곡 추종성 확보)
 # accel = (F_err − D·v)/M. 댐핑 D로 진동/슬램 억제하며 목표 N에 수렴. 닿을 때까지 압입.
 ADMITTANCE_DAMPING = 50.0
 ADMITTANCE_MASS = 1.0
-ADMITTANCE_MAX_VEL = 0.02   # m/s — seek 압입 속도 상한 (v1과 동일)
+ADMITTANCE_MAX_VEL = (POLISH_APPROACH_VEL if POLISH_PHYSICAL_CONTACT else 0.02)   # m/s — seek 압입 속도 상한 (실접촉 모드는 슬램 완화용으로 낮춤)
 # 추종지연 피드포워드: RMPFlow가 명령보다 덜 내려오는 정상상태 지연을 추정해 명령을 더 깊게 보냄
 LAG_FEEDFORWARD_GAIN = 0.12   # 0.08→0.12: bad-contact/stuck 스킵이 터지기 전에 지연을 더 빨리 메움
 LAG_FEEDFORWARD_MAX = 0.08    # 0.05→0.08: RMPFlow 정상상태 지연(~2cm)+여유를 충분히 보정해 패드가 표면에 닿게
@@ -885,6 +895,26 @@ def create_polishing_contact_disk_for_robot(stage, robot_root_path, old_pad_path
         physx_col.CreateRestOffsetAttr().Set(0.0)
     except Exception:
         pass
+    if USE_PHYSICAL_CONTACT_SENSOR:
+        # 로봇 트랙 레시피: 관입속도 상한 + 순응(compliant) 접촉 재질 (마찰·반발 0)
+        try:
+            physx_rb = PhysxSchema.PhysxRigidBodyAPI.Apply(disk_prim)
+            physx_rb.CreateMaxDepenetrationVelocityAttr().Set(float(PAD_MAX_DEPENETRATION_VEL))
+            mat_path = "/World/PhysicsMaterials/pad_compliant"
+            mat = UsdShade.Material.Define(stage, mat_path)
+            mat_prim = mat.GetPrim()
+            um = UsdPhysics.MaterialAPI.Apply(mat_prim)
+            um.CreateStaticFrictionAttr().Set(0.0); um.CreateDynamicFrictionAttr().Set(0.0)
+            um.CreateRestitutionAttr().Set(0.0)
+            pm = PhysxSchema.PhysxMaterialAPI.Apply(mat_prim)
+            pm.CreateCompliantContactStiffnessAttr().Set(float(PAD_COMPLIANT_STIFFNESS_N_M))
+            pm.CreateCompliantContactDampingAttr().Set(float(PAD_COMPLIANT_DAMPING_N_S_M))
+            UsdShade.MaterialBindingAPI.Apply(disk_prim).Bind(
+                mat, UsdShade.Tokens.strongerThanDescendants, "physics")
+            print(f"[pad] PhysX 실접촉: 순응 재질 k={PAD_COMPLIANT_STIFFNESS_N_M:.0f} N/m, "
+                  f"c={PAD_COMPLIANT_DAMPING_N_S_M:.0f}, 관입속도 ≤{PAD_MAX_DEPENETRATION_VEL} m/s")
+        except Exception as exc:
+            print(f"[pad] ⚠ 순응 재질 설정 실패: {exc}")
     if physics_material:
         UsdShade.MaterialBindingAPI.Apply(disk_prim).Bind(
             physics_material, UsdShade.Tokens.weakerThanDescendants, "physics"
