@@ -779,3 +779,11 @@ D=3.4m)에서 시작해 `--cam_zoom_start/end`(시뮬 s) 구간 동안 smoothste
 동시 실행 주의: 오늘 환경에서 49대 녹화 중 2대 녹화를 추가로 띄우면 49대 쪽이 정지하거나
 새 프로세스가 PhysX view 생성에 실패 → 영상 녹화는 **순차 실행**. kill 은 `demo_arm.py`
 패턴으로(래퍼 `python.sh` 만 죽이면 Kit 파이썬이 좀비로 남아 같은 폴더에 프레임을 계속 씀).
+
+**v6 (패드 가시화 최종)**: 링크 자식 USD 프림은 Fabric 계층을 따라오지 않아 렌더에 안 나옴 →
+패드를 **VisualizationMarkers(CylinderCfg)** 로 그리고 매 렌더 스텝 link_6 물리 위치 + 명령 자세로
+이동. 발견: ① Isaac Lab 6.x 쿼터니언은 **xyzw** (quat_apply/마커/IK 명령) — 데모의 wxyz 헬퍼는
+경계에서 변환. ② 물리 body 프레임은 시각 prim 프레임과 **y축 180°** 관계(도구축 prim −Z ↔
+body +Z, y 부호 동일 — sander_pad body 실측). 매핑 (−x, y, −z) 로 하우징 바닥 측정값을 body
+오프셋으로 변환하니 패드가 하우징 바로 아래·표면 위에 정렬. usdrt world pose 속성은 이 빌드에서
+비어 있어 사용 불가.
