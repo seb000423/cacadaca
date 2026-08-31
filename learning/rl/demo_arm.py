@@ -52,6 +52,12 @@ parser.add_argument("--cam_preset", type=str, default="auto", choices=["auto", "
 parser.add_argument("--cam_focal", type=float, default=18.0)
 parser.add_argument("--cam_dist_scale", type=float, default=1.0)
 parser.add_argument("--no_status", action="store_true", help="환경 상태등(구슬) 표시 안 함")
+parser.add_argument("--cam_anim", type=str, default="none", choices=["none", "zoomout"],
+                    help="zoomout: 근접(두 env) → 전체 격자로 카메라 이동 (녹화 전용)")
+parser.add_argument("--cam_zoom_start", type=float, default=200.0, help="줌아웃 시작 시뮬 시각(s)")
+parser.add_argument("--cam_zoom_end", type=float, default=350.0, help="줌아웃 종료 시뮬 시각(s)")
+parser.add_argument("--cam_close_envs", type=str, default="0,1", help="근접 시점이 잡을 env 인덱스")
+parser.add_argument("--cam_close_dist", type=float, default=2.6, help="근접 시점 카메라 거리(m)")
 parser.add_argument("--n_passes", type=int, default=1,
                     help="래스터 패스 수 (판정 레시피=2; 기본 1은 짧은 GUI 시연용)")
 AppLauncher.add_app_launcher_args(parser)
@@ -405,18 +411,11 @@ def main():
         if _rendered and "_REC" in globals():
             _rec = globals()["_REC"]
             _cam = _rec["cam"]
-            if not _rec["posed"]:
-                # world 규약(전방 +X, 상단 +Z)의 look-at 회전을 직접 구성
-                from isaaclab.utils.math import quat_from_matrix as _qfm
-                _e = np.asarray(_rec["eye"], float); _t = np.asarray(_rec["tgt"], float)
-                _f = _t - _e; _f /= np.linalg.norm(_f)
-                _l = np.cross(np.array([0.0, 0.0, 1.0]), _f); _l /= np.linalg.norm(_l)
-                _u = np.cross(_f, _l)
-                _R = torch.tensor(np.stack([_f, _l, _u], axis=1), dtype=torch.float32,
-                                  device=sim.device)   # 열 = (x=fwd, y=left, z=up)
-                _cam.set_world_poses(
-                    torch.tensor([_e], dtype=torch.float32, device=sim.device),
-                    _qfm(_R).unsqueeze(0), convention="world")
+            if args.cam_anim == "zoomout":
+                _e, _t = _anim_eye_target(scene.env_origins, sim_t)
+                _set_rec_cam_pose(_cam, _e, _t, sim.device)
+            elif not _rec["posed"]:
+                _set_rec_cam_pose(_cam, _rec["eye"], _rec["tgt"], sim.device)
                 _rec["posed"] = True
                 print(f"[demo][rec] cam pos_w={_cam.data.pos_w[0].tolist()}", flush=True)
             _cam.update(1 / 60)
@@ -561,6 +560,47 @@ def _define_overview_camera(env_origins):
     return path, eye, target
 
 
+def _close_eye_target(env_origins, env_ids, D):
+    """지정 env 들의 작업면 중심을 로봇 정면(+x) 3/4 각도에서 내려다보는 근접 시점."""
+    p = env_origins.detach().cpu().numpy()[env_ids]
+    c = p.mean(axis=0)
+    target = np.array([c[0] + PATCH_CENTER[0], c[1], 0.42])
+    # 두 env 가 퍼진 축(d)에 수직인 로봇 정면(+x) 쪽에서 보되, d 의 반대쪽으로 살짝 비켜
+    # 팔이 작업면을 가리지 않게 한다 → 두 대가 나란히 보이는 구도.
+    if len(p) >= 2:
+        d = p[-1, :2] - p[0, :2]; d = d / max(np.linalg.norm(d), 1e-6)
+    else:
+        d = np.array([0.0, 1.0])
+    horiz = np.array([1.0, 0.0]) - 0.12 * d          # 거의 정면, 살짝만 비켜 깊이감
+    horiz = horiz / np.linalg.norm(horiz)
+    eye = target + np.array([horiz[0] * D * 0.88, horiz[1] * D * 0.88, 0.48 * D])
+    return eye, target
+
+
+def _anim_eye_target(env_origins, sim_t):
+    """zoomout: 근접 시점 유지 → [zoom_start, zoom_end] 동안 smoothstep 으로 전체 시점까지 이동."""
+    ids = [int(v) for v in args.cam_close_envs.split(",")]
+    eye_c, tgt_c = _close_eye_target(env_origins, ids, args.cam_close_dist)
+    _saved = args.cam_preset; args.cam_preset = "far"
+    eye_f, tgt_f = _overview_eye_target(env_origins); args.cam_preset = _saved
+    eye_f, tgt_f = np.asarray(eye_f, float), np.asarray(tgt_f, float)
+    u = (sim_t - args.cam_zoom_start) / max(args.cam_zoom_end - args.cam_zoom_start, 1e-6)
+    u = float(np.clip(u, 0.0, 1.0)); s = u * u * (3.0 - 2.0 * u)
+    return eye_c + (eye_f - eye_c) * s, tgt_c + (tgt_f - tgt_c) * s
+
+
+def _set_rec_cam_pose(cam, eye, tgt, device):
+    """world 규약(전방 +X, 상단 +Z)의 look-at 회전을 구성해 Camera 센서 자세 설정."""
+    from isaaclab.utils.math import quat_from_matrix as _qfm
+    e = np.asarray(eye, float); t = np.asarray(tgt, float)
+    f = t - e; f /= np.linalg.norm(f)
+    l = np.cross(np.array([0.0, 0.0, 1.0]), f); l /= np.linalg.norm(l)
+    u = np.cross(f, l)
+    R = torch.tensor(np.stack([f, l, u], axis=1), dtype=torch.float32, device=device)
+    cam.set_world_poses(torch.tensor([e], dtype=torch.float32, device=device),
+                        _qfm(R).unsqueeze(0), convention="world")
+
+
 def _setup_record(env_origins):
     """헤드리스 녹화 (2026-08-31): Isaac Lab Camera 센서(공식 헤드리스 캡처 경로)로 부감 rgb.
     반드시 sim.reset() 이전에 생성 (센서는 reset 시 초기화). 조준은 reset 후 첫 렌더 스텝에서
@@ -569,7 +609,8 @@ def _setup_record(env_origins):
     import os as _os2
     from isaaclab.sensors import Camera, CameraCfg
     _os2.makedirs(args.record, exist_ok=True)
-    eye, tgt = _overview_eye_target(env_origins)
+    eye, tgt = (_anim_eye_target(env_origins, 0.0) if args.cam_anim == "zoomout"
+                else _overview_eye_target(env_origins))
     _w, _h = [int(v) for v in args.record_res.lower().split("x")]
     cam = Camera(CameraCfg(
         prim_path="/World/RecCam", update_period=0.0, height=_h, width=_w,
