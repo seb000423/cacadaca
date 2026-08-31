@@ -30,7 +30,7 @@ import omni.replicator.core as rep
 
 from pxr import Usd, UsdGeom, Vt, Gf
 from isaacsim.core.api import World
-from omni.isaac.core.utils.prims import create_prim
+from isaacsim.core.utils.prims import create_prim
 
 DEPTH_DIR = os.path.join(OUTPUT_DIR, "depth")
 POINTS_DIR = os.path.join(OUTPUT_DIR, "points")

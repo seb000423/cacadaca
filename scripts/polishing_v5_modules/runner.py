@@ -5,9 +5,9 @@ import sys
 import numpy as np
 from scipy.spatial import KDTree
 
-from omni.isaac.core import World
-from omni.isaac.core.objects import VisualCuboid
-from omni.isaac.core.utils.prims import create_prim
+from isaacsim.core.api import World
+from isaacsim.core.api.objects import VisualCuboid
+from isaacsim.core.utils.prims import create_prim
 
 from . import common
 from .common import *
@@ -260,7 +260,7 @@ def main(simulation_app, obj_name="car"):
         ).Set(0.05)
 
     # 공유 물리 재질 (NoBounceMaterial)
-    from omni.isaac.core.materials import PhysicsMaterial
+    from isaacsim.core.api.materials import PhysicsMaterial
     PhysicsMaterial(
         prim_path="/World/NoBounceMaterial",
         dynamic_friction=POLISHING_DYNAMIC_FRICTION,
@@ -359,6 +359,29 @@ def main(simulation_app, obj_name="car"):
         print(f"[main] Robot {cfg['label']}: 베이스={[round(v,3) for v in agent.base_position]}, "
               f"YZ정지={[[round(y,2), round(z,2)] for y, z in agent.yz_stops]}")
 
+    # ★ 잔차 정책 + 차 전체 셀 격자 (POLISH_RL=1). 원코드 동작은 기본 그대로.
+    rl_registry = None
+    def _rl_flush(tag=""):
+        if rl_registry is not None:
+            from .rl_bridge import write_judgement
+            out = os.environ.get("POLISH_RL_OUT", os.path.join(_SRC_DIR, "learning", "rl", "logs",
+                                                                "v5_rl", "car_cells_judgement.csv"))
+            write_judgement(rl_registry, out)
+    if os.environ.get("POLISH_RL", "0") == "1":
+        from .rl_bridge import CellRegistry, ResidualPolicyBridge
+        _ckpt = os.environ.get("POLISH_RL_CKPT") or None
+        _rt = os.environ.get("POLISH_RL_RECIPE_TOP") or None
+        _rs = os.environ.get("POLISH_RL_RECIPE_SIDE") or None
+        rl_registry = CellRegistry(raw_points, profile=os.environ.get("POLISH_RL_PROFILE", "new_car"))
+        _kw = {}
+        if _ckpt: _kw["ckpt"] = _ckpt
+        if _rt: _kw["recipe_json"] = _rt
+        if _rs: _kw["recipe_json_side"] = _rs
+        rl_bridge = ResidualPolicyBridge(rl_registry, **_kw)
+        for agent in agents:
+            agent.rl_bridge = rl_bridge
+        print(f"[main] POLISH_RL=1 — 잔차 정책 브리지 연결 ({len(agents)}대), 셀 {len(rl_registry.cells)}개")
+
     # 물리 초기화
     world.reset()
     for agent in agents:
@@ -373,7 +396,7 @@ def main(simulation_app, obj_name="car"):
     _car_center = (np.mean(raw_points, axis=0) if len(raw_points) else np.array([0.0, 0.0, 1.0]))
     ros_pub = make_publisher(agents, polish_viz, _car_center)
 
-    from omni.isaac.core.prims import XFormPrim as _XFP
+    from isaacsim.core.prims import SingleXFormPrim as _XFP
     viz_flush_step = 0
     lift_step = 0
     scan_cloud_revealed = False
@@ -404,10 +427,21 @@ def main(simulation_app, obj_name="car"):
     # POLISH_RENDER_EVERY=1(기본)=매 스텝 렌더, 4~10이면 벽시계 속도 크게 상승.
     render_every = max(1, int(os.environ.get("POLISH_RENDER_EVERY", "1")))
     render_idx = 0
+    # 헤드리스 종료 조건 (기본값은 기존과 동일: 창을 닫을 때까지 무한 루프).
+    #   MAX_SIM_STEPS=N          → world.step() N회 후 루프 종료 (0=무제한)
+    #   POLISH_EXIT_WHEN_DONE=1  → 모든 로봇 완료 + 리프트 하강 완료 시 루프 종료
+    max_sim_steps = int(os.environ.get("MAX_SIM_STEPS", "0") or 0)
+    exit_when_done = os.environ.get("POLISH_EXIT_WHEN_DONE", "0") == "1"
+    sim_step = 0
     while simulation_app.is_running():
         do_render = (render_idx % render_every == 0)
         render_idx += 1
         world.step(render=do_render)
+        sim_step += 1
+        if max_sim_steps > 0 and sim_step >= max_sim_steps:
+            print(f"[main] MAX_SIM_STEPS={max_sim_steps} 도달 — 시뮬레이션 루프 종료", flush=True)
+            _rl_flush("max_steps")
+            break
         if not world.is_playing():
             continue
 
@@ -499,14 +533,22 @@ def main(simulation_app, obj_name="car"):
                 print("[main] 리프트 하강 완료 — 차량 원위치 복귀. (시뮬레이션 계속 실행 중)")
                 lowering = False  # 하강 루프 탈출, 이후 idle 루프
                 lowered_done = True  # 재진입 방지
+                if exit_when_done:
+                    print("[main] POLISH_EXIT_WHEN_DONE=1 — 폴리싱·하강 완료, 시뮬레이션 루프 종료", flush=True)
+                    _rl_flush("done")
+                    break
             continue
 
         # 하강까지 모두 끝났으면 idle(시뮬 창만 유지, 아무 동작 안 함)
         if lowered_done:
+            if exit_when_done:
+                break
             continue
 
         for agent in agents:
             agent.step(stage)
+        if rl_registry is not None and sim_step % 3000 == 0:      # ~50 s 마다 중간 판정 저장
+            _rl_flush("periodic")
 
         # 대시보드 실시간 데이터 퍼블리시(계측 전용)
         ros_pub.tick(polishing=True)

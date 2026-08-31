@@ -6,10 +6,17 @@ import numpy as np
 from scipy.spatial.transform import Rotation as R
 
 from isaacsim.core.prims import SingleArticulation
-from omni.isaac.core.objects import VisualCuboid, VisualCylinder
-from omni.isaac.core.utils.prims import create_prim
-from omni.isaac.core.utils.types import ArticulationAction
-from omni.isaac.sensor import ContactSensor
+from isaacsim.core.api.objects import VisualCuboid, VisualCylinder
+from isaacsim.core.utils.prims import create_prim
+from isaacsim.core.utils.types import ArticulationAction
+try:
+    from isaacsim.sensors.physics import ContactSensor
+except ImportError:
+    # Isaac Sim 6: the ContactSensor wrapper extension is not loaded by the default
+    # python experience (bootstrap enables it; this is the fallback for other entry points).
+    from isaacsim.core.utils.extensions import enable_extension
+    enable_extension("isaacsim.sensors.physics")
+    from isaacsim.sensors.physics import ContactSensor
 
 from .common import *
 from .common import _SCRIPT_DIR, _SRC_DIR, ROBOT_USD_PATH
@@ -166,6 +173,12 @@ class RailRobotAgent:
         self._glass_skip_count = 0       # 유리/구멍 스킵 누적
         self._side_debug_done = False    # 측면 디스크 접촉축 1회 측정 플래그
         self._repolish_pass = False      # 재폴리싱 패스 여부(이미 칠한 점 건너뜀)
+        # 잔차 정책 브리지 (rl_bridge.ResidualPolicyBridge, runner 가 주입; None 이면 원코드 동작)
+        self.rl_bridge = None
+        self._rl_force_scale = 1.0
+        self._rl_feed_scale = 1.0
+        self._last_step_advance_wp = 0.0
+        self._wp_spacing_cache = (None, 0.0)
         self._completed_segs: set = set()  # 이미 완료(RETRACT까지 진행)한 구간 인덱스
         self._polish_pass = 0            # 독립 재폴리싱 패스 카운터 (0=초기, ≥1=재폴리싱)
         self._max_passes = 2             # 최대 독립 재폴리싱 횟수
@@ -226,7 +239,7 @@ class RailRobotAgent:
         ]
         old_pad_path = pad_candidates[0]
         try:
-            from omni.isaac.core.utils.prims import get_prim_at_path
+            from isaacsim.core.utils.prims import get_prim_at_path
             for c in pad_candidates:
                 if get_prim_at_path(c):
                     old_pad_path = c
@@ -579,7 +592,7 @@ class RailRobotAgent:
     def _pad_contact_world_pos(self, stage):
         local_contact = np.array([0.0, -0.5 * float(POLISHING_DISK_HEIGHT), 0.0])
         try:
-            from omni.isaac.core.utils.xforms import get_world_pose
+            from isaacsim.core.utils.xforms import get_world_pose
             pad_world_pos, pad_world_quat = get_world_pose(self.pad_path)
             pad_world_rot = R.from_quat([
                 pad_world_quat[1],
@@ -618,7 +631,7 @@ class RailRobotAgent:
                 ], dtype=float))
 
         try:
-            from omni.isaac.core.utils.xforms import get_world_pose
+            from isaacsim.core.utils.xforms import get_world_pose
             pad_world_pos, pad_world_quat = get_world_pose(self.pad_path)
             pad_world_rot = R.from_quat([
                 pad_world_quat[1],
@@ -1173,7 +1186,7 @@ class RailRobotAgent:
     def _update_tele_lift(self, stage, new_y, new_z):
         """고정단(측면=바닥/천장=빔)은 그 높이에 고정(Y만 레일 추종),
         2단 튜브를 고정단↔로봇 베이스 거리에 맞춰 신축."""
-        from omni.isaac.core.prims import XFormPrim
+        from isaacsim.core.prims import SingleXFormPrim as XFormPrim
         anchor_z = self._tele_lift_anchor_z()
         XFormPrim(prim_path=self.tele_lift_path).set_world_pose(
             position=np.array([self.rail_x, new_y, anchor_z]))
@@ -1186,7 +1199,7 @@ class RailRobotAgent:
         self._set_tube_lift(stage, TELE_LIFT_STAGE2_PRIM, ext)
 
     def _update_column_visuals(self, stage, new_y, new_z):
-        from omni.isaac.core.prims import XFormPrim
+        from isaacsim.core.prims import SingleXFormPrim as XFormPrim
         import numpy as np
         
         # 로봇 베이스 위치 업데이트 (공통)
@@ -1305,7 +1318,7 @@ class RailRobotAgent:
 
     def _update_gantry_visuals(self, new_y, new_z):
         """캐리지 Y이동 + 수직 Z슬라이더 신축 (매 스텝)."""
-        from omni.isaac.core.prims import XFormPrim
+        from isaacsim.core.prims import SingleXFormPrim as XFormPrim
         L = self.label
         beam_z = GANTRY_BEAM_Z
         XFormPrim(prim_path=f"/World/GantryCarriage_{L}").set_world_pose(
@@ -1357,6 +1370,23 @@ class RailRobotAgent:
         dz = target_z - self.base_position[2]
         self.base_position[2] += np.clip(dz, -zstep, zstep)
         self._update_column_visuals(stage, self.base_position[1], self.base_position[2])
+
+    def _waypoint_spacing(self) -> float:
+        """현재 구간 경로의 평균 웨이포인트 간격(m) — 이송 속도 환산용 (구간별 캐시)."""
+        key = id(self.path)
+        if self._wp_spacing_cache[0] == key:
+            return self._wp_spacing_cache[1]
+        sp = 0.025
+        try:
+            if len(self.path) >= 2:
+                d = np.linalg.norm(np.diff(np.asarray(self.path)[:, :3], axis=0), axis=1)
+                d = d[d > 1e-6]
+                if len(d):
+                    sp = float(np.median(d))
+        except Exception:
+            pass
+        self._wp_spacing_cache = (key, sp)
+        return sp
 
     def step(self, stage):
         """1 physics step 실행. 완료 시 self.done = True."""
@@ -1659,6 +1689,8 @@ class RailRobotAgent:
                 normal_tilt_deg,
                 mode="side" if self.is_side else "top",
             )
+            # ★ 잔차 정책: 목표 힘 × (1 + a0·0.30) — 직전 20 Hz 제어 스텝의 출력 (rl_bridge)
+            self._target_force *= self._rl_force_scale
 
             # 측면은 디스크가 더 일찍(zoff↑) 물리적으로 닿음 → 가상 접촉거리를 그에 맞춰
             # (안 맞추면 가상이 접촉을 못 보고 계속 밀어 N↑→원위치)
@@ -1802,6 +1834,15 @@ class RailRobotAgent:
                 FORCE_FILTER_ALPHA * raw_force +
                 (1.0 - FORCE_FILTER_ALPHA) * self.filtered_contact_force
             )
+            # ★ 잔차 정책 브리지: 측정 힘·패드 접촉점·이송·진행률을 넘겨 20 Hz 로
+            #   [Δforce, Δfeed] 를 받고, 같은 주기로 현재 셀의 품질 모델을 스텝한다.
+            if self.rl_bridge is not None:
+                _feed_mps = self._last_step_advance_wp * self._waypoint_spacing() * 60.0
+                _progress = self.current_path_idx_float / max(len(self.path) - 1, 1)
+                self._rl_force_scale, self._rl_feed_scale = self.rl_bridge.substep(
+                    self.label, float(self.filtered_contact_force), np.asarray(actual_pad_pos, float),
+                    float(_feed_mps), float(_progress), bool(normal_tilt_deg > 45.0),
+                    bool(polish_contact_verified))
 
             arm_clearance, arm_guard_link, arm_guard_margin, arm_skip_clearance = self._arm_surface_clearance(stage)
             arm_guard_active = (
@@ -2111,10 +2152,12 @@ class RailRobotAgent:
                     step_advance = (
                         PATH_ADVANCE_PER_CONTACT_STEP_SIDE if self.is_side
                         else PATH_ADVANCE_PER_CONTACT_STEP_TOP
-                    )
+                    ) * self._rl_feed_scale          # ★ 잔차 정책: 이송 × (1 + a1·0.50)
                     self.current_path_idx_float += step_advance
+                    self._last_step_advance_wp = step_advance
                 else:
                     self.current_path_idx_float += PATH_CREEP_ADVANCE_PER_STEP
+                    self._last_step_advance_wp = PATH_CREEP_ADVANCE_PER_STEP
 
             self.current_target_idx = int(self.current_path_idx_float)
 
