@@ -14,20 +14,20 @@
   },
   "all": {
     "n_cells": 150,
-    "n_pass": 146,
+    "n_pass": 147,
     "gu_after": {
-      "mean": 72.744,
+      "mean": 72.852,
       "min": 65.92,
       "max": 74.76
     },
     "scratch_after_um": {
-      "mean": 0.184,
+      "mean": 0.151,
       "min": 0.018,
-      "max": 1.024
+      "max": 0.64
     },
-    "scratch_reduction_pct": 58.0,
+    "scratch_reduction_pct": 62.0,
     "clearcoat_remaining_min_um": {
-      "mean": 41.752,
+      "mean": 41.759,
       "min": 35.3,
       "max": 47.95
     }
@@ -36,38 +36,38 @@
     "n_cells": 50,
     "n_pass": 48,
     "gu_after": {
-      "mean": 72.522,
+      "mean": 72.598,
       "min": 65.92,
       "max": 74.76
     },
     "scratch_after_um": {
-      "mean": 0.149,
+      "mean": 0.123,
       "min": 0.026,
-      "max": 0.74
+      "max": 0.411
     },
-    "scratch_reduction_pct": 62.3,
+    "scratch_reduction_pct": 66.3,
     "clearcoat_remaining_min_um": {
-      "mean": 41.329,
+      "mean": 41.33,
       "min": 35.3,
       "max": 45.73
     }
   },
   "side_facing_cells (도어/펜더 등, tilt>45°)": {
     "n_cells": 100,
-    "n_pass": 98,
+    "n_pass": 99,
     "gu_after": {
-      "mean": 72.855,
-      "min": 68.5,
+      "mean": 72.98,
+      "min": 68.53,
       "max": 74.72
     },
     "scratch_after_um": {
-      "mean": 0.201,
+      "mean": 0.165,
       "min": 0.018,
-      "max": 1.024
+      "max": 0.64
     },
-    "scratch_reduction_pct": 56.2,
+    "scratch_reduction_pct": 60.1,
     "clearcoat_remaining_min_um": {
-      "mean": 41.964,
+      "mean": 41.973,
       "min": 35.53,
       "max": 47.95
     }
@@ -77,16 +77,16 @@
       "n_cells": 25,
       "n_pass": 23,
       "gu_after": {
-        "mean": 72.208,
+        "mean": 72.248,
         "min": 65.92,
         "max": 74.29
       },
       "scratch_after_um": {
-        "mean": 0.13,
+        "mean": 0.116,
         "min": 0.032,
-        "max": 0.563
+        "max": 0.323
       },
-      "scratch_reduction_pct": 64.9,
+      "scratch_reduction_pct": 67.2,
       "clearcoat_remaining_min_um": {
         "mean": 40.989,
         "min": 35.3,
@@ -97,38 +97,38 @@
       "n_cells": 25,
       "n_pass": 25,
       "gu_after": {
-        "mean": 72.837,
-        "min": 70.76,
+        "mean": 72.949,
+        "min": 71.09,
         "max": 74.76
       },
       "scratch_after_um": {
-        "mean": 0.168,
+        "mean": 0.13,
         "min": 0.026,
-        "max": 0.74
+        "max": 0.411
       },
-      "scratch_reduction_pct": 59.9,
+      "scratch_reduction_pct": 65.4,
       "clearcoat_remaining_min_um": {
-        "mean": 41.669,
+        "mean": 41.671,
         "min": 36.24,
         "max": 45.73
       }
     },
     "R3:door_left": {
       "n_cells": 25,
-      "n_pass": 23,
+      "n_pass": 24,
       "gu_after": {
-        "mean": 72.759,
-        "min": 68.5,
+        "mean": 72.87,
+        "min": 68.53,
         "max": 74.72
       },
       "scratch_after_um": {
-        "mean": 0.227,
+        "mean": 0.184,
         "min": 0.018,
-        "max": 0.944
+        "max": 0.536
       },
-      "scratch_reduction_pct": 55.7,
+      "scratch_reduction_pct": 59.3,
       "clearcoat_remaining_min_um": {
-        "mean": 42.208,
+        "mean": 42.246,
         "min": 35.53,
         "max": 47.39
       }
@@ -137,16 +137,16 @@
       "n_cells": 25,
       "n_pass": 25,
       "gu_after": {
-        "mean": 72.437,
-        "min": 70.04,
+        "mean": 72.658,
+        "min": 70.89,
         "max": 74.52
       },
       "scratch_after_um": {
-        "mean": 0.221,
+        "mean": 0.171,
         "min": 0.018,
-        "max": 1.024
+        "max": 0.64
       },
-      "scratch_reduction_pct": 50.0,
+      "scratch_reduction_pct": 56.0,
       "clearcoat_remaining_min_um": {
         "mean": 41.176,
         "min": 36.09,
@@ -157,19 +157,19 @@
       "n_cells": 25,
       "n_pass": 25,
       "gu_after": {
-        "mean": 73.148,
-        "min": 70.26,
+        "mean": 73.252,
+        "min": 70.56,
         "max": 74.36
       },
       "scratch_after_um": {
-        "mean": 0.189,
+        "mean": 0.157,
         "min": 0.025,
-        "max": 0.774
+        "max": 0.485
       },
-      "scratch_reduction_pct": 57.2,
+      "scratch_reduction_pct": 61.1,
       "clearcoat_remaining_min_um": {
-        "mean": 42.789,
-        "min": 37.62,
+        "mean": 42.79,
+        "min": 37.7,
         "max": 47.95
       }
     },
@@ -177,18 +177,18 @@
       "n_cells": 25,
       "n_pass": 25,
       "gu_after": {
-        "mean": 73.076,
+        "mean": 73.138,
         "min": 70.24,
         "max": 74.58
       },
       "scratch_after_um": {
-        "mean": 0.167,
+        "mean": 0.149,
         "min": 0.021,
-        "max": 0.749
+        "max": 0.411
       },
-      "scratch_reduction_pct": 61.8,
+      "scratch_reduction_pct": 64.0,
       "clearcoat_remaining_min_um": {
-        "mean": 41.682,
+        "mean": 41.681,
         "min": 36.43,
         "max": 46.39
       }
@@ -212,12 +212,6 @@
       "region_name": "door_left",
       "cell_id": "4",
       "failure_reason": "gu_below_target(68.5<70)"
-    },
-    {
-      "region_id": "R3",
-      "region_name": "door_left",
-      "cell_id": "20",
-      "failure_reason": "gu_below_target(69.8<70)"
     }
   ],
   "synthetic_disclaimer": "모든 품질 수치는 논문 근거 모델의 SYNTHETIC 출력 — 실측 아님."

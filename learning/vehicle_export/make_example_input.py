@@ -51,8 +51,12 @@ def draw_initial_state(rng, profile: str):
     cc0 = float(rng.uniform(40.0, 50.0))
     if profile == "new_car":
         ra0 = float(np.clip(rng.normal(NEW_CAR_SWIRL_RA, 0.012), 0.09, 0.16))
-        if rng.uniform() < 0.15:                      # 운송 손상 꼬리
-            scr0, n_scr = float(rng.uniform(0.5, 1.5)), int(rng.integers(2, 5))
+        if rng.uniform() < 0.15:                      # 운송 손상 꼬리 (PT-DESIGN)
+            # 상한 1.0μm = "폴리싱 가능급" 경계 (2026-08-31 확정):
+            #   ① OEM 보증 규정(누적 제거 ≤7.5μm ≈ 풀패스 2회)에서 제거 가능한 깊이
+            #   ② 자체 통과율 곡선(≤1.0μm 76%+, 초과 시 붕괴)의 이중 앵커.
+            #   더 깊은 손상은 상류 검사에서 재도장 분류되어 폴리싱 공정에 오지 않는다.
+            scr0, n_scr = float(rng.uniform(0.5, 1.0)), int(rng.integers(2, 5))
         else:                                          # 세차 마링 (L-DERIVED ≤0.5μm, NIST 2018)
             scr0, n_scr = float(rng.uniform(0.05, 0.5)), int(rng.integers(1, 4))
     else:  # correction (기존)
