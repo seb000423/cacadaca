@@ -1,7 +1,7 @@
 # PolyTwin 자산 감사 · 감축 기록
 
 **측정일** 2026-08-27 · **도구** `@gltf-transform/cli`, `fonttools` + `brotli`
-**검수** `asset-check.html` (로컬 서버에서 열 것)
+**검수** `appendix/tools/asset-check.html` (로컬 서버에서 열 것)
 
 ---
 
@@ -66,7 +66,7 @@
   `assets/vendor/meshopt_decoder.mjs`에 넣어뒀고 GLTFLoader가 지원한다.
 - A(양자화)는 디코더가 전혀 필요 없다. 어떤 이유로든 meshopt를 못 쓰면 이걸로.
 - B/C는 삼각형을 50% 줄인다. **차체는 육안 차이가 없었다.** 로봇 SL은
-  `asset-check.html`에서 직접 확인할 것 — 관절부가 뭉개지면 비율을 0.7로 올려라.
+  `appendix/tools/asset-check.html`에서 직접 확인할 것 — 관절부가 뭉개지면 비율을 0.7로 올려라.
 
 ### 재현
 
@@ -171,17 +171,17 @@ assets/
     three.module.js, meshopt_decoder.mjs,
     loaders/GLTFLoader.js, controls/OrbitControls.js,
     utils/BufferGeometryUtils.js
-src/                          ← 번들에서 풀어낸 원본. 참고용
-_backup_2026-08-27/           ← 작업 전 HTML·MD 전체 백업 (71 MB)
+appendix/sourcecode/          ← 번들에서 풀어낸 원본. 참고용
+appendix/backups/             ← 예전 HTML 버전 (37 MB)
 ```
 
-**배포 전 삭제:** `assets/models/_orig/`, `src/`, `_backup_2026-08-27/`
+**배포에서 제외됨(.vercelignore):** `frontend/assets/models/_orig/`, `appendix/`
 
 ---
 
 ## 7. 검수 방법
 
-`asset-check.html`은 `fetch`를 쓰므로 **`file://`로 열면 동작하지 않는다.**
+`appendix/tools/asset-check.html`은 `fetch`를 쓰므로 **`file://`로 열면 동작하지 않는다.**
 
 ```bash
 cd "해커톤 UI"
@@ -318,3 +318,283 @@ python scripts/brighten-figures.py 1.35   # 세기 조절. 항상 _prebright_ �
 ```
 
 `ASSET_V` 를 `2026-08-31e` 로 올렸다.
+
+---
+
+## 기획서 크롭 → 네이티브 도해 (2026-08-31)
+
+**표를 그림으로 넣지 마라.** 그림에 구운 글자는 선택도 검색도 번역도 안 되고,
+스크린리더가 못 읽고, `.p-fig img` 의 `max-height: 460px` 에 걸려 모바일에서
+글자까지 같이 줄어든다. 기획서 크롭 29장 중 **애초에 그림일 이유가 없던 10장**을
+`sub.html` 의 `FIGS` 마크업으로 옮겼다.
+
+| 옮긴 그림 | 새 도해 키 | 내용 |
+|---|---|---|
+| `crop_security.webp` | `logsplit` | 이벤트 로그 / 스텝 로그 표 2개 |
+| `crop_rl_asset.webp` | `rlasset` | 조합별 전문가 점수·판정 표 |
+| `crop_rbac.webp` | `rbac` | 역할 × 권한 격자 |
+| `crop_rl_env.webp` | `rlenv` | 3종 × 4단계 × 4단계 = 48 조합 |
+| `crop_rl_policy.webp` | `rlpolicy` | 정책·환경 순환과 보상 함수 |
+| `crop_rl_eval.webp` | `rleval` | 전문가 평가 4항목 |
+| `crop_deburr_report.webp` | `burr` | 잔여 버 검사 요약·세부 표 |
+| `crop_monitor.webp` | `runlive` | 실시간 공정 패널 |
+| `wide_blindspot.webp` | `blind` | Blind Spot 판정 원리·결과 |
+| `wide_market.webp` | `cagr` | 두 시장의 연평균 성장률 |
+
+**값은 크롭 화면에 찍혀 있던 값 그대로다.** 새로 지어낸 수치는 없다.
+파형(`runlive`)과 감쇠 곡선(`rlpolicy`)만 형태 예시이고 그 사실을 캡션에 적었다.
+
+### 서브셋에 없는 글리프를 쓰지 마라
+
+`✓`(U+2713) · `○`(U+25CB) · `π` · `Ø` · `−`(U+2212) 는 Pretendard 서브셋 928자에
+**없다.** 판정 표시는 글리프 대신 `.gr::before` 로 점을 그리고 옆에 글자를 붙였다
+(색만으로 알리지 않는다는 규칙과도 맞는다). 음수는 en dash `–` 를 쓴다.
+
+```bash
+# 서브셋에 그 글자가 있는지 먼저 확인해라
+python -c "from fontTools.ttLib import TTFont; f=TTFont('assets/fonts/Pretendard-500.subset.woff2'); \
+  print(any(0x2713 in t.cmap for t in f['cmap'].tables))"
+```
+
+### 나머지 4장 — 잘라내기와 라벨 지우기
+
+그림 자체는 살려야 하는데 글자만 한글인 경우다. 원본은
+`assets/img/_precrop_2026-08-31/` (배포 제외).
+
+| 그림 | 한 일 | 크기 |
+|---|---|---|
+| `crop_ansys.webp` | 위아래 한글 띠를 잘라냈다. 안쪽 ANSYS 캡처는 원래 영어다 | 1200×900 → **1076×586** |
+| `crop_force.webp` | 제목·범례·설명 띠를 잘라내고 그래프만 남겼다. 축 숫자는 언어 중립. 제목과 범례는 `force` 도해가 마크업으로 올린다 | 1200×906 → **1140×467** |
+| `crop_collision.webp` | 구워져 있던 「충돌 위험」을 지우고 `ovFig` 로 얹었다 | 그대로 |
+| `crop_preston.webp` | 「연마 패드」·「연마 대상」 동일 | 그대로 |
+
+지우는 방법은 **라벨 사각형 위·아래 한 줄을 세로로 선형 보간**해 채우는 것이다.
+주변을 평균낸 단색으로 덮으면 매끈한 배경에 사각형 자국이 남는다.
+라벨 위치는 원본 픽셀에서 실측한 퍼센트다 — 눈대중으로 넣지 마라.
+
+### 남은 6장은 손대지 않았다
+
+`wide_system` · `wide_loop` · `wide_path` · `wide_result` · `wide_rl_overview` ·
+`pdf_20_*.jpg` 는 실제 인물 사진, Isaac Sim 캡처, 히트맵이 한 장에 합성된
+슬라이드다. 다시 생성하면 **다른 그림**이 나오지 원본이 복원되지 않고,
+숫자는 기획서 실측값이라 모델이 지어내면 `수치는 기획서에 있는 값만 쓴다` 가
+깨진다. 캡션만 마크업이므로 번역은 캡션까지만 된다.
+
+`ASSET_V` 를 `2026-08-31h` 로 올렸다. 검수는 17개 서브 페이지 전부 —
+깨진 그림 0, 콘솔 오류 0, 390px 폭에서 가로 스크롤 없음.
+
+---
+
+## 그림 안의 한글 → 영문판 (2026-09-01)
+
+랜딩(`index.html`)은 `<img>` 가 0개다. 도해가 전부 인라인 SVG라
+`assets/js/i18n.js` 의 사전이 글자를 그대로 잡아 EN 에서 영어로 바뀐다.
+`sub.html` 은 래스터 `.webp` 를 쓰고 글자가 픽셀에 구워져 있어 안 바뀌었다.
+
+### 손댈 것은 18장 중 6장뿐이었다
+
+| | |
+|---|---|
+| 한글이 박힘 | `wide_loop` `wide_system` `wide_rl_overview` `wide_result` `wide_path` `pdf_20_*` |
+| 언어 중립 | `crop_scan` `crop_path` `crop_boundary` `crop_blindspot` `crop_deburr_run` `crop_sand_grit` `crop_sand_quality` `crop_pose` `crop_collision` `crop_preston` `wide_docs` |
+| 원래 영문 | `crop_ansys` (ANSYS 캡처) |
+
+위 「남은 6장은 손대지 않았다」를 대체한다. **다시 생성하지 않았다** —
+원본을 복사해 한글 자리만 덮고 그 자리에 Pretendard 로 영문을 그렸다.
+차체 와이어프레임·로봇·레이더 차트·히트맵·인물 사진은 원본 픽셀 그대로다.
+숫자(`20.0` `1,800 rpm` `85.6` `04:12`)와 원래 영문(`ANSYS` `ROS 2` `Isaac Sim`
+`Expert Evaluation` `J1–J6`)은 건드리지 않았다.
+
+```bash
+python scripts/i18n-figures.py            # 6장 전부
+python scripts/i18n-figures.py wide_loop  # 한 장
+python scripts/i18n-figures.py wide_loop --debug   # 지울 자리를 빨간 상자로
+python scripts/i18n-figures.py wide_loop --audit   # 상자가 글자를 다 덮는지
+```
+
+좌표·문구는 `scripts/figspec.py` 에 있다. 원본 6장은
+`assets/img/_prei18n_2026-08-31/` 에 보관하고 배포에서 제외한다.
+
+### 지우는 방법 — 사각형이 아니라 글자 마스크
+
+라벨 하나를 지우던 앞 절의 세로 보간은 여기서 안 통한다. 상자를 가로지르는
+레이더 차트 선·카드 테두리가 세로로 번져 얼룩이 된다. 그래서
+
+1. 상자 안에서 **밝기 임계를 넘는 픽셀만** 글자로 보고 마스크를 만든다
+   (흰 말풍선 안 검은 글씨는 `th` 를 음수로 줘 반대로 잡는다),
+2. 안티에일리어싱 가장자리까지 먹도록 `grow` 만큼 부풀리고 **상자 안으로 다시 자른다**
+   (안 자르면 드롭다운 화살표 같은 옆 그림을 먹는다),
+3. 그 픽셀만 **같은 줄의 좌우 배경을 선형 보간**해 채운다.
+
+사방으로 확산시키면 상자 밖(드롭다운 밖 패널 배경 같은)의 다른 색이 끌려
+들어와 어두운 얼룩이 생긴다. 좌우 기증 픽셀의 밝기가 크게 다르면 한쪽이
+글자·아이콘 가장자리라는 뜻이므로 배경 쪽(어두운 UI면 어두운 쪽)을 쓴다.
+
+`--audit` 은 상자 안 획에서 이어지는 픽셀이 상자를 넘는지 보고한다.
+`오비탈 · 스파이럴 · 리니어` 가 상자보다 7px 왼쪽에서 시작하던 것을 이걸로 찾았다.
+번호 원(①②③)·체크표시·색 칩처럼 **남겨야 하는 그림**도 같이 걸리므로
+경고 목록은 눈으로 한 번 본다.
+
+### Pretendard 서브셋에는 ASCII 밖 문자가 없다
+
+`assets/fonts/Pretendard-*.full-ko.woff2` 는 한글 + ASCII 서브셋이다.
+가운뎃점(`·`)·따옴표(`’`)·화살표(`→`)·`×`·`°` 가 전부 빠져 있어 그리면 두부(□)가 된다.
+브라우저는 대체 글꼴로 넘기지만 PIL 은 안 넘긴다. `i18n-figures.py` 의 `check()`
+가 그리기 전에 막는다 — `·` 는 `/`, `→` 는 `->`, `×` 는 `x`, `°` 는 `deg` 로 쓴다.
+
+### 붙이는 쪽
+
+`i18n.js` 의 `IMG_EN` 이 `lang=en` 일 때 `<img src>` 만 갈아 끼운다
+(`?v=` 캐시 버스터는 유지). KR 로 돌아가면 원본으로 복귀한다.
+`<main data-i18n="off">` 안에서도 교체한다 — 본문 번역이 안 끝난 것과
+그림 글자가 한국어인 것은 별개다. 이미 `.en` 인 그림은 `IMG_EN` 에 없어
+다시 걸리지 않으므로 MutationObserver 가 여러 번 돌아도 안전하다.
+
+| | 원본 | 영문판 |
+|---|---|---|
+| `wide_loop` | 124 KB | 126 KB |
+| `wide_path` | 130 KB | 129 KB |
+| `wide_result` | 91 KB | 96 KB |
+| `wide_rl_overview` | 109 KB | 112 KB |
+| `wide_system` | 150 KB | 164 KB |
+| `pdf_20_*` | 172 KB | 241 KB (JPEG q82 · 4:4:4 — 글자가 뭉개지지 않게) |
+| **합계** | **776 KB** | **868 KB** |
+
+영문판은 EN 에서만 받는다. KR 사용자의 첫 로드에는 안 들어간다.
+
+### 본문 글자 — `assets/js/i18n-sub.js`
+
+그림과 별개로 `sub.html` 본문(17개 서브 페이지)도 옮겼다.
+`<main>` 에 걸려 있던 `data-i18n="off"` 를 뗐고, 본문 사전 764개를
+`i18n-sub.js` 로 나눴다 — 98 KB(gzip 36 KB)라 랜딩 첫 로드에 얹을 수 없다.
+`sub.html` 만 `i18n.js` 앞에 이 파일을 싣고, `i18n.js` 가 있으면 합친다.
+
+키는 화면의 한국어 원문 그대로다. 본문이 `<b>813</b>개` 처럼 인라인 요소로
+끊겨 있어 텍스트 노드 단위로 토막 키가 많다 — 숫자를 사이에 두고도 말이
+되도록 영문을 골랐다(`스캔 1회 →` + 813 + `waypoints generated`).
+
+```bash
+python scripts/i18n-check.py          # 사전에 없는 본문 문장 (없어야 정상)
+python scripts/i18n-check.py --keys   # 본문에서 사라진 사전 키
+```
+
+**본문에 문장을 추가하면 이 검사를 돌려라.** 사전에 없으면 EN 화면의 그
+문단만 한국어로 남는다. 한 문단 안에 두 언어가 섞이는 게 제일 나쁘다.
+
+`document.title` 도 손봤다. `sub.html` 은 페이지를 바꿀 때마다 제목을 다시
+쓰는데 `i18n.js` 가 로드 시점 값을 붙들고 있어서, EN 에서 탭 제목이 첫
+페이지 이름으로 되돌아갔다. 이제 스냅숏 대신 그때그때 현재 제목을 읽는다
+(`transTitle` · `syncTitle`).
+
+### 값과 이어 붙는 노드 (2026-09-01)
+
+`sub.html` 의 벤치마크 표에서 한 줄만 한국어로 남아 있었다.
+
+```html
+<p class="gen__o"><b>${v}</b> — ${note}</p>
+```
+
+런타임에 이것은 텍스트 노드 **하나**다 — 「— 합성 숙련공 기준…」. 사전에는
+「합성 숙련공 기준…」 만 있어서 맞지 않았다. `i18n-check.py` 가 이걸 놓친 이유는
+값을 뽑을 때 `${...}` 를 지우고 봤기 때문이다. 지우고 나면 사전에 있는 형태와
+같아 보인다.
+
+고친 방법은 구분선을 떼어 노드를 나눈 것이다. `<span>` 은 색도 굵기도
+물려받으므로 화면은 그대로다.
+
+```html
+<p class="gen__o"><b>${v}</b> <span class="sep">—</span> ${note}</p>
+```
+
+세 곳이었다 — `gens` · `market` · `bench`. 같은 유형을 다시 놓치지 않도록
+`i18n-check.py` 에 `--glue` 를 붙였다(기본 실행에도 들어간다). 태그 경계 안에서
+정적 글자와 `${}` 가 한 노드로 붙는 자리를 찾는다. 중첩 템플릿
+(`${B.map(([k, v]) => \`…\`)}`) 안까지 재귀로 들어간다 — 처음에는 거기서
+빠뜨렸다.
+
+## 앱 화면 영문화 — ① 콘솔 · ② 모니터 · ④ 라이브러리 (2026-09-01)
+
+랜딩과 `sub.html` 은 번역됐는데 헤더가 직접 링크하는 앱 화면 세 개는
+`i18n.js` 자체를 싣지 않았다. EN 에서 「① 사전 설정」 을 누르면 전면 한국어
+UI 로 떨어지고, 그 화면에는 언어 전환 버튼도 없어 되돌아올 수도 없었다.
+
+### 세 화면은 생김새가 다르다
+
+| 화면 | 파일 | 형태 |
+|---|---|---|
+| ② 모니터 | `monitor.html` | 평범한 HTML — 끝에 `<script>` 두 줄 |
+| ① 콘솔 | `PolyTwin Console.html` | 번들러 아티팩트 (599 KB) |
+| ④ 라이브러리 | `PolyTwin Library.html` | 번들러 아티팩트 (166 KB) |
+
+번들 두 개는 실제 문서가 `<script type="__bundler/template">` 안에 **JSON
+문자열 한 덩이**로 들어 있고, 로더가 그걸 파싱해
+`document.documentElement.replaceWith()` 로 통째로 갈아 끼운다.
+
+**그래서 바깥 껍데기에 `<script>` 를 달면 안 된다.** 갈아 끼우는 순간
+i18n 이 붙잡고 있던 `body` 가 문서에서 떨어져 나간다. 템플릿 **안**에 넣어야
+로더의 스크립트 재생성 루프가 새 문서에서 다시 실행한다.
+
+```bash
+python scripts/i18n-bundle-patch.py          # 심는다 (두 번 돌려도 안전)
+python scripts/i18n-bundle-patch.py --check  # 심겼는지 본다
+```
+
+**번들을 다시 구우면 이 패치가 날아간다.** 그때 다시 돌려라.
+
+### 사전 두 벌 — `assets/js/i18n-app.js`
+
+앱 화면의 글은 값과 함께 자바스크립트에서 이어 붙는다.
+
+```js
+'도달 ' + assigned + ' / ' + points + ' pt · 미도달 구간은 검증 리포트로 남는다'
+```
+
+숫자가 매번 달라지므로 노드 전체를 키로 둘 수 없다. 그래서 두 벌을 쓴다.
+
+- `PT_DICT_APP` — 노드 하나가 통째로 맞을 때. **기본 수단이다.**
+- `PT_PHRASES_APP` — 노드 안의 한 토막만. 위가 안 될 때만.
+
+토막은 **긴 것부터** 맞춘다. 짧은 토막이 긴 문장 안을 파고들면 반쪽짜리
+영어가 되는데, 그건 한국어로 남는 것보다 나쁘다. 한 글자짜리(`행`·`대`)는
+`진행`·`대비` 같은 낱말 속에 있으므로 숫자 뒤에 붙은 것만 바꾸도록
+정규식으로 뒀다.
+
+```bash
+python scripts/i18n-app-check.py            # 사전에 없는 화면 글 (없어야 정상)
+python scripts/i18n-app-check.py --anchors  # 언어 전환 상자가 붙을 자리
+python scripts/i18n-app-check.py --phrases  # 다른 문장 속을 파고드는 토막
+```
+
+번들은 이 검사기가 템플릿을 꺼내 읽는다 — 원본은 건드리지 않는다.
+
+### 언어 전환 상자
+
+세 화면의 헤더가 제각각이고 번들은 마크업을 직접 고치기 어렵다. 그래서
+`i18n-app.js` 가 화면이 그려진 뒤에 끼워 넣는다. 붙는 자리는 순서대로
+`.bar`(②) → `main nav`(④) → `main > header`(①). `class="lang"` 을 달아
+`i18n.js` 의 기존 클릭 처리와 `paintSwitch` 를 그대로 쓴다.
+
+### 옵서버 간격
+
+②는 매 프레임 수치를 다시 쓴다. 그때마다 `MutationObserver` 가 깨어 문서
+전체를 훑으면 3D 뷰와 프레임을 다툰다. 화면 글이 60번/초로 바뀔 일은 없으므로
+최소 간격 120 ms 를 뒀다(`i18n.js` 의 `GAP`). 첫 번째는 미루지 않는다.
+
+### 남은 것
+
+`PolyTwin Save.html`(③)과 `admin.html` 은 한국어 그대로다. ②·④에서 「③ 결과
+저장」 을 누르면 EN 에서도 한국어 화면이 나온다. 옮기려면 같은 방법이다 —
+`i18n-app.js` 에 사전을 더하고 `i18n-bundle-patch.py` 의 `FILES` 에 넣으면 된다.
+
+`index.html` 의 3D 로더 실패 문구 두 개(`모델을 불러오지 못했다 —`,
+`file:// 로는 fetch가 막힌다…`)도 한국어다. 로컬에서 서버 없이 열었을 때만
+뜨는 경로라 그대로 뒀다.
+
+### 배포 증가분
+
+| | 크기 | gzip |
+|---|---|---|
+| `i18n-app.js` | 18.6 KB | 7.5 KB |
+| 번들 두 개 | +196 B 씩 | — |
+
+`i18n-app.js` 는 앱 화면에서만 받는다. 랜딩 첫 로드에는 안 들어간다.

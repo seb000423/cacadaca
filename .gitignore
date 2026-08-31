@@ -4,9 +4,12 @@ node_modules/
 .env.*
 
 # 로컬 DB — 절대 커밋하지 않는다
-data/*.db
-data/*.db-shm
-data/*.db-wal
+# data/ 는 2026-09-01 이전 위치다. 옛 서버가 붙잡고 있어 아직 남아
+# 있을 수 있으므로 같이 막아 둔다 (지워도 무방).
+data/
+backend/data/*.db
+backend/data/*.db-shm
+backend/data/*.db-wal
 
 # 작업 백업 — 저장소에 들어올 물건이 아니다
 *.backup-*.html
@@ -15,7 +18,10 @@ _snapshot_*/
 _probe.html
 
 # 참고용 원본 소스 (자체 git 저장소 — 이 repo 에 넣지 않는다)
-polytwin_sourcecode/
+# 2026-09-01 에 appendix/sourcecode/ 로 옮겼다. 356MB 이고 .git 을
+# 자기 안에 들고 있다 — 여기 들어오면 저장소가 두 배가 된다.
+appendix/sourcecode/
 
 .vercel
 .env*
+scripts/__pycache__/

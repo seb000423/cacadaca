@@ -3,16 +3,16 @@
    vercel.json 의 rewrite 가 원래 경로를 __path 쿼리에 실어 보낸다
    ([[...route]] 이중 대괄호 캐치올은 Next.js 문법이라 일반 Vercel
    함수에서는 1단계 깊이만 매칭됐다 — 2026-08-31 실측).
-   로직은 server/routes.js — 로컬 서버(server/server.js)와 같은
+   로직은 backend/routes.js — 로컬 서버(backend/server.js)와 같은
    코드다. 여기서는 pathname 만 풀어서 넘긴다.
 
    Node 런타임이다 (Edge 아님) — scrypt 가 node:crypto 를 쓴다.
    DB 는 TURSO_DATABASE_URL 환경변수로 libSQL 백엔드가 잡힌다
-   (server/db.js 참고). 파일 SQLite 는 서버리스에서 유지되지 않는다.
+   (backend/db.js 참고). 파일 SQLite 는 서버리스에서 유지되지 않는다.
    ══════════════════════════════════════════════════════════════ */
 'use strict';
 
-const { handleApi, json } = require('../server/routes');
+const { handleApi, json } = require('../backend/routes');
 
 module.exports = async (req, res) => {
   let pathname;

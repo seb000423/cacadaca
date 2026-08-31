@@ -12,7 +12,7 @@
 import { createRequire } from 'node:module';
 const require = createRequire(import.meta.url);
 
-const { seedAdmin } = require('../server/routes.js');
+const { seedAdmin } = require('../backend/routes.js');
 
 try {
   const r = await seedAdmin();

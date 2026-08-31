@@ -24,8 +24,8 @@
 
 - **`DESIGN.md`** — 색·타이포·간격·모션 토큰. 실제 코드에서 감사해 확정한 값이다.
 - **`ASSETS.md`** — 3D 모델·폰트 감축 기록과 재현 방법.
-- **`AI티제거_지침서_폴리트윈_2026-08-27.md`** — 왜 이렇게 하는지에 대한 배경.
-- **`UI목업_프롬프트_폴리트윈_2026-08-25.md`** — 원래 기획 의도와 화면별 요구사항.
+- **`appendix/docs/AI티제거_지침서_폴리트윈_2026-08-27.md`** — 왜 이렇게 하는지에 대한 배경.
+- **`appendix/docs/UI목업_프롬프트_폴리트윈_2026-08-25.md`** — 원래 기획 의도와 화면별 요구사항.
 
 ---
 
@@ -69,14 +69,14 @@ scene.environment = pmrem.fromScene(envScene, 0.03).texture;  // 없으면 금�
 ```
 
 - **형상보다 조명이 중요하다.** 키 라이트 1 + 좌우 림 라이트 2, 강한 명암 대비.
-- 모델은 `assets/models/*.opt.glb` (meshopt 압축). `MeshoptDecoder`를 반드시 연결:
+- 모델은 `frontend/assets/models/*.opt.glb` (meshopt 압축). `MeshoptDecoder`를 반드시 연결:
   ```js
   new GLTFLoader().setMeshoptDecoder(MeshoptDecoder)
   ```
 - 카메라는 **바운딩 스피어 기준으로 자동 프레이밍**하라. 모델마다 스케일이
   3자릿수 넘게 차이난다(샌딩킷 0.003 단위, 차체 27 단위). 고정 좌표를 쓰면 안 된다.
 - 무광 → 유광 스캔은 `material.onBeforeCompile`로 `roughnessFactor`를
-  0.82 ↔ 0.14 보간. 동작하는 구현이 `asset-check.html`에 있다 — 거기서 복사해라.
+  0.82 ↔ 0.14 보간. 동작하는 구현이 `appendix/tools/asset-check.html`에 있다 — 거기서 복사해라.
 - bloom은 `strength` 0.25 이하. 넘어가면 즉시 게임 UI가 된다.
 
 ---
@@ -97,13 +97,18 @@ scene.environment = pmrem.fromScene(envScene, 0.03).texture;  // 없으면 금�
 
 ## 검수
 
-```bash
-python -m http.server 8000
-# → http://localhost:8000/asset-check.html
-```
-
 `asset-check.html`은 압축 모델을 원본과 나란히 비교하는 도구다.
 3D를 건드렸으면 여기서 확인하고 넘어가라. `fetch`를 쓰므로 `file://`로는 안 열린다.
+
+이 도구는 `appendix/tools/` 에 있고 배포 루트(`frontend/`) 밖이다. 자산을
+상대 경로로 읽으므로 **쓸 때만 프론트 루트로 복사해서** 연다:
+
+```bash
+cp appendix/tools/asset-check.html frontend/
+node backend/server.js                       # 또는 npm start
+# → http://localhost:8000/asset-check.html
+rm frontend/asset-check.html                 # 확인 끝나면 지운다
+```
 
 ---
 
@@ -119,10 +124,33 @@ python -m http.server 8000
 
 ## 디렉터리
 
+2026-09-01 에 frontend / backend / appendix 셋으로 갈랐다.
+
 ```
-assets/models/   압축 모델 (_orig/ 는 비교용, 배포 제외)
-assets/fonts/    Pretendard 서브셋
-assets/vendor/   three.js r169 + 애드온 + MeshoptDecoder
-src/             번들에서 풀어낸 원본 소스 (참고용)
-_backup_2026-08-27/   작업 전 백업 (배포 제외)
+frontend/                배포되는 것 전부 (vercel.json 의 outputDirectory)
+  *.html                 화면 7장
+  assets/models/         압축 모델 (_orig/ 는 비교용, 배포 제외)
+  assets/fonts/          Pretendard 서브셋
+  assets/vendor/         three.js r169 + 애드온 + MeshoptDecoder
+  데이터셋/              KPI JSON(시드 원본) + traces/ (그 둘만 배포된다)
+                         JSON 은 npm run seed:data 로 DB 에 들어간다.
+                         화면은 DB(/api/dataset/*)에서 읽고, CSV 조각만
+                         traces/ 에서 Range 로 직접 읽는다
+  console-src/           ① 편집 원본 + repack.py
+  library-src/           ④ 편집 원본 + repack.py
+  save-src/              ③ 편집 원본 + repack.py
+backend/                 서버 코드 한곳
+  server.js              로컬 서버 (정적 루트 = ../frontend)
+  routes.js db.js auth.js
+  middleware.js          Edge 게이팅 본체
+  data/                  로컬 SQLite (배포 제외)
+api/index.js             Vercel 함수 — backend/routes.js 로 위임
+middleware.js            루트 샴 — backend/middleware.js 재수출
+                         (둘 다 루트에 있어야 Vercel 이 인식한다)
+scripts/                 빌드·검수 파이썬 + seed-admin.mjs
+appendix/                배포·개발 어디에도 안 쓰이는 것
+  backups/ snapshots/    예전 HTML 버전 · 작업 전 스냅샷
+  sourcecode/            번들에서 풀어낸 원본 소스 (중첩 git 저장소)
+  tools/                 asset-check · rig-check · clip-check
+  docs/                  끝난 작업 문서
 ```

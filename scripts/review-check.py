@@ -12,7 +12,9 @@
 import os, re, sys
 from collections import defaultdict, Counter
 
-ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+# 정적 파일은 frontend/ 아래로 내려갔다 (2026-09-01 폴더 정리).
+# 저장소 루트가 아니라 프론트 루트를 기준으로 잡는다.
+ROOT = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "frontend")
 IMGDIR = os.path.join(ROOT, 'assets', 'img')
 
 # 검수 대상. 번들 3장은 결과물이 아니라 소스를 본다 (repack.py 로 되돌아간다)

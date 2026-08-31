@@ -13,7 +13,9 @@ from fontTools.ttLib import TTFont
 from fontTools import subset
 
 sys.stdout.reconfigure(encoding='utf-8')
-ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+# 정적 파일은 frontend/ 아래로 내려갔다 (2026-09-01 폴더 정리).
+# 저장소 루트가 아니라 프론트 루트를 기준으로 잡는다.
+ROOT = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "frontend")
 FONTS = os.path.join(ROOT, 'assets', 'fonts')
 
 SRC = ['index.html', 'sub.html', 'monitor.html', 'admin.html',

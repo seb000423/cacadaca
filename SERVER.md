@@ -11,12 +11,12 @@
 ## 실행
 
 ```bash
-node server/server.js      # 또는 npm start
+node backend/server.js      # 또는 npm start
 # → http://127.0.0.1:8000
 ```
 
 **`python -m http.server`는 더 이상 쓰지 않는다.** 로그인·계정 API가
-정적 서버에는 없다. 3D 자산 검수(`asset-check.html`)도 이 서버로 열면 된다.
+정적 서버에는 없다. 3D 자산 검수(`appendix/tools/asset-check.html`)도 이 서버로 열면 된다.
 
 ### 최초 기동
 
@@ -30,7 +30,7 @@ PASSWORD  polytwin2026
 **데모용 기본값이다.** 바꾸려면 둘 중 하나:
 
 ```bash
-PT_ADMIN_PW='원하는-비밀번호' node server/server.js   # 최초 1회에만 반영
+PT_ADMIN_PW='원하는-비밀번호' node backend/server.js   # 최초 1회에만 반영
 ```
 또는 로그인 후 `/admin.html` → 해당 계정 **비번 초기화**.
 
@@ -40,7 +40,21 @@ PT_ADMIN_PW='원하는-비밀번호' node server/server.js   # 최초 1회에만
 |---|---|---|
 | `PORT` | `8000` | 포트 |
 | `HOST` | `127.0.0.1` | 바인딩 주소. 같은 망에서 보려면 `0.0.0.0` |
-| `PT_DB` | `data/polytwin.db` | DB 경로 |
+| `PT_DB` | `backend/data/polytwin.db` | DB 경로 |
+
+### WAL 주의
+
+로컬 DB 는 WAL 모드다(읽기·쓰기가 서로를 막지 않게). 그래서 **서버가 도는
+동안 `polytwin.db` 파일만 열면 내용이 안 보인다** — 최근 쓴 것이 전부
+`polytwin.db-wal` 에 있고, `.db` 만 읽는 뷰어(VS Code Database Client 등)는
+'No tables available' 을 띄운다. 파일이 4KB 근처면 그 상태다.
+
+`Ctrl+C` 로 정상 종료하면 `backend/server.js` 가 `store.checkpoint()` 를
+불러 WAL 을 본 파일로 접고 나간다. 강제 종료(kill -9)했다면 직접 접어라:
+
+```bash
+node -e "require('./backend/db.js').checkpoint()"
+```
 | `PT_ADMIN_ID` | `admin` | 씨앗 관리자 ID (최초 1회) |
 | `PT_ADMIN_PW` | `polytwin2026` | 씨앗 관리자 비밀번호 (최초 1회) |
 
@@ -62,7 +76,7 @@ PT_ADMIN_PW='원하는-비밀번호' node server/server.js   # 최초 1회에만
 랜딩이 그 신호를 받아 로그인 창을 열고, 성공하면 원래 가려던 화면으로 보낸다.
 
 새 화면을 추가하면 **기본이 차단**이다. 공개해야 하면
-`server/server.js` 의 `PUBLIC_PAGES` 에 넣어라.
+`backend/server.js` 의 `PUBLIC_PAGES` 에 넣어라.
 
 ---
 
@@ -90,7 +104,7 @@ PT_ADMIN_PW='원하는-비밀번호' node server/server.js   # 최초 1회에만
 DB의 `sessions` 표에 있고 만료분은 한 시간마다 쓸어낸다.
 
 > `Secure` 플래그는 붙이지 않았다. localhost는 http라 붙이면 쿠키가 안 실린다.
-> **https로 배포한다면 반드시 켜라** — `server/server.js` 의 `Set-Cookie` 두 곳.
+> **https로 배포한다면 반드시 켜라** — `backend/server.js` 의 `Set-Cookie` 두 곳.
 
 ---
 
@@ -102,6 +116,11 @@ DB의 `sessions` 표에 있고 만료분은 한 시간마다 쓸어낸다.
 | `POST` | `/api/login` | 누구나 | 로그인, 쿠키 발급 |
 | `POST` | `/api/logout` | 누구나 | 세션 파기 |
 | `GET` | `/api/me` | 누구나 | 현재 로그인 상태 |
+| `GET` | `/api/library` | 로그인 | 합격 기록 목록 (전원 공유, 최근 200건) |
+| `POST` | `/api/library` | 로그인 | 합격 기록 저장 (`ref_id` 중복이면 기존 것 반환) |
+| `DELETE` | `/api/library/:id` | 본인·admin | 합격 기록 삭제 |
+| `GET` | `/api/dataset/seg-best-kpi` | 로그인 | 숙련공 정답 데이터 (세그먼트 15) |
+| `GET` | `/api/dataset/quality-kpi` | 로그인 | 품질 기준 · 에피소드 |
 | `GET` | `/api/admin/users` | admin | 계정 목록 |
 | `GET` | `/api/admin/audit` | admin | 최근 기록 60건 |
 | `PATCH` | `/api/admin/users/:id` | admin | `status` · `role` · `password` |
@@ -121,10 +140,15 @@ DB의 `sessions` 표에 있고 만료분은 한 시간마다 쓸어낸다.
 ## 파일
 
 ```
-server/server.js   정적 파일 + 라우팅 + 접근 제어
-server/db.js       스키마와 질의 (node:sqlite)
-server/auth.js     scrypt 해시 · 세션 토큰
-data/polytwin.db   DB. 지우면 다음 기동에 관리자만 다시 생긴다
+backend/server.js       정적 파일(../frontend) + 라우팅 + 접근 제어
+backend/routes.js       API — 로컬·Vercel 공용
+backend/db.js           스키마와 질의 (node:sqlite / Turso)
+                        테이블 6: users · sessions · audit
+                                  library_entries (합격 기록)
+                                  segments · dataset_meta (숙련공 정답 데이터)
+backend/auth.js         scrypt 해시 · 세션 토큰
+backend/middleware.js   Edge 게이팅 본체
+backend/data/polytwin.db  DB. 지우면 다음 기동에 관리자만 다시 생긴다
 admin.html         계정 관리 화면 (admin 전용)
 assets/js/auth-client.js   헤더 세션 표시 · 로그아웃 · API 래퍼
 ```
@@ -145,15 +169,17 @@ assets/js/auth-client.js   헤더 세션 표시 · 로그아웃 · API 래퍼
 ## Vercel 배포 (2026-08-31 추가)
 
 정적 HTML 은 CDN, `/api/*` 는 서버리스 함수, HTML 게이팅은 Edge Middleware.
-로컬 `node server/server.js` 는 그대로 돈다 — 같은 라우트 코드(`server/routes.js`)를 쓴다.
+로컬 `node backend/server.js` 는 그대로 돈다 — 같은 라우트 코드(`backend/routes.js`)를 쓴다.
 
 | 파일 | 역할 |
 |---|---|
-|  `api/index.js` | `/api/*` 단일 함수 — rewrite 가 원 경로를 `__path` 로 전달 · `server/routes.js` 위임 |
-| `middleware.js` | HTML 302/403 게이팅 (HMAC 서명 쿠키 검증, DB 안 봄) |
-| `server/db.js` | `TURSO_DATABASE_URL` 있으면 Turso(libSQL), 없으면 로컬 node:sqlite |
-| `vercel.json` | 자산 캐시(immutable) · HTML no-store · .glb MIME |
-| `scripts/seed-admin.mjs` | 원격 DB 관리자 시드 (`npm run seed`) |
+|  `api/index.js` | `/api/*` 단일 함수 — rewrite 가 원 경로를 `__path` 로 전달 · `backend/routes.js` 위임 |
+| `middleware.js` (루트) | `backend/middleware.js` 재수출 샴 — Vercel 이 루트에서만 찾는다 |
+| `backend/middleware.js` | HTML 302/403 게이팅 (HMAC 서명 쿠키 검증, DB 안 봄) |
+| `backend/db.js` | `TURSO_DATABASE_URL` 있으면 Turso(libSQL), 없으면 로컬 node:sqlite |
+| `vercel.json` | `outputDirectory: frontend` · 자산 캐시(immutable) · HTML no-store · .glb MIME |
+| `scripts/seed-admin.mjs` | 관리자 계정 시드 (`npm run seed`) |
+| `scripts/seed-datasets.mjs` | 숙련공 정답 데이터 시드 (`npm run seed:data`) |
 
 ### 환경 변수 (Vercel 프로젝트 설정)
 
@@ -171,6 +197,9 @@ turso db create polytwin && turso db show polytwin --url && turso db tokens crea
 
 # 2. 관리자 시드 — 기본 비밀번호로는 거부된다
 TURSO_DATABASE_URL=… TURSO_AUTH_TOKEN=… PT_ADMIN_PW='강한-비밀번호' npm run seed
+
+# 2-1. 숙련공 정답 데이터 시드 — 안 하면 ①·④ 화면이 503 을 받는다
+TURSO_DATABASE_URL=… TURSO_AUTH_TOKEN=… npm run seed:data
 
 # 3. 배포
 vercel login && vercel link && vercel --prod

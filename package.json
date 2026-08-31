@@ -5,8 +5,9 @@
   "description": "PolyTwin 관제·설정 웹 콘솔",
   "type": "commonjs",
   "scripts": {
-    "start": "node server/server.js",
-    "seed": "node scripts/seed-admin.mjs"
+    "start": "node backend/server.js",
+    "seed": "node scripts/seed-admin.mjs",
+    "seed:data": "node scripts/seed-datasets.mjs"
   },
   "engines": {
     "node": "22.x"
