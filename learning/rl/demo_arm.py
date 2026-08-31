@@ -36,6 +36,9 @@ parser.add_argument("--same_surface", action="store_true",
                     help="모든 환경에 같은 surface_seed 사용 (정책 비교용)")
 parser.add_argument("--render_every", type=int, default=3,
                     help="몇 physics substep마다 렌더할지 (16대 권장값 6)")
+parser.add_argument("--record", type=str, default=None,
+                    help="부감 카메라 영상 녹화 출력 디렉토리 (헤드리스 가능 — PNG 시퀀스, "
+                         "종료 후 ffmpeg 로 mp4 병합). --enable_cameras 와 함께 사용")
 parser.add_argument("--max_seconds", type=float, default=None,
                     help="시뮬 시간 상한 (기본: 에피소드 완주까지)")
 AppLauncher.add_app_launcher_args(parser)
@@ -140,6 +143,8 @@ def main():
         plate.func(f"/World/envs/env_{i}/Workpiece", plate,
                    translation=(PATCH_CENTER[0], PATCH_CENTER[1], WORK_TOP - 0.025))
 
+    if args.record:
+        _setup_record(scene.env_origins)   # 반드시 sim.reset() 이전 (이후 생성 시 빈 프레임)
     sim.reset()
     _force_environment_visibility(E)
     _set_overview_camera(sim, scene.env_origins)
@@ -342,8 +347,35 @@ def main():
         robot.set_joint_position_target_index(
             target=torch.zeros((E, 1), device=sim.device), joint_ids=[pad_joint])
         scene.write_data_to_sim()
-        sim.step(render=(sub % args.render_every == 0))
+        _rendered = (sub % args.render_every == 0)
+        sim.step(render=_rendered)
         scene.update(1 / 60)
+        if _rendered and "_REC" in globals():
+            _rec = globals()["_REC"]
+            _cam = _rec["cam"]
+            if not _rec["posed"]:
+                # world 규약(전방 +X, 상단 +Z)의 look-at 회전을 직접 구성
+                from isaaclab.utils.math import quat_from_matrix as _qfm
+                _e = np.asarray(_rec["eye"], float); _t = np.asarray(_rec["tgt"], float)
+                _f = _t - _e; _f /= np.linalg.norm(_f)
+                _l = np.cross(np.array([0.0, 0.0, 1.0]), _f); _l /= np.linalg.norm(_l)
+                _u = np.cross(_f, _l)
+                _R = torch.tensor(np.stack([_f, _l, _u], axis=1), dtype=torch.float32,
+                                  device=sim.device)   # 열 = (x=fwd, y=left, z=up)
+                _cam.set_world_poses(
+                    torch.tensor([_e], dtype=torch.float32, device=sim.device),
+                    _qfm(_R).unsqueeze(0), convention="world")
+                _rec["posed"] = True
+                print(f"[demo][rec] cam pos_w={_cam.data.pos_w[0].tolist()}", flush=True)
+            _cam.update(1 / 60)
+            _img = _cam.data.output["rgb"][0].cpu().numpy()
+            if _rec["n"] < 2:
+                print(f"[demo][rec] shape={_img.shape} dtype={_img.dtype}", flush=True)
+            if _img.size > 0:
+                from PIL import Image as _Image
+                _Image.fromarray(_img[..., :3].astype("uint8")).save(
+                    f"{_rec['dir']}/frame_{_rec['n']:05d}.png")
+                _rec["n"] += 1
         sub += 1
         if sub % 600 == 0:                        # 10초마다 생존 로그 + 패드 자세 검증
             _ny = _quat_to_R(robot.data.body_pose_w.torch[0, ee_body, 3:7].cpu().numpy()) @ \
@@ -436,6 +468,55 @@ def _overview_eye_target(env_origins):
     return eye, target
 
 
+def _define_overview_camera(env_origins):
+    """/World/OverviewCamera USD 카메라 프림 정의 (Z-up look-at, 18mm). 경로 반환."""
+    import omni.usd
+    from pxr import Gf, Sdf, UsdGeom
+    eye, target = _overview_eye_target(env_origins)
+    stage = omni.usd.get_context().get_stage()
+    path = "/World/OverviewCamera"
+    camera = UsdGeom.Camera.Define(stage, path)
+    camera.GetProjectionAttr().Set(UsdGeom.Tokens.perspective)
+    camera.GetFocalLengthAttr().Set(18.0)
+    camera.GetClippingRangeAttr().Set(Gf.Vec2f(0.05, 1000.0))
+    # translate + orient xformOp 로 look-at 설정 (transform 행렬 op 는 이 환경(Fabric)에서
+    # 회전이 렌더에 반영되지 않는 것이 녹화 프레임으로 확인됨). USD 카메라: -Z 전방, +Y 위.
+    e, t = np.asarray(eye, float), np.asarray(target, float)
+    fwd = t - e; fwd /= np.linalg.norm(fwd)
+    right = np.cross(fwd, np.array([0.0, 0.0, 1.0])); right /= np.linalg.norm(right)
+    up = np.cross(right, fwd)
+    rot = Gf.Matrix3d(*[float(v) for v in (*right, *up, *(-fwd))])   # 행우선 9개 = 기저벡터 행
+    quat = rot.ExtractRotation().GetQuat()
+    xform = UsdGeom.Xformable(camera.GetPrim())
+    xform.ClearXformOpOrder()
+    xform.AddTranslateOp(UsdGeom.XformOp.PrecisionDouble).Set(Gf.Vec3d(*e))
+    xform.AddOrientOp(UsdGeom.XformOp.PrecisionDouble).Set(quat)
+    camera.GetPrim().CreateAttribute(
+        "omni:kit:centerOfInterest", Sdf.ValueTypeNames.Double3).Set(Gf.Vec3d(*target))
+    print(f"[demo] overview cam eye={tuple(round(float(v),2) for v in e)} target={tuple(round(float(v),2) for v in t)}")
+    return path, eye, target
+
+
+def _setup_record(env_origins):
+    """헤드리스 녹화 (2026-08-31): Isaac Lab Camera 센서(공식 헤드리스 캡처 경로)로 부감 rgb.
+    반드시 sim.reset() 이전에 생성 (센서는 reset 시 초기화). 조준은 reset 후 첫 렌더 스텝에서
+    set_world_poses_from_view 로 설정 — replicator 직접 부착은 이 환경에서 첫 프레임 이후
+    갱신되지 않는 것이 확인되어 폐기."""
+    import os as _os2
+    from isaaclab.sensors import Camera, CameraCfg
+    _os2.makedirs(args.record, exist_ok=True)
+    eye, tgt = _overview_eye_target(env_origins)
+    cam = Camera(CameraCfg(
+        prim_path="/World/RecCam", update_period=0.0, height=720, width=1280,
+        data_types=["rgb"],
+        spawn=sim_utils.PinholeCameraCfg(focal_length=18.0, clipping_range=(0.05, 1000.0)),
+        offset=CameraCfg.OffsetCfg(pos=tuple(float(v) for v in eye), rot=(1.0, 0.0, 0.0, 0.0),
+                                   convention="world")))
+    globals()["_REC"] = {"cam": cam, "eye": eye, "tgt": tgt, "dir": args.record,
+                         "n": 0, "posed": False}
+    print(f"[demo] 녹화 시작 → {args.record} (Isaac Lab Camera, rgb PNG)")
+
+
 def _install_overview_usd_camera(env_origins):
     """실제 USD 카메라를 만들고 Kit 활성 viewport에 직접 연결한다."""
     try:
@@ -443,27 +524,14 @@ def _install_overview_usd_camera(env_origins):
         from omni.kit.viewport.utility import get_active_viewport
         from pxr import Gf, Sdf, UsdGeom
 
-        eye, target = _overview_eye_target(env_origins)
-        stage = omni.usd.get_context().get_stage()
-        path = "/World/OverviewCamera"
-        camera = UsdGeom.Camera.Define(stage, path)
-        camera.GetProjectionAttr().Set(UsdGeom.Tokens.perspective)
-        camera.GetFocalLengthAttr().Set(18.0)
-        camera.GetClippingRangeAttr().Set(Gf.Vec2f(0.05, 1000.0))
-        xform = UsdGeom.Xformable(camera.GetPrim())
-        xform.ClearXformOpOrder()
-        pose = Gf.Matrix4d(1.0).SetLookAt(
-            Gf.Vec3d(*eye), Gf.Vec3d(*target), Gf.Vec3d(0.0, 0.0, 1.0)).GetInverse()
-        xform.AddTransformOp().Set(pose)
-        camera.GetPrim().CreateAttribute(
-            "omni:kit:centerOfInterest", Sdf.ValueTypeNames.Double3).Set(
-            Gf.Vec3d(*target))
-
+        path, eye, target = _define_overview_camera(env_origins)
         viewport = get_active_viewport()
         if viewport is None:
             raise RuntimeError("active Kit viewport 없음")
         viewport.set_active_camera(path)
 
+        if args.record:
+            return   # 헤드리스 녹화: 뷰포트 바인딩은 불필요하고 render product 를 비운다 (검증)
         # Isaac Sim 6 renderer에도 같은 카메라를 명시적으로 연결한다.
         from isaacsim.core.rendering_manager import ViewportManager
         ViewportManager.set_camera_view(path, eye=list(eye), target=list(target))

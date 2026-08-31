@@ -718,3 +718,24 @@ rework_candidate(예산 여유 남은 근소 미달 — 재작업·공정조정 
 비율로 GU 감점하는 보수적 설계) 때문에 표면 품질이 좋아도 GU 70 도달이 수학적으로
 불가한 셀. 스팟 재도장 검토가 산업 관행상 올바른 처분 (OEM 보증 논리와 동일).
 q_clearcoat 의 성격(광택 물리 아님 — 실측 광택계는 표면 기하만 잼)도 본 절에 명시.
+
+### 9.30 시각화 산출 경로 확정 — 헤드리스 영상 녹화 (2026-08-31)
+
+**창 문제 진단**: 이 머신은 `isaac-sim.sh`(풀 편집기)는 뜨지만 python 경유(AppLauncher)
+데모는 창이 안 뜸. 기본 경험 파일에 뷰포트 모듈이 없던 것이 1차 원인
+(`--experience ~/isaacsim/apps/isaacsim.exp.full.kit` 로 뷰포트 로드까지 확인) — 그래도
+창 표시는 미해결 → **헤드리스 영상 녹화**로 우회 확정.
+
+**녹화 기능** (`demo_arm.py --record DIR --headless --enable_cameras`): Isaac Lab Camera
+센서(/World/RecCam)를 **sim.reset() 이전**에 생성, 첫 렌더 스텝에서 world 규약 look-at
+으로 조준, 렌더 스텝마다 PNG 저장 → ffmpeg 병합.
+실패 경로 기록: replicator BasicWriter/annotator 직접 부착은 (a) reset 이후 생성 시 빈 배열,
+(b) reset 이전 생성 시에도 첫 프레임 이후 갱신 안 됨 → Camera 센서로 대체.
+
+산출: `~/Desktop/polish_demo_10robots.mp4` (60s, 10fps, 1280x720, 로봇 10대 챔피언 정책).
+```
+~/isaacsim/python.sh learning/rl/demo_arm.py --headless --enable_cameras --num_envs 10 \
+  --all_policy --checkpoint learning/rl/champion/model_terminal_ppo_14ch_it800.pt \
+  --record learning/rl/logs/demo_rec/frames --max_seconds 60 --render_every 6
+ffmpeg -framerate 10 -i frames/frame_%05d.png -c:v libx264 -pix_fmt yuv420p out.mp4
+```
