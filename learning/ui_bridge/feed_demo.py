@@ -41,14 +41,23 @@ while time.time() - t0 < dur:
                        "q": q, "base": {"pos": pos, "quat": list(quat)}})
     if n % 40 == 0:
         feed.event("SL", f"셀 {n // 40} 판정 통과 — GU {71 + (n % 5) * 0.4:.1f}", "info", t)
-    cells = {"total": 491, "pass": int(prog * 300), "rework": int(prog * 60), "repaint": int(prog * 80),
-             "not_reached": 491 - int(prog * 440), "items": []}
+    # 합성 셀 판정 지도: 차 bbox(x ±0.9, y ±2.3, 윗면 z≈1.4 / 옆면 x=±0.92) 위 격자, 진행률만큼 순서대로 판정됨
+    if n == 1:
+        import random as _rnd; _r = _rnd.Random(7)
+        _grid = [[0.12 * i - 0.84, 0.16 * j - 2.24, 1.42] for j in range(29) for i in range(15) if abs(0.12 * i - 0.84) < 0.75 or abs(0.16 * j - 2.24) < 1.3]
+        _grid += [[sx * 0.93, 0.16 * j - 2.24, 0.45 + 0.16 * k] for sx in (-1, 1) for j in range(29) for k in range(5)]
+        _disp = [_r.choices(["pass", "spot_repaint_review", "rework_candidate"], weights=[62, 30, 8])[0] for _ in _grid]
+        globals()["_GRID"], globals()["_DISP"] = _grid, _disp
+    _k = int(prog * len(_GRID))
+    cells = {"total": len(_GRID), "pass": sum(1 for d in _DISP[:_k] if d == "pass"), "rework": sum(1 for d in _DISP[:_k] if d == "rework_candidate"),
+             "repaint": sum(1 for d in _DISP[:_k] if d == "spot_repaint_review"), "not_reached": len(_GRID) - _k,
+             "items": [[*_GRID[i], _DISP[i], 71.0 + (i % 7) * 0.5] for i in range(_k)]}
     scene = {"up": "z", "long": "y", "car_min": [-0.92, -2.3, 0.05], "car_max": [0.92, 2.3, 1.45]}
     feed.update("POLISH" if prog < 1.0 else "DONE", prog, robots, elapsed_s=t, cells=cells, scene=scene)
     if recorder is not None:
         recorder.frame(t, "POLISH" if prog < 1.0 else "DONE", prog, t, robots)
         if n % 40 == 0: recorder.event(t, "SL", "info", f"셀 {n // 40} 판정 통과 — GU {71 + (n % 5) * 0.4:.1f}")
-        if n % 100 == 0: recorder.cells(t, cells)
+        if n % 20 == 0: recorder.cells(t, cells)      # 합성: 2 s 마다 셀 스냅샷
     time.sleep(0.1)   # 10 Hz — 팔 동기화 확인용
 # 연결 검증용 결과 요약(last_run.json) — 실제 러너의 _rl_flush 와 같은 자리에 같은 모양으로
 import json as _json
