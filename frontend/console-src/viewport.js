@@ -707,6 +707,12 @@ function robotCell(parts, mats) {
   foam.rotation.x = Math.PI / 2; foam.position.z = -0.014; foam.castShadow = true;
   const plate = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.01, 40), mats.dark);
   plate.rotation.x = Math.PI / 2; plate.position.z = -0.033;
+  // 회전이 보이게: 폼 옆면에 어두운 띠 무늬 2개 (대칭 원통은 돌아도 안 보인다)
+  for (const a of [0, Math.PI]) {
+    const mark = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.03, 0.006), mats.dark);
+    mark.position.set(Math.cos(a) * 0.053, Math.sin(a) * 0.053, -0.014); mark.rotation.z = a;
+    padDisc.add(mark);
+  }
   padDisc.add(foam, plate);
   padAnchor.add(padDisc);
   // 작업 지점 표시 — 레이저처럼 툴에서 표면으로 내려오는 투명한 빔과 표면 글로우(월드에 두고 매 프레임 옮긴다)
@@ -1480,16 +1486,21 @@ class PolyTwinViewport extends HTMLElement {
        패드가 지나간 자리가 유광이 되므로 p=1 이면 차 전체가 닦여 있다. 설비는 작업점을 따라온다(_liftFollow). */
     if (!this._lanes || !this._lanes.length) return;
     const prog = Math.max(0, Math.min(1, Number(feed.progress) || 0));
+    let jumped = false;
     for (const cell of this._cells) {
       if (!cell.userData.work || cell.userData.work.length < 2) continue;
       const len = cell.userData.pathLen || 0;
       const sTarget = prog * len;
       const cur = cell.userData.s || 0;
-      const maxStep = Math.max(0.02, 1.2 * dt);                    // 따라붙는 최대 속도 1.2 m/s (탐색 점프도 부드럽게)
       const d = sTarget - cur;
-      cell.userData.s = Math.abs(d) > maxStep ? cur + Math.sign(d) * maxStep : sTarget;
-      if (sTarget < cur - 0.5) { cell.userData.s = sTarget; cell.userData.cursor = 0; }   // 뒤로 탐색: 즉시
+      if (Math.abs(d) > 0.4) {                                      // 슬라이더 점프(앞/뒤): 즉시 그 지점으로
+        cell.userData.s = sTarget; cell.userData.cursor = 0; jumped = true;
+      } else {
+        const maxStep = Math.max(0.02, 1.2 * dt);                   // 재생 중 미세 지연은 부드럽게
+        cell.userData.s = Math.abs(d) > maxStep ? cur + Math.sign(d) * maxStep : sTarget;
+      }
     }
+    if (jumped) this._rebuildGlossForProgress(p);                    // 그 시점까지 닦였어야 할 자리를 경로에서 다시 칠한다
     this._liftFollow = true;
     this._animateLanes(dt, t, p, true);
     return;   // 광택은 패드가 실제로 지나간 자리만 (레인이 도장 면 전체를 덮으므로 100 % 에서 전부 닦인다)
@@ -1528,6 +1539,23 @@ class PolyTwinViewport extends HTMLElement {
       }
     }
     this._animateLanes(dt, t, p);                                   // 콘솔 자체 동작: 레일 슬라이딩·접근·훑기·광택
+  }
+
+  /** 진행률 모드에서 탐색(점프) 뒤 광택 마스크를 처음부터 다시: 로봇마다 경로의 s 지점까지 패드 반경으로 촘촘히 찍는다 */
+  _rebuildGlossForProgress(p) {
+    this.resetPolish();
+    const r = (p.pad / 1000) / 2, step = Math.max(0.01, r * 0.7);
+    for (const cell of this._cells) {
+      const work = cell.userData.work, cum = cell.userData.cum; if (!work || work.length < 2) continue;
+      const sEnd = cell.userData.s || 0;
+      let next = 0;
+      for (let k = 0; k < work.length && cum[k] <= sEnd; k++) {
+        if (cum[k] < next) continue;
+        // 레인 전환 구간(20 cm 이상 점프)은 표면 위를 지나지 않으므로 찍지 않는다
+        if (k > 0 && cum[k] - cum[k - 1] > 0.20) { next = cum[k]; continue; }
+        this.stampPolish(work[k], r); next = cum[k] + step;
+      }
+    }
   }
 
   /** 완료된 셀 전체를 광택 마스크에 찍는다(셀 12 cm → 반경 9 cm 원). 팔 동작과 무관하게 판정 완료 = 닦임. */
@@ -1974,6 +2002,10 @@ class PolyTwinViewport extends HTMLElement {
         // 패드는 그 선이 아니라 도장면을 짚어야 하므로 되돌려 겨눈다.
         _ikPad.copy(pt).addScaledVector(nrm, -PATH_LIFT);
         _ikBack.copy(_ikPad).addScaledVector(nrm, 0.12);
+        if (contact) {   // 작업 중 손목이 살짝 흔들린다(±1.2 cm, 1.3 Hz) — 진짜 폴리싱처럼 팔에 움직임이 보이게
+          const side = new THREE.Vector3(nrm.z, 0, -nrm.x); if (side.lengthSq() < 1e-6) side.set(1, 0, 0); side.normalize();
+          _ikBack.addScaledVector(side, 0.012 * Math.sin(t * 2 * Math.PI * 1.3 + ci * 2.1));
+        }
 
         // 작업 지점 빛: 표면 글로우(법선 정렬) + 손목→표면 빔. 접촉 중일 때만, 숨쉬듯 맥동
         {
@@ -2008,9 +2040,11 @@ class PolyTwinViewport extends HTMLElement {
         }
         if (over) setCellQ(cell, q0);
 
-        // 패드 자전 — 공정 중일 때만 RPM 대로 돈다
+        // 패드 자전 + 듀얼액션 궤도(4 mm, 5 Hz) — 공정 중일 때만. 어느 배속에서도 '작업 중' 이 보인다
         const rpm = p.rpm || 3000;
         cell.userData.padDisc.rotation.z += (rpm / 60) * Math.PI * 2 * dt;
+        const orb = contact ? 0.004 : 0.0, ph = t * 2 * Math.PI * 5;
+        cell.userData.padDisc.position.set(orb * Math.cos(ph), orb * Math.sin(ph), 0);
 
         // 지나간 자리를 무광에서 유광으로 — 빛이 닿는 표면 작업점(패드가 조금 떠도 광택은 정확히 그 자리)
         if (contact) this.stampPolish(_ikPad, (p.pad / 1000) / 2);
