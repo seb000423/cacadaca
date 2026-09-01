@@ -1514,7 +1514,7 @@ class PolyTwinViewport extends HTMLElement {
         cell.userData.s = Math.abs(d) > maxStep ? cur + Math.sign(d) * maxStep : sTarget;
       }
     }
-    if (jumped) this._rebuildGlossForProgress(p);                    // 그 시점까지 닦였어야 할 자리를 경로에서 다시 칠한다
+    if (jumped || this._waNeedGloss) { this._waNeedGloss = false; this._rebuildGlossForProgress(p); }   // 점프·레인 재구성 뒤: 그 시점까지의 광택 재계산
     this._liftFollow = true;
     this._animateLanes(dt, t, p, true);
     return;   // 광택은 패드가 실제로 지나간 자리만 (레인이 도장 면 전체를 덮으므로 100 % 에서 전부 닦인다)
@@ -1815,14 +1815,16 @@ class PolyTwinViewport extends HTMLElement {
     const f = THREE.MathUtils.clamp((this._params.force - 3) / 9, 0, 1);
     this.raster.material.opacity = 0.34 + f * 0.5;
     this.raster.material.color.setHSL(0.543, 0.40 + f * 0.22, 0.42 + f * 0.16);
-    if (this._live && p.carLift !== undefined) { this._params.carLift = prev.carLift; }   // 시뮬을 따르는 동안은 리프트 높이를 시뮬 값으로 고정
-    if (!this._live && p.carLift !== undefined && p.carLift !== prev.carLift) {
-      // 차를 올리면 표면 좌표가 통째로 바뀐다 — 필드부터 다시 굽는다
+    /* 관절 추종 모드(실제 Isaac 기록)만 리프트를 시뮬 값으로 고정. 그 외(대기·데모·진행률 재생)는 차를 올리면
+       표면 좌표가 통째로 바뀌므로 높이맵·레인·마스크·배치를 즉시 다시 굽는다 — 차는 떠 있는데 레인만 바닥에 남는 일이 없게 */
+    if (this._live && !this._liveWorkArea && p.carLift !== undefined) { this._params.carLift = prev.carLift; }
+    else if (p.carLift !== undefined && p.carLift !== prev.carLift) {
       this._applyCarLift();
       this._buildFields();
       this.initPolish();                // 차체가 움직이면 마스크 기준 상자도 다시
       this.rebuildPath();
       this.layoutCells();
+      if (this._liveWorkArea) this._waNeedGloss = true;   // 레인이 다시 생기면(비동기) 진행률까지의 광택도 재계산
     } else if (spacingChanged) {
       this.rebuildPath();
     }
@@ -1875,6 +1877,7 @@ class PolyTwinViewport extends HTMLElement {
       this._normals = normals;
       this.head.visible = this._flat.length > 0;
       this.assignWork();
+      if (this._liveWorkArea) this._waNeedGloss = true;   // 레인이 바뀌었다 — 다음 프레임에 진행률까지 광택 재계산
     });
   }
 
