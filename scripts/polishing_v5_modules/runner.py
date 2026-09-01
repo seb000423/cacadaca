@@ -467,6 +467,10 @@ def main(simulation_app, obj_name="car"):
         monitor_feed.event("C", f"공정 시작 — 로봇 {len(agents)}대, 정책 {'ON' if rl_registry is not None else 'OFF'}", "info", 0.0)
         print(f"[main] 모니터 피드 → {_feed_path}")
     _NAMES = {"C": "천장", "SL": "좌측", "SR": "우측"}
+    # 콘솔이 Isaac 월드(Z-up, 차 길이축 Y)를 자기 좌표계로 옮길 때 쓰는 기준: 차 점군 bbox
+    _feed_scene = {"up": "z", "long": "y",
+                   "car_min": [float(v) for v in np.min(raw_points, axis=0)] if len(raw_points) else [0, 0, 0],
+                   "car_max": [float(v) for v in np.max(raw_points, axis=0)] if len(raw_points) else [0, 0, 0]}
     _FEED_EVERY = max(1, int(os.environ.get("POLISH_MONITOR_FEED_EVERY", "6")))   # 6 스텝 ≈ 10 Hz (팔 동기화용)
     # 기록기(POLISH_RECORD=<sqlite 경로> 또는 1): UI 리플레이/지연 재생용 — 피드와 같은 주기로 프레임을 DB 에 쓴다
     recorder = None
@@ -485,10 +489,6 @@ def main(simulation_app, obj_name="car"):
             print(f"[main] 기록기 → {_rec_path}", flush=True)
         except Exception as _exc:
             print(f"[main] ⚠ 기록기 생성 실패(시뮬 계속): {_exc}", flush=True)
-    # 콘솔이 Isaac 월드(Z-up, 차 길이축 Y)를 자기 좌표계로 옮길 때 쓰는 기준: 차 점군 bbox
-    _feed_scene = {"up": "z", "long": "y",
-                   "car_min": [float(v) for v in np.min(raw_points, axis=0)] if len(raw_points) else [0, 0, 0],
-                   "car_max": [float(v) for v in np.max(raw_points, axis=0)] if len(raw_points) else [0, 0, 0]}
     def _feed_tick():
         if monitor_feed is None and recorder is None:
             return
