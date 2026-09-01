@@ -901,3 +901,8 @@ v5 의 접촉 상태기계(스파이크 소프트 리트랙트·암 가드·크�
 결론: 8셀 BO 는 분산이 커서 150셀 해석식 판정(2 분)을 직접 격자탐색 기준으로 쓰는 편이 낫다.
 다음: 이송 ×1.3/1.5/1.7 × 힘 ×1.0/1.15 미니 격자(순회 종료 후 CPU 여유 시) → 147 유지 최단 레시피 채택
 → PhysX 순회로 최종 확인.
+
+**중단·재개 절차 (2026-09-01 15:40)**: 순회는 배치마다 `car_cells.csv` 에 append 되므로 전원/세션
+중단 시 진행 중 배치(≤16셀, ~10분)만 유실. 재개: `setsid nohup bash learning/rl/robot/results/resume_sweep.sh &`
+(CSV 에 없는 첫 셀부터). 강곡률 재실행 옵션 패치는 `learning/rl/robot/results/apply_rerun_patch.py`
+(순회 종료 후 `python3` 로 적용 → `car_cells_robot.py --force_scale 0.7 --pad_radius 0.035 --tag ...`).
