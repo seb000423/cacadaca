@@ -1079,3 +1079,15 @@ DB 에서 프레임을 미리 받아 **보간하며 재생**한다(속도 0.5~16
 
 **검증**: 합성 기록 6 s(60 프레임·6 청크·7.4 KB) import → 청크/이벤트/런 API 정상. 워커 스트리밍 경로는 큐 작업 + `--fake`
 로 확인(아래 로그). Isaac 실기록은 재실행 종료 후 `POLISH_RECORD=1 bash scripts/run_v5_rl_view.sh --headless` 로 생성 예정.
+
+### 9.42 콘솔 설정 → Isaac 배치 반영 (UI 동기화 3단계) (2026-09-01 20:20)
+
+콘솔의 대수·이동 레일·텔레스코픽 리프트·패드 지름·차체 리프트가 v5 실행에 실제로 반영된다.
+- v5 env: `POLISH_ROBOTS`(활성 라벨, runner 가 RAIL_CONFIGS 를 필터), `POLISH_RAIL`(0 이면 측면 로봇이 가운데 정지 위치 하나만 —
+  레일 이동 없음), `POLISH_LIFT`(0 이면 측면 베이스 높이를 정지 위치 평균으로 고정), `POLISH_PAD_RADIUS`(m, 물리 패드·발자국 반경),
+  `POLISH_CAR_LIFT_Z`(차 리프트 m).
+- 매핑(워커 `layout_env` / 로컬 spawn 동일): 3대 → C,SL,SR (v5 고정 배치와 1:1), 2대 → SL,SR, 1대 → C; 패드 mm/2000; carLift 0.90 + mm/1000.
+- 서버 화이트리스트에 hasRail/hasLift/pad/carLift 추가, 콘솔 실행 요청에 포함. 로컬 spawn 도 `POLISH_RECORD` 로 기록을 남긴다
+  (`learning/ui_bridge/out/run_local_<ts>.sqlite` → 끝난 뒤 `POST /api/runs/import`).
+- 주의: 잔차 정책의 제거 모델(polytwin config) 패드 반경은 보정값 그대로 — 패드 지름을 크게 바꾸면 제거량 모델과 물리 패드가 어긋난다
+  (9.34 재실행의 소형 패드와 같은 경고). 검증은 Isaac 실행 시(재실행 종료 후).
