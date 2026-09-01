@@ -488,6 +488,8 @@ function envTexture(renderer) {
 // 자산은 문서 위치를 기준으로 절대화한다.
 const asset = (rel) => new URL(rel, location.href).href;
 const ARM_URL = asset('assets/models/robot_arm.opt.glb');
+/* 레일 폭 배율 — 받침판 폭을 여기서 역산하므로 레일 배치와 반드시 같은 값을 쓴다 */
+const RAIL_SX = 0.55;
 const LIFT_URL = asset('assets/models/lift.opt.glb');   // 텔레스코픽 컬럼 0.80 x 2.11 x 0.80 m
 const RAIL_URL = asset('assets/models/rail.opt.glb');   // 직선 레일, 원본 길이 22.86 m
 const MESHOPT_URL = asset('assets/vendor/meshopt_decoder.mjs');
@@ -999,6 +1001,16 @@ class PolyTwinViewport extends HTMLElement {
        차를 로봇 쪽으로 올리는 장치다. 차를 들면 사이드실이 어깨로 올라오고
        그만큼 루프는 도달 범위 밖으로 나간다. 그 맞바꿈이 이 슬라이더다. */
     const standY = Math.max(0.2, surfaceY - (p.carLift || 0) - 0.52);
+    /* 레일은 ㄷ자 채널이다 — 실측하면 양쪽 립 상면이 0.190, 가운데 바닥판은
+       0.025 다. 받침대는 립 상면(= 바운딩 박스 상면)에서 시작한다. 이걸 빼면
+       레일이 기둥 밑동을 관통하고 받침판이 레일 밖 바닥에 걸쳐 앉는다. */
+    const railH = (p.hasRail && this._railGeo) ? this._railGeo.userData.size.y : 0;
+    /* 받침판 폭 — 립 위에 걸쳐 앉아야 한다. 좁으면 립 사이 빈 곳 위에
+       떠 보이고, 넓으면 레일 밖으로 나간다. 레일 폭에서 역산하고 양옆
+       30 mm 씩 물린다. 레일이 없으면 원래 비율(0.62)을 쓴다. */
+    const standS = (p.hasRail && this._railGeo && this._liftGeo)
+      ? (this._railGeo.userData.size.x * RAIL_SX - 0.06) / this._liftGeo.userData.size.x
+      : 0.62;
 
     /** 받침대 — 리프트를 켜면 텔레스코픽 컬럼, 아니면 원통 기둥.
         리프트 지오메트리는 loadProp 에서 기둥축을 Y 로 세워 두었다. */
@@ -1008,7 +1020,7 @@ class PolyTwinViewport extends HTMLElement {
       let m;
       if (p.hasLift && this._liftGeo) {
         m = new THREE.Mesh(this._liftGeo, this.armMats.lift);
-        m.scale.set(0.62, height / this._liftGeo.userData.size.y, 0.62);
+        m.scale.set(standS, height / this._liftGeo.userData.size.y, standS);
       } else {
         m = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.17, 1, 20), this.armMats.dark);
         m.scale.y = height;
@@ -1033,8 +1045,13 @@ class PolyTwinViewport extends HTMLElement {
       cell.position.set(0, 0, 0);
       cell.position[CROSS] = mid[CROSS] + side * half;
       cell.position[LONG] = mid[LONG] + size[LONG] * SLOTS[i][1];
-      buildStand(cell, standY);
-      cell.userData.armRoot.position.y = standY;
+      /* 레일 위에 앉히고 기둥을 그만큼 줄인다 — 어깨 높이(standY)는 그대로다.
+         차체 리프트를 끝까지 올리면 standY 가 하한 0.2 에 걸리므로 기둥에도
+         하한을 둔다. 안 그러면 기둥이 0 이 되어 팔이 레일에 박힌다. */
+      const columnH = Math.max(0.2, standY - railH);
+      cell.position.y = railH;
+      buildStand(cell, columnH);
+      cell.userData.armRoot.position.y = columnH;
 
       /* 베이스는 레일과 나란히 둔다. 차체를 향하는 회전은 1축(선회 관절)이
          맡는다 — 셀 전체를 돌리면 받침대 볼트판이 레일과 어긋나 보인다.
@@ -1091,7 +1108,7 @@ class PolyTwinViewport extends HTMLElement {
         if (seen.has(c)) continue;
         seen.add(c);
         const r = new THREE.Mesh(this._railGeo, this.armMats.rail);
-        r.scale.set(0.55, 1, (l1 - l0) / this._railGeo.userData.size.z);
+        r.scale.set(RAIL_SX, 1, (l1 - l0) / this._railGeo.userData.size.z);
         if (LONG === 'x') r.rotation.y = Math.PI / 2;
         r.position.set(0, 0, 0);
         r.position[CROSS] = Number(c);
@@ -1105,7 +1122,7 @@ class PolyTwinViewport extends HTMLElement {
     if (p.hasLift && this._railGeo && this._liftGeo) {
       const beamY = surfaceY + 1.28;
       const beam = new THREE.Mesh(this._railGeo, this.armMats.rail);
-      beam.scale.set(0.55, 1, (l1 - l0) / this._railGeo.userData.size.z);
+      beam.scale.set(RAIL_SX, 1, (l1 - l0) / this._railGeo.userData.size.z);
       beam.rotation.x = Math.PI;                     // 레일 면을 아래로 향하게
       if (LONG === 'x') beam.rotation.y = Math.PI / 2;
       beam.position.set(0, beamY, 0);

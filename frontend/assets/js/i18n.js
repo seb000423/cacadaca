@@ -122,19 +122,20 @@
     '공정 보기': 'See the process',
 
     /* ── 랜딩 · 문장 하나 ── */
-    '40년의 감은 은퇴와 함께': 'Forty years of feel walks out',
+    '숙련공의 감은 은퇴와 함께': 'A veteran’s feel walks out',
     '사라진다.': 'with the retirement.',
-    '남는 건 결과물뿐이다. 그 결과를 만든 압력·속도·경로는 어디에도 기록되지 않는다. 아래부터가 그 값을 남기는 방법이다.':
-      'What is left is the finished part. The pressure, the speed and the path that made it are recorded nowhere. What follows is how those values get kept.',
+    '남는 건 결과물뿐이다. 그 결과를 만든 암묵지(압력·속도·경로)는 어디에도 기록되지 못했다. 아래부터가 그 암묵지를 남기는 방법이다.':
+      'What is left is the finished part. The tacit knowledge behind it — pressure, speed, path — was never recorded anywhere. What follows is how that knowledge gets kept.',
 
     /* ── 랜딩 · 01 공정 ── */
     '01 — 공정': '01 — Process',
-    '스캔 라인이 지나간 자리에서 무광이 유광으로 바뀐다': 'Matte turns glossy where the scan line has passed',
-    '로봇이 실제로 지나간 경로만 광택이 오른다. 덜 지난 면은 덜 지난 대로 남는다. 가공 결과를 눈으로 판정하지 않고 표면 상태로 읽는다.':
-      'Gloss rises only along the path the robot actually took. Faces it covered less stay that way. The result is not judged by eye but read off the surface.',
+    '잘 닦였는지는 눈이 아니라 표면 수치로 판정한다': 'A good finish is judged by surface numbers, not by eye',
+    '차체를 3,600칸 격자로 나눠 칸마다 표면을 잰다. 거칠기 Ra 0.20 µm 이하, 극단 거칠기 Rz 2.0 µm 이하, 잔여 클리어코트 35 µm 이상 — 한 칸이라도 벗어나면 합격이 아니다. 숙련공이 합격을 매길 때 보는 것도 이 수치다.':
+      'The body is split into a 3,600-cell grid and every cell is measured. Ra at or below 0.20 µm, Rz at or below 2.0 µm, at least 35 µm of clearcoat left — one cell outside the line and the run does not pass. These are the same numbers a veteran signs off on.',
     '차체 표면이 무광에서 유광으로 바뀌는 스캔 시연': 'Scan demo — the body surface going from matte to gloss',
     '진행': 'Progress',
     '거칠기 Ra': 'Roughness Ra',
+    '합격선': 'Pass line',
     '다시 재생': 'Replay',
     '이 브라우저에서는 3D 미리보기를 표시할 수 없다.': 'This browser cannot show the 3D preview.',
 

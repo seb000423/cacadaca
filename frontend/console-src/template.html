@@ -428,8 +428,8 @@ const VEHICLE_KEY = 'polytwin_vehicle';
 const readVehicle = () => {
   try {
     const id = localStorage.getItem(VEHICLE_KEY);
-    return CARS.some((c) => c.id === id) ? id : 'z4';
-  } catch (err) { return 'z4'; }
+    return CARS.some((c) => c.id === id) ? id : 'sonata';
+  } catch (err) { return 'sonata'; }
 };
 
 /* mark 는 assets/icons/ 의 제조사 마크다. 회색조·톤 정규화가 파일에 구워져 있다 —
@@ -438,10 +438,10 @@ const readVehicle = () => {
    파일이 없으면 alt="" 라 빈칸으로 떨어진다(깨진 이미지 아이콘 안 뜬다).
    누끼·톤 정규화 재현은 scripts/logo-mono.py, 원본은 assets/icons/_orig/. */
 const CARS = [
+  { id: 'sonata', name: '현대 쏘나타', mark: 'assets/icons/hyundai.png' },
   { id: 'z4', name: 'BMW Z4', mark: 'assets/icons/bmw.png' },
   { id: 'coupe', name: '벤츠 쿠페', mark: 'assets/icons/benz.png' },
   { id: 'sf90', name: '페라리 SF90', mark: 'assets/icons/ferrari.png' },
-  { id: 'sonata', name: '현대 쏘나타', mark: 'assets/icons/hyundai.png' },
 ];
 
 // 광택기 두 종류 — 「자동차 광택」 2. 광택의 종류.

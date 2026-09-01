@@ -394,17 +394,17 @@ const SEEK = Math.max(0, Math.min(1,
    ?vehicle= 이 있으면 그게 우선한다 — 링크로 특정 차종을 열 때.
    ① 이 localStorage 에 쓰는 키와 같아야 한다 (console-src/template.html). */
 const CARS = {
+  sonata:{ file: 'sonata',  name: '현대 쏘나타' },
   z4:    { file: 'car',     name: 'BMW Z4' },
   coupe: { file: 'benz',    name: '벤츠 쿠페' },
   sf90:  { file: 'ferrari', name: '페라리 SF90' },
-  sonata:{ file: 'sonata',  name: '현대 쏘나타' },
 };
 const CAR = (() => {
   const q = new URLSearchParams(location.search).get('vehicle');
   if (CARS[q]) return CARS[q];
   // 프라이빗 모드에서는 읽기만 해도 던진다
-  try { return CARS[localStorage.getItem('polytwin_vehicle')] || CARS.z4; }
-  catch (err) { return CARS.z4; }
+  try { return CARS[localStorage.getItem('polytwin_vehicle')] || CARS.sonata; }
+  catch (err) { return CARS.sonata; }
 })();
 /* 3D 가 뜨기 전에 적는다 — WebGL 이 막힌 브라우저에서도 차종은 맞아야 한다.
    i18n-app.js 의 옵서버가 뒤이어 EN 으로 바꾼다 */
@@ -593,9 +593,12 @@ async function boot() {
   const liftBox = new THREE.Box3().setFromObject(liftSrc);
   const liftSize = liftBox.getSize(new THREE.Vector3());
 
-  /* 리프트 받침이 레일 상면보다 넓어 옆으로 삐져나온다 — 레일 폭 안에
-     들어오도록 균일 축소한다. 여유 0.74 는 받침 양옆에 레일이 보이는 폭. */
-  const LIFT_S = Math.min(1, (railSize.x * 0.74) / Math.max(liftSize.x, liftSize.z));
+  /* 받침판(0.80 x 0.80)은 레일 폭(0.89) 안에 들어가지만 그것만으로는 부족하다.
+     기본 카메라 앙각이 19.5 도라 레일 상면보다 높은 것은 전부 화면상 앞으로
+     밀려 나온다 — 받침판 두께 하나만으로도 레일 가장자리를 넘는다.
+     실제로 렌더해 보면 0.66 에서 가장자리에 닿고 그 아래에서 안으로 들어온다.
+     0.60 은 여유를 둔 값. 높이 2.11 -> 1.27 m, 받침판 0.80 -> 0.48 m. */
+  const LIFT_S = 0.60;
   const LIFT_H = liftSize.y * LIFT_S;            // 축소 후 상면 = 팔 어깨 높이
 
   const parts = await loadArmGeometry('./assets/models/robot_arm.opt.glb');
@@ -648,7 +651,6 @@ async function boot() {
   rimR.position.set(sph.center.x + r * 2.2, sph.center.y + r * 0.5, sph.center.z - r * 1.5);
   scene.fog = new THREE.FogExp2(new THREE.Color(COL.void).getHex(), 0.02);
 
-  window.__dbg = { THREE, cell, RAIL_X, RAIL_TOP, railSize: railSize.toArray(), liftSize: liftSize.toArray(), LIFT_S, LIFT_H, k, carW };
   buildCams();
   setCam(0);
   resize();
@@ -999,6 +1001,6 @@ tickData(S.t / CYCLE, 0.25);
 <!-- 앱 화면 사전이 먼저 실려야 i18n.js 가 집어 간다.
      언어는 localStorage 로 랜딩에서 넘어온다 — ?lang= 이 없어도 EN 이 유지된다. -->
 <script src="assets/js/i18n-app.js?v=2026-09-01d"></script>
-<script src="assets/js/i18n.js?v=2026-09-01"></script>
+<script src="assets/js/i18n.js?v=2026-09-01b"></script>
 </body>
 </html>

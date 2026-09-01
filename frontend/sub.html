@@ -266,7 +266,7 @@ main { padding-top: var(--header-h); }
   letter-spacing: -0.02em; color: var(--text-hi); text-wrap: balance;
   max-width: 24ch;
 }
-.page-head .lede { max-width: 56ch; font-size: clamp(16px, 1.7vw, 19px); color: var(--text-mid); text-wrap: pretty; text-align: justify; }
+.page-head .lede { max-width: 56ch; font-size: clamp(16px, 1.7vw, 19px); color: var(--text-mid); text-wrap: pretty; }
 
 /* ══ 프로세스 — 번호 붙은 교차 배치 ══ */
 .proc { border-top: 1px solid var(--line); }
@@ -298,20 +298,14 @@ main { padding-top: var(--header-h); }
 .p-txt p { font-size: 17px; color: var(--text-mid); }
 .p-txt ul { margin-top: 18px; display: grid; gap: 9px; }
 .p-txt li { position: relative; padding-inline-start: 18px; font-size: 16px; color: var(--text-mid); }
-/* ── 양쪽 정렬 ─────────────────────────────────────────────
-   body 의 word-break: keep-all 때문에 줄바꿈이 어절 자리에서만 일어난다.
-   30ch(296px) 짜리 좁은 단에서는 줄 끝이 최대 45px — 단 폭의 15% 까지
-   들쭉날쭉해진다. 이 단이 오른쪽에 오는 짝수 단계에서는 그 rag 이
-   페이지의 오른쪽 가장자리가 되고, 위아래 도해 상자의 곧은 모서리와
-   나란히 놓여 특히 눈에 띈다.
+/* ── 양쪽 정렬을 쓰지 않는다 ────────────────────────────────
+   한때 30ch 좁은 단 문단 하나를 재서 "여백 15% 까지는 안 띈다" 로
+   일반화했는데, 문장마다 줄당 어절 수가 달라 그 값이 다른 문단엔
+   안 맞았다 (예: '시장과 결제 경로' 03단계, 짧은 어절이 줄 앞을
+   차지하면 남는 공백이 몇 안 되는 자리에 몰려 들쭉날쭉해진다).
+   keep-all + justify 조합은 어절 수가 적을수록 깨지므로, 문단마다
+   재는 대신 그냥 양쪽 정렬을 쓰지 않는다. ── */
 
-   실측(02 규격 기준선 문단): 남는 폭이 1.9 / 22.1 / 3.3 / 17.4 / 45.0px.
-   공백 기본 폭이 17px 에서 4.1px 이므로 늘어나는 양은 줄당
-   +0.3 / +3.7 / +0.5 / +3.5 / +11.3px 이다. 넷은 눈에 안 띄고
-   한 줄만 느슨해진다 — 그 대신 양 끝이 모두 떨어진다.
-   ⚠ 영문은 제외한다. 좁은 단에서 영문을 양쪽 정렬하면 공백이 크게
-     벌어져 줄 사이에 흰 강(river)이 생긴다. 아래에서 되돌린다. ── */
-.p-txt p, .p-txt li { text-align: justify; }
 .p-txt li::before {
   content: ""; position: absolute; inset-inline-start: 0; top: 10px;
   width: 6px; height: 1px; background: var(--accent-dim);
@@ -535,6 +529,75 @@ html[lang="en"] .p-fig figcaption { text-transform: none; letter-spacing: 0.02em
 /* 담당 칩 — 점 + 글자. 색만으로 알리지 않는다 */
 .st.s-man { color: var(--text-lo); border-color: var(--line-hi); }
 .st.s-sys { color: var(--accent); border-color: var(--accent); }
+
+/* ── 로봇 3D ── Physical AI 는 로봇이 물리를 다루는 이야기다 ──
+   이 페이지의 다른 도해는 전부 정지한 SVG·마크업이다. 여기만 실물
+   모델을 띄우는 이유는 "물리를 다룬다"가 정지 그림으로는 증명되지
+   않기 때문이다. 캔버스 높이는 고정하지 않고 비율로 묶는다 —
+   높이를 px 로 박으면 좁은 화면에서 로봇이 잘린다. */
+.rb { display: grid; gap: 12px; }
+.rb__stage {
+  position: relative; aspect-ratio: 4 / 3;
+  background: var(--bg-void); border: 1px solid var(--line);
+  overflow: hidden;
+}
+@media (min-width: 640px) { .rb__stage { aspect-ratio: 16 / 10; } }
+.rb__stage canvas { display: block; width: 100%; height: 100%; }
+/* 로드 전·실패 시 자리를 지키는 글자. 캔버스가 뜨면 JS 가 지운다 */
+.rb__ph {
+  position: absolute; inset: 0; display: grid; place-content: center; gap: 6px;
+  text-align: center; color: var(--text-lo); font-size: 15px;
+}
+.rb__ph b { color: var(--text-mid); font-weight: 500; font-size: 16px; }
+/* 계측값 띠 — 로봇 아래에 붙여 3D 가 장식이 아님을 알린다 */
+.rb__hud {
+  display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1px;
+  background: var(--line); border: 1px solid var(--line);
+}
+@media (min-width: 560px) { .rb__hud { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+.rb__hud > div { background: var(--bg-base); padding: 10px 14px; display: grid; gap: 3px; }
+.rb__v {
+  font-size: 20px; font-weight: 300; line-height: 1; letter-spacing: -0.02em;
+  color: var(--text-hi); font-variant-numeric: tabular-nums;
+}
+.rb__v small { font-size: 14px; font-weight: 500; color: var(--text-lo); margin-inline-start: 4px; }
+.rb__k { font-size: 14px; color: var(--text-lo); word-break: keep-all; }
+
+/* ── 정책 정합 ── 공고가 요구하는 것과 우리가 이미 가진 것을 마주 세운다 ──
+   좌: 정책이 내건 조건 / 우: 우리가 대는 근거. 가운데 선이 대응을 만든다.
+   두 칸을 같은 격자에 두는 이유는 눈이 가로로 짝을 지어 읽게 하기 위해서다 */
+.pf { display: grid; gap: 1px; background: var(--line); border: 1px solid var(--line); }
+.pf__hd, .pf__r {
+  display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 1px; background: var(--line);
+}
+.pf__hd > *, .pf__r > * { background: var(--bg-base); padding: 12px 14px; }
+.pf__hd > * {
+  background: var(--bg-panel);
+  font-size: 13px; font-weight: 500; letter-spacing: 0.08em; color: var(--text-lo);
+}
+/* 우리 쪽 칸만 액센트로 두른다 — 대응의 방향을 색이 알린다 */
+.pf__r > :last-child { border-inline-start: 2px solid var(--accent); background: var(--bg-panel); }
+.pf__k { font-size: 16px; font-weight: 500; color: var(--text-mid); word-break: keep-all; }
+.pf__r > :last-child .pf__k { color: var(--text-hi); }
+.pf__d { margin-top: 3px; font-size: 15px; color: var(--text-lo); word-break: keep-all; }
+.pf__n {
+  font-size: 15px; color: var(--text-lo); font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+}
+.pf__n b { color: var(--text-hi); font-weight: 500; }
+/* 합계 줄 — 겹치는 지점이 몇 개인지 세어 준다 */
+.pf__sum { display: flex; align-items: baseline; gap: 9px; padding: 12px 14px; background: var(--bg-base); }
+.pf__sum b {
+  font-size: 22px; font-weight: 300; letter-spacing: -0.03em; color: var(--accent);
+  font-variant-numeric: tabular-nums;
+}
+.pf__sum span { font-size: 15px; color: var(--text-lo); word-break: keep-all; }
+@media (max-width: 720px) {
+  /* 좁아지면 짝을 세로로 쌓는다. 우리 쪽 칸의 왼쪽 선이 짝의 아래쪽임을 알린다 */
+  .pf__hd { display: none; }
+  .pf__r { grid-template-columns: minmax(0, 1fr); }
+}
 
 /* ── 도장면 단면 ── 연마가 되돌릴 수 있는 층은 하나뿐이다 ── */
 .pl { display: grid; gap: 12px; }
@@ -837,7 +900,7 @@ html[lang="en"] .lead figcaption { text-transform: none; letter-spacing: 0.02em;
 .post { display: grid; gap: 7px; padding: 20px 18px; background: var(--bg-base); }
 .post time { font-size: 14px; font-weight: 500; letter-spacing: 0.08em; color: var(--text-lo); font-variant-numeric: tabular-nums; }
 .post h2 { font-size: 17px; font-weight: 700; color: var(--text-hi); word-break: keep-all; }
-.post p { font-size: 16px; line-height: 1.65; color: var(--text-mid); max-width: 74ch; word-break: keep-all; text-align: justify; }
+.post p { font-size: 16px; line-height: 1.65; color: var(--text-mid); max-width: 74ch; word-break: keep-all; }
 
 /* ── 문답 ── */
 .qa { display: grid; gap: 1px; background: var(--line); border: 1px solid var(--line); margin-block: clamp(24px, 4vh, 44px); }
@@ -851,7 +914,7 @@ html[lang="en"] .lead figcaption { text-transform: none; letter-spacing: 0.02em;
 .qa summary::-webkit-details-marker { display: none; }
 .qa summary::before { content: "Q"; color: var(--accent); font-weight: 700; }
 .qa summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-.qa__a { padding: 0 16px 16px 47px; font-size: 16px; line-height: 1.65; color: var(--text-mid); max-width: 74ch; word-break: keep-all; text-align: justify; }
+.qa__a { padding: 0 16px 16px 47px; font-size: 16px; line-height: 1.65; color: var(--text-mid); max-width: 74ch; word-break: keep-all; }
 
 /* ⚠ 언어별 본문 폭 — ch 는 숫자 0 의 폭이라 두 언어에서 같은 px 를 낸다.
    Pretendard 16px 기준 74ch = 688px 이고, 그 안에 들어가는 글자 수는
@@ -1216,6 +1279,76 @@ const FIGS = {
             `<tr><th scope="row">${String(i + 1).padStart(2, '0')}</th><td>${t}</td><td>${KO[who]}</td></tr>`).join('')}
           </tbody>
         </table>
+      </div>`;
+  },
+
+  /* ── 로봇 3D ── 실제 배포 모델을 그대로 띄운다 ──
+     assets/models/robot_arm.opt.glb (Doosan M0609, meshopt 압축 596KB).
+     콘솔 화면이 쓰는 것과 같은 파일이라 자산이 늘지 않는다.
+     조명·톤매핑은 console-src/viewport.js 에서 검증된 값을 그대로 옮겼다 —
+     키 1 + 좌우 림 2, ACES, PMREM 환경맵. 빼면 금속이 금속이 아니다. */
+  robot3d: () => `
+      <div class="fg">
+        <div class="fg__hd">
+          <p class="fg__t">힘을 만드는 쪽은 결국 이 팔이다</p>
+          <p class="fg__n">Doosan M0609</p>
+        </div>
+        <div class="rb">
+          <div class="rb__stage" id="rb-stage">
+            <p class="rb__ph" id="rb-ph"><b>로봇 팔 불러오는 중</b><span>Doosan M0609 · 6축</span></p>
+          </div>
+          <div class="rb__hud">
+            <div><span class="rb__v">6<small>축</small></span><span class="rb__k">회전 관절</span></div>
+            <div><span class="rb__v">1.5<small>N</small></span><span class="rb__k">목표 접촉력</span></div>
+            <div><span class="rb__v">813<small>개</small></span><span class="rb__k">경로 웨이포인트</span></div>
+            <div><span class="rb__v">3<small>대</small></span><span class="rb__k">동시 제어 — 천장·측면·레일</span></div>
+          </div>
+        </div>
+      </div>`,
+
+  /* ── 정책 정합 ── 2026 정부 AI 예산 기조와 우리 단계의 대응 ──
+     예산 숫자만 늘어놓으면 "그래서 우리랑 무슨 상관"이 남는다. 공고가
+     내건 조건과 우리가 이미 가진 근거를 가로로 짝지어 그 답을 그림이
+     대신 하게 한다. 금액 출처는 TODO_사이트_누락콘텐츠_2026-08-30.md. */
+  policyfit: () => {
+    /* [정책 축, 금액, 공고가 요구하는 것] / [우리 대응, 근거, 해당 단계] */
+    const M = [
+      [['산업부 M.AX', '1조 1,000억 원 · 2배 확대', '제조 공정에 AI 를 넣어 실증할 것'],
+       ['재질별 파라미터 프로파일', '차체에서 세운 절차를 유리·금형으로 이식', '2단계']],
+      [['중기부 제조AI 스마트공장', '800억 원 · 400개 과제', '중소 제조 현장에 적용할 것'],
+       ['숙련공 실측 데이터 연계', '검증 리포트 250만 원 — 지원 한도 안', '3단계']],
+      [['피지컬 AI 정책금융', '약 16조 원', '로봇이 물리 세계를 다룰 것'],
+       ['접촉력·마찰까지 계산하는 힘 제어', '목표 1.5 N 추종 · 과압 0회', '1단계 · 완료']],
+    ];
+    return `
+      <div class="fg">
+        <div class="fg__hd">
+          <p class="fg__t">공고가 내건 조건과 우리가 이미 가진 것이 같은 자리에 있다</p>
+          <p class="fg__n">Policy Fit</p>
+        </div>
+        <div class="pf">
+          <div class="pf__hd" aria-hidden="true">
+            <span>2026 정책 기조</span>
+            <span>폴리트윈이 대는 것</span>
+          </div>
+          ${M.map(([[pol, won, ask], [ours, why, stage]]) => `
+            <div class="pf__r">
+              <div>
+                <p class="pf__k">${pol}</p>
+                <p class="pf__n"><b>${won}</b></p>
+                <p class="pf__d">${ask}</p>
+              </div>
+              <div>
+                <p class="pf__k">${ours}</p>
+                <p class="pf__n">${stage}</p>
+                <p class="pf__d">${why}</p>
+              </div>
+            </div>`).join('')}
+          <div class="pf__sum">
+            <b>3 / 3</b>
+            <span>세 축 모두 우리가 이미 만든 것 또는 로드맵에 올린 것과 맞물린다</span>
+          </div>
+        </div>
       </div>`;
   },
 
@@ -1671,9 +1804,9 @@ const FIGS = {
   roadmap4: () => {
     const S = [
       ['1단계', '자동차 차체 연마', '스캔 → 경로 → 힘 제어 → 리포트 통합 — 웨이포인트 813개 · 접촉력 3–8 N 유지', 'done', '구현 완료'],
-      ['2단계', '유리 · 위생도기 · 케이스 · 금형', '재질별 Preston 계수 k 를 시험 가공으로 캘리브레이션한 뒤 파라미터 프로파일로 등록', 'open', '본선 구현'],
-      ['3단계', '숙련공 실측 데이터 연계', '모션캡처 실측 / Isaac Sim 대조 검증 — 재현 오차가 허용 범위에 수렴해야 성립', 'open', '본선 구현'],
-      ['4단계', '적응형 자율 연마 · 타 공정', '표면 상태 입력 → 파라미터 자동 조정 — 디버링 · 샌딩 · 도장 · 실링으로 확장', 'open', '확장 목표'],
+      ['2단계', '유리 · 위생도기 · 케이스 · 금형', '재질별 Preston 계수 k 를 시험 가공으로 캘리브레이션한 뒤 파라미터 프로파일로 등록', 'open', '개발 예정'],
+      ['3단계', '숙련공 실측 데이터 연계', '모션캡처 실측 / Isaac Sim 대조 검증 — 재현 오차가 허용 범위에 수렴해야 성립', 'open', '개발 예정'],
+      ['4단계', '적응형 자율 연마 · 타 공정', '표면 상태 입력 → 파라미터 자동 조정 — 디버링 · 샌딩 · 도장 · 실링으로 확장', 'open', '개발 예정'],
     ];
     return `
       <div class="fg">
@@ -2225,8 +2358,6 @@ const PAGES = {
   goal: {
     group: '기업소개', title: '숙련공의 노하우를 물리량으로 남긴다',
     lede: '"이 정도 힘으로 눌러" 는 기록이 아니다. 접촉력·이송속도·공구 자세·체류 시간 — 노하우의 실체는 측정할 수 있는 물리량이고, 디지털 트윈에서는 그 값이 남는다.',
-    frame: [FIG('cagr', '두 시장의 연평균 성장률 — 로봇 하드웨어 11.7% 대 검증 소프트웨어 37.6%'),
-             FIG('market', '시장 규모 · 2026년 기준 — TAM 31.8억 / SAM 3.5억 / SOM 25만 달러')],
     steps: [
       { t: '현장의 기록은 말로만 남는다', d: '사람이 연마할 때는 센서를 부착한 채 작업하지 않는다. 작업이 끝난 뒤 남는 측정값은 0개다.',
         b: ['"손끝에 걸리는 느낌이 사라질 때까지"', '"곡면에서는 살살, 평면은 쫙"', '작업 종료 후 남는 물리량 0개'],
@@ -2247,8 +2378,8 @@ const PAGES = {
     lede: '팀 CACADACA. 넷이서 스캔부터 힘 제어까지, 한 공정을 끝까지 파고든다.',
     frame: IMG('wide_docs.webp', '남는 것은 문서와 값이다 — 팀 CACADACA'),
     steps: [
-      { t: '기록되지 않으면 사라진다', d: '40년의 감은 은퇴와 함께 사라진다. 우리는 결과물이 아니라 결과를 만든 값을 남기는 쪽을 택했다.',
-        b: ['모든 공정 이벤트를 타임스탬프로 기록', '전 스텝 폴리싱 로깅 17열 체계·CSV 내보내기'],
+      { t: '고객사의 공정은 고객사의 것이다', d: '같은 실행에서 나온 로그라도 성격이 다르다. 언제 무엇을 했는지는 나눌 수 있지만, 어떤 각도로 얼마의 힘을 줬는지는 공정 그 자체다. 저장하는 단계에서부터 둘을 갈라 놓는다.',
+        b: ['이벤트 로그는 공유, 접촉력·관절각은 분리 보관', '조회·설정·제어 3단계 권한 · ISO 27001 기준 대응'],
         f: FIG('logsplit', '로그 이원화 설계 — 공유 가능 데이터와 고객사 자산') },
       { t: '검증 없이는 주장하지 않는다', d: '시뮬레이션 파라미터는 Ansys 물리 환경과 교차 검증하고, 스캔→경로→폴리싱 엔드투엔드를 헤드리스로 교차검증한다.',
         b: ['Ansys FEA 교차 검증 파이프라인', '엔드투엔드 통합 실행 검증'],
@@ -2264,7 +2395,7 @@ const PAGES = {
   },
   results: {
     group: '기업소개', title: '우리의 성과',
-    lede: '2026년 7–9월, 대표 항목 22개 중 완료 12 · 진행 5 · 예정 5. 수치는 전부 실측이다.',
+    lede: '사람이 연마하고 나면 남는 측정값은 0개다. 같은 공정을 트윈에서 돌려 17열을 남겼다 — 정상 구간 접촉력 변동계수 3.23%, 목표대역 체류 100%, 과압 0회. 합성 숙련공 기준선(9.96%)의 약 1/3이다. 2026년 7–9월, 대표 항목 22개 중 완료 12 · 진행 5 · 예정 5. 수치는 전부 실측이다.',
     frame: IMG('wide_result.webp', '결과 분석 — 도달 영역 · 예상 공정 시간 · 권장 파라미터'),
     stats: [
       ['813', '개', '자동 생성 웨이포인트'],
@@ -2300,18 +2431,21 @@ const PAGES = {
       ['1/40', '', '상용 OLP 라이선스 대비 도입 비용'],
       ['82', '%', '품종 전환 연 4회 기준 연간 운영비 절감'],
     ],
-    frame: FIG('pricing3', '기업 규모별 수익 모델 — 1차 유료 고객은 중견기업 월 구독 · 기획서 4.3 [표 7]'),
+    frame: FIG('pricing3', ''),
     steps: [
       { t: '가격은 상향식으로 산정했다', d: '인건비·연산비·개발비 상각을 공표 통계 기준으로 합산했다. 설비투자 대비 0.2%라는 비율은 목표가 아니라 이 합산의 결과다.',
         b: ['특급기술자 일 단가 — 국가승인통계 제372001호 (2026년 적용)', '도입 1개월 내 투자 회수 — 품종 전환 연 4회 기준'],
-        f: FIG('calc250', '검증 리포트 1건 판매가 산정 — 기획서 4.3 [표 8]') },
+        f: FIG('calc250', '') },
       { t: '힘 제어 검증은 폴리트윈만 지원한다', d: '상용 OLP 는 어디로 갈지(경로)는 다루지만 얼마나 누를지(힘)는 다루지 않는다. 연마는 접촉력이 품질을 결정하는 공정이라, 이 지점이 기존 솔루션의 공백이다.',
         b: ['힘 제어 검증 포함 + 상용 라이선스 대비 약 1/40 가격', '적용 범위를 중소기업까지 확장'],
-        f: FIG('compete', '유사 서비스 비교 — 기획서 4.3 [표 10]') },
+        f: FIG('compete', '') },
       { t: '시장과 결제 경로', d: '하드웨어(로봇)보다 검증 소프트웨어 레이어가 빠르게 큰다. 국내에서는 스마트공장 구축 지원사업이 실질적 결제 수단이고, 우리 가격은 그 예산 한도 안에 여유 있게 들어간다.',
         b: ['정부형 지원 최대 2억 원 · 상생형 AI 트랙 최대 5억 원', '구독·리포트 모두 지원사업 예산 한도 이내', '설비 발주 전에 검증부터 — 영업 메시지도 이 한 줄이다'],
-        f: FIG('market', '시장 규모 — 출처: Fortune Business Insights(2026) · Allied Market Research(2026)') },
+        f: FIG('cagr', '두 시장의 연평균 성장률 — 로봇 하드웨어 11.7% 대 검증 소프트웨어 37.6%') },
     ],
+    /* 성장률(단계 03)을 읽은 뒤에 규모를 본다. 순서가 뒤집히면
+       "얼마짜리 시장인가" 가 "왜 이 레이어인가" 보다 먼저 나온다 */
+    detail: [FIG('market', '시장 규모 — 출처: Fortune Business Insights(2026) · Allied Market Research(2026)')],
   },
 
   /* ── SOLUTION ────────────────────────────── */
@@ -2413,14 +2547,14 @@ const PAGES = {
   roadmap: {
     group: 'SOLUTION', title: '확장 로드맵',
     lede: '이식되는 것은 결과물이 아니라 절차다. 계측 → 재현 → 판정 3단계가 성립하면 대상 공정·설비·품목은 교체할 수 있다. 곡면 차체는 접촉 공정 중 가장 까다로운 대상이라, 여기서 세운 절차는 평판·저접촉 공정으로 갈수록 요구 조건이 완화된다.',
-    frame: FIG('roadmap4', '확장 로드맵 4단계 — 기획서 4.5 [표 4] · 차체는 곡면 난이도가 높아 절차 검증용 기준 대상으로 유지'),
+    frame: FIG('roadmap4', ''),
     steps: [
       { t: '다음 단계는 이미 목록에 있다', d: '현직 광택 숙련공 인터뷰(2026-08-28)에서 확보한 항목이 강화학습 확장 과제로 등록돼 있다. 예산은 클리어코트 한 층의 두께다.',
         b: ['도막 예산 — 클리어코트 50–70 µm · 1회 제거 약 5 µm · 누적 40 µm 초과 경고', '온도(마찰열) 상태변수 — 낮으면 연마가 안 되고 100 °C 에 가까우면 도장이 상한다', 'RPM 을 고정값(3,000)에서 가변 행동변수로 · 엣지 구간 규칙 분리'],
         f: FIG('paint', '도장면 단면 — 확장 과제의 예산은 클리어코트 한 층 안에 있다') },
-      { t: '정책 흐름과 겹친다', d: '2026년 정부 AI 예산은 9.9조 원으로 전년의 3배다. 폴리트윈은 AI 팩토리와 AI 로봇 두 축이 겹치는 뿌리산업 과제 구간에 있다.',
-        b: ['산업부 M.AX 1조 1,000억 원 — 2배 확대', '중기부 제조AI 특화 스마트공장 800억 원 · 400개 과제', '피지컬 AI 정책금융 약 16조 원'],
-        f: FIG('loop', '가상 작업장 파이프라인 — 같은 절차가 공정을 갈아끼운다') },
+      { t: '2·3·4단계를 굴릴 재원이 밖에 있다', d: '확장 단계는 재질 시험 가공과 모션캡처 실측을 요구한다 — 우리 자체 예산으로는 감당할 수 없는 항목이다. 2026년 정부 AI 예산이 9.9조 원으로 전년의 3배가 되면서, 그 비용을 댈 과제 공고가 우리가 가려는 방향과 같은 곳을 겨냥하고 있다.',
+        b: ['산업부 M.AX 1조 1,000억 원(2배 확대) — 2단계 재질별 프로파일 확장이 여기 걸린다', '중기부 제조AI 특화 스마트공장 800억 원 · 400개 과제 — 3단계 숙련공 실측 연계의 현장 확보처', '피지컬 AI 정책금융 약 16조 원 — 4단계 타 공정 확장의 자금 경로'],
+        f: FIG('policyfit', '') },
     ],
   },
 
@@ -2430,9 +2564,9 @@ const PAGES = {
     lede: '움직임만 흉내 내는 시뮬레이션이 아니라, 접촉력·마찰·제거량까지 계산하는 물리 기반 가상 작업장이다. NVIDIA Isaac Sim 위에서 ROS 2 로 명령과 측정값이 실시간으로 오간다.',
     frame: IMG('wide_system.webp', '전체 구성 — 작업자 Web UI 와 가상 작업장'),
     steps: [
-      { t: '물리 엔진 위의 작업장', d: '실제와 같은 물리 조건으로 차체·로봇·연마 도구를 재현한다. 명령과 측정값은 ROS 2 통신망으로 실시간 왕복한다.',
-        b: ['NVIDIA Isaac Sim 물리 환경', 'ROS 2 실시간 통신'],
-        f: FIG('loop', '가상 작업장 파이프라인 — Isaac Sim 위에서 도는 10단계') },
+      { t: '물리 엔진 위의 작업장', d: '실제와 같은 물리 조건으로 차체·로봇·연마 도구를 재현한다. 6축 로봇 팔은 실제 Doosan M0609 의 링크 길이를 그대로 쓰고, 명령과 측정값은 ROS 2 통신망으로 실시간 왕복한다.',
+        b: ['NVIDIA Isaac Sim 물리 환경', 'ROS 2 실시간 통신', '실제 로봇 형상 그대로 — 아래 모델은 시뮬레이터가 쓰는 것과 같은 파일이다'],
+        f: FIG('robot3d', '') },
       { t: '접촉을 수식으로 다룬다', d: '연마 패드와 표면의 접촉은 가상 스프링·감쇠 모델로, 제거량은 Preston 방정식으로 계산한다. 회전 속도·이동 속도·누르는 힘이 전부 변수다.',
         b: ['순응 접촉 모델 F = k·침투 – c·속도', 'Preston 제거량 MRR = k<sub>p</sub>·P·V'],
         f: FIG('preston', '시뮬레이션 적용 — Preston 방정식') },
@@ -2504,17 +2638,17 @@ const PAGES = {
       ['12.3', '%', 'ISO/TS 15066 최저 한계(안면 65 N) 대비 상한'],
       ['5', '종', '실행 전 차단 항목'],
     ],
-    frame: FIG('safegate', '실행 전 안전 게이트 3단 — 기획서 4.1 [그림 16]'),
+    frame: FIG('safegate', ''),
     steps: [
       { t: '리스크 5종을 실행 전에 차단한다', d: '기존 방식의 위험은 전부 실물에서 발견됐다 — 발견 시점에 이미 노출된 뒤다. 폴리트윈은 다섯 항목 모두를 실행 전 검증으로 옮긴다.',
         b: ['도입 기업은 이 판정 결과를 ISO/TS 15066 위험성 평가의 사전 검증 자료로 그대로 제출', '검증 안 된 구간은 통과가 아니라 미검증으로 표기'],
-        f: FIG('risk5', '안전 리스크 대응 — 기존 방식 대비 실행 전 차단 항목 5종 · 기획서 4.1 [표 5]') },
+        f: FIG('risk5', '') },
       { t: '규격 기준선 — ISO/TS 15066', d: '연마는 사람과 같은 공간에서 이뤄지는 협동로봇 공정이다. 정상 작업 대역 3–8 N 은 규격이 정한 인체 허용 한계에서 한 자릿수 배율만큼 떨어져 있다. 실제 위험은 이상 상황 — 과압입·경로 이탈·급가속 — 이고, 그것이 앞의 게이트가 걸러내는 대상이다.',
         b: ['인체 29개 부위별 한계 — 안면 65 N · 손 140 N · 하완 160 N', '숙련공이 겪던 사고 — 케이블 말림·마찰 화상 — 는 셀 분리로 구조적으로 제거 (인터뷰 채록 2026-08-28)'],
         f: FIG('iso15066', '규격 허용 한계 대비 연마 접촉력 — ISO/TS 15066:2016 Annex A') },
       { t: '멈춰도 이어서 간다', d: '오류는 없앨 수 없으니 복구를 설계한다. 로그를 단계별로 분리 저장해 중단 지점부터 재개하고, 제어와 시각화 통신을 분리해 영상 오류가 로봇 제어를 건드리지 못하게 한다.',
         b: ['스캔 / 경로 생성 / 실행 로그 단계별 분리 저장', '제어 통신 / 시각화 통신 분리'],
-        f: FIG('recover', '시스템 오류 대비 및 복구 — 제출본 3.5') },
+        f: FIG('recover', '') },
     ],
   },
 
@@ -2640,14 +2774,15 @@ const PAGES = {
   const band = (src, label) => {
     if (!src) return '';
     return `<section class="frame" aria-label="${label}">` + [].concat(src).map((f) => {
-      const cap = `<figcaption>${esc(f.cap)}</figcaption>`;
+      /* cap 이 비면 캡션 줄을 아예 만들지 않는다 — 도해가 스스로 제목을 달고 있는 경우다 */
+      const cap = f.cap ? `<figcaption>${esc(f.cap)}</figcaption>` : '';
       if (f.fig) return `<figure class="p-fig p-fig--wide">${FIGS[f.fig]()}${cap}</figure>`;
       if (f.vid) return `<figure class="p-fig p-fig--wide">${videoTag(f, '')}${cap}</figure>`;
       const [w, h] = f.dim || [1200, 800];
       /* 세로가 긴 그림까지 띠 폭을 다 주면 좌우가 전부 레터박스가 된다 */
       const tall = h > w ? ' p-fig--tall' : '';
       return `<figure class="p-fig p-fig--wide${tall}">` +
-        `<img src="${f.img}" alt="${esc(f.cap)}" loading="lazy" width="${w}" height="${h}">${cap}</figure>`;
+        `<img src="${f.img}" alt="${esc(f.cap || label)}" loading="lazy" width="${w}" height="${h}">${cap}</figure>`;
     }).join('') + `</section>`;
   };
   html += band(page.frame, '개요 도해');
@@ -2656,16 +2791,19 @@ const PAGES = {
     html += '<section class="proc" aria-label="프로세스">' + page.steps.map((s, i) => {
       const no = String(i + 1).padStart(2, '0');
       const [w, h] = s.f.dim || [1200, 800];   /* img 경로에서만 쓴다 */
+      /* band() 와 같은 규칙 — cap 이 비면 캡션 줄을 만들지 않는다.
+         도해가 스스로 제목을 달고 있으면 아래 한 줄은 같은 말의 반복이다 */
+      const sCap = s.f.cap ? `<figcaption>${esc(s.f.cap)}</figcaption>` : '';
       const fig = s.f.fig
         /* 네이티브 도해 — 마크업이라 캡션도 텍스트로 붙는다 */
-        ? `<figure class="p-fig">${FIGS[s.f.fig]()}<figcaption>${esc(s.f.cap)}</figcaption></figure>`
+        ? `<figure class="p-fig">${FIGS[s.f.fig]()}${sCap}</figure>`
         : s.f.vid
         /* 자동재생은 붙이지 않는다. 아래에서 reduced-motion 을 보고 정한다.
            controls 는 항상 둔다 — 움직이는 것은 멈출 수 있어야 한다 */
-        ? `<figure class="p-fig">${videoTag(s.f, '')}<figcaption>${esc(s.f.cap)}</figcaption></figure>`
+        ? `<figure class="p-fig">${videoTag(s.f, '')}${sCap}</figure>`
         : s.f.img
-        ? `<figure class="p-fig"><img src="${s.f.img}" alt="${esc(s.f.cap)}" loading="lazy" width="${w}" height="${h}">` +
-          `<figcaption>${esc(s.f.cap)}</figcaption></figure>`
+        ? `<figure class="p-fig"><img src="${s.f.img}" alt="${esc(s.f.cap || s.t)}" loading="lazy" width="${w}" height="${h}">` +
+          `${sCap}</figure>`
         : `<figure class="p-fig"><div class="ph"><span class="label">${esc(s.f.ph)}</span></div></figure>`;
       return `<article class="p-step">
         <div class="p-txt">
@@ -2754,9 +2892,153 @@ const PAGES = {
 })();
 </script>
 
+<script type="importmap">
+{
+  "imports": {
+    "three": "./assets/vendor/three.module.js",
+    "three/addons/": "./assets/vendor/"
+  }
+}
+</script>
+
+<!-- ══════════════════════════════════════════════════════════════
+     로봇 3D 뷰어 — Physical AI 페이지에만 뜬다.
+
+     이 페이지의 나머지 도해는 전부 마크업이다. three.js 는 #rb-stage
+     가 실제로 문서에 있을 때만 import 한다 — 다른 하위 페이지에서는
+     벤더 코드를 아예 받지 않는다.
+
+     카메라는 바운딩 스피어로 자동 프레이밍한다. 모델 스케일이 화면마다
+     다르므로 고정 좌표를 쓰면 안 된다 (CLAUDE.md 3D 절).
+     ══════════════════════════════════════════════════════════════ -->
+<script type="module">
+(async () => {
+  const stage = document.getElementById('rb-stage');
+  if (!stage) return;                       /* 다른 페이지면 여기서 끝 */
+
+  const ph = document.getElementById('rb-ph');
+  const fail = (why) => {
+    if (ph) ph.innerHTML = '<b>로봇 팔을 불러오지 못했다</b><span>' + why + '</span>';
+  };
+
+  let THREE, GLTFLoader, MeshoptDecoder;
+  try {
+    THREE = await import('three');
+    ({ GLTFLoader } = await import('three/addons/loaders/GLTFLoader.js'));
+    ({ MeshoptDecoder } = await import('./assets/vendor/meshopt_decoder.mjs'));
+  } catch (e) {
+    fail('WebGL 모듈을 읽지 못했다');
+    return;
+  }
+
+  const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+  renderer.setPixelRatio(Math.min(devicePixelRatio, 1.5));
+  /* 이 셋은 빼먹으면 즉시 티가 난다 — CLAUDE.md */
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 1.2;
+  renderer.outputColorSpace = THREE.SRGBColorSpace;
+  renderer.setClearColor(0x000000, 0);
+
+  const scene = new THREE.Scene();
+
+  /* 환경맵 — 없으면 금속이 금속이 아니다.
+     밝은 띠 몇 개짜리 최소 스튜디오. 곡면이 각도를 훑으므로 낮은 앙각을 덮는다 */
+  const envScene = new THREE.Scene();
+  const panel = (x, y, z, w, h, i) => {
+    const m = new THREE.Mesh(
+      new THREE.PlaneGeometry(w, h),
+      new THREE.MeshBasicMaterial({ color: 0xffffff })
+    );
+    m.material.color.multiplyScalar(i);
+    m.position.set(x, y, z);
+    m.lookAt(0, 0, 0);
+    envScene.add(m);
+  };
+  envScene.background = new THREE.Color(0x0b0d10);
+  panel(-3, 3.2, 2.5, 6, 3, 2.6);
+  panel(3.4, 1.6, -2.2, 5, 2.4, 1.5);
+  panel(0, 1.0, 4.2, 5, 2.0, 1.1);
+  const pmrem = new THREE.PMREMGenerator(renderer);
+  scene.environment = pmrem.fromScene(envScene, 0.03).texture;
+
+  const camera = new THREE.PerspectiveCamera(34, 1, 0.01, 100);
+
+  /* 키 1 + 좌우 림 2, 강한 명암 대비 — 형상보다 조명이 중요하다 */
+  const key = new THREE.DirectionalLight(0xffffff, 3.0);
+  key.position.set(2.4, 6.5, 3.2);
+  const rimL = new THREE.DirectionalLight(0xbcd4ff, 1.5);
+  rimL.position.set(-7, 3.4, -4.5);
+  const rimR = new THREE.DirectionalLight(0xffd9c2, 1.1);
+  rimR.position.set(7.5, 2.6, -3.5);
+  const hemi = new THREE.HemisphereLight(0x8496ad, 0x080a0d, 0.5);
+  scene.add(key, rimL, rimR, hemi);
+
+  const pivot = new THREE.Group();
+  scene.add(pivot);
+
+  let gltf;
+  try {
+    gltf = await new GLTFLoader().setMeshoptDecoder(MeshoptDecoder)
+      .loadAsync('./assets/models/robot_arm.opt.glb');
+  } catch (e) {
+    fail('모델 파일을 읽지 못했다');
+    return;
+  }
+
+  const arm = gltf.scene;
+  /* 바운딩 스피어 기준 자동 프레이밍. 모델 스케일이 3자릿수 넘게
+     차이나므로 고정 좌표를 쓰면 안 된다 */
+  const box = new THREE.Box3().setFromObject(arm);
+  const sph = box.getBoundingSphere(new THREE.Sphere());
+  arm.position.sub(sph.center);             /* 원점으로 끌어온다 */
+  pivot.add(arm);
+
+  const fit = sph.radius / Math.sin((camera.fov * Math.PI) / 360);
+  camera.position.set(fit * 0.62, fit * 0.42, fit * 0.72);
+  camera.lookAt(0, 0, 0);
+  camera.near = fit / 100;
+  camera.far = fit * 12;
+  camera.updateProjectionMatrix();
+
+  stage.appendChild(renderer.domElement);
+  if (ph) ph.remove();
+
+  const resize = () => {
+    const w = stage.clientWidth, h = stage.clientHeight;
+    if (!w || !h) return;
+    renderer.setSize(w, h, false);
+    camera.aspect = w / h;
+    camera.updateProjectionMatrix();
+  };
+  resize();
+  addEventListener('resize', resize);
+
+  /* 모션 정지 — 예외 없음. 정지 상태에서도 한 프레임은 그린다 */
+  const still = matchMedia('(prefers-reduced-motion: reduce)');
+  let raf = 0, spinning = false;
+  const draw = () => renderer.render(scene, camera);
+  const tick = () => { pivot.rotation.y += 0.0022; draw(); raf = requestAnimationFrame(tick); };
+  const stop = () => { cancelAnimationFrame(raf); raf = 0; spinning = false; };
+  const start = () => {
+    if (raf || still.matches) { draw(); return; }
+    spinning = true; tick();
+  };
+
+  /* 화면 밖이면 돌리지 않는다 — 안 보이는 캔버스에 GPU 를 쓰지 않는다 */
+  const io = 'IntersectionObserver' in window
+    ? new IntersectionObserver((rows) => {
+        rows.forEach((r) => (r.isIntersecting ? start() : stop()));
+      }, { threshold: 0.15 })
+    : null;
+  io ? io.observe(stage) : start();
+
+  still.addEventListener('change', () => { if (still.matches) { stop(); draw(); } });
+})();
+</script>
+
 <!-- 본문 사전이 먼저 실려야 i18n.js 가 집어 간다 -->
-<script src="/assets/js/i18n-sub.js?v=2026-09-01"></script>
-<script src="/assets/js/i18n.js?v=2026-09-01"></script>
+<script src="/assets/js/i18n-sub.js?v=2026-09-01c"></script>
+<script src="/assets/js/i18n.js?v=2026-09-01b"></script>
 <script src="/assets/js/auth-client.js?v=2026-09-01"></script>
 
 </body>

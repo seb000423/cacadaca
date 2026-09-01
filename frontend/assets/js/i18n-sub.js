@@ -332,7 +332,7 @@
     '유리 · 위생도기 · 케이스 · 금형': 'Glass, sanitaryware, casings, moulds',
     '재질별 Preston 계수 k 를 시험 가공으로 캘리브레이션한 뒤 파라미터 프로파일로 등록':
       'Calibrate the Preston coefficient k per material on test cuts, then register it as a parameter profile',
-    '본선 구현': 'Built for the finals',
+    '개발 예정': 'Planned',
     '3단계': 'Stage 3',
     '숙련공 실측 데이터 연계': 'Measured veteran data',
     '모션캡처 실측 / Isaac Sim 대조 검증 — 재현 오차가 허용 범위에 수렴해야 성립':
@@ -341,7 +341,6 @@
     '적응형 자율 연마 · 타 공정': 'Adaptive autonomous polishing and other processes',
     '표면 상태 입력 → 파라미터 자동 조정 — 디버링 · 샌딩 · 도장 · 실링으로 확장':
       'Surface state in, parameters adjusted automatically — extending to deburring, sanding, painting, sealing',
-    '확장 목표': 'Target',
     '가장 어려운 공정에서 절차를 세우고, 접촉하는 공정 전반으로 넓힌다':
       'Set the procedure on the hardest process, then widen it across everything that touches',
 
@@ -593,8 +592,6 @@
       '"Press about this hard" is not a record. Contact force, feed rate, tool pose, dwell time — know-how is made of quantities you can measure, and in the digital twin those values stay.',
     '두 시장의 연평균 성장률 — 로봇 하드웨어 11.7% 대 검증 소프트웨어 37.6%':
       'Compound annual growth of two markets — robot hardware 11.7% against validation software 37.6%',
-    '시장 규모 · 2026년 기준 — TAM 31.8억 / SAM 3.5억 / SOM 25만 달러':
-      'Market size, 2026 — TAM $3.18bn, SAM $350M, SOM $250,000',
     '현장의 기록은 말로만 남는다': 'On the floor, the record is only ever spoken',
     '사람이 연마할 때는 센서를 부착한 채 작업하지 않는다. 작업이 끝난 뒤 남는 측정값은 0개다.':
       'Nobody polishes with sensors strapped on. When the job ends, the number of measurements left is zero.',
@@ -632,11 +629,11 @@
     '팀 CACADACA. 넷이서 스캔부터 힘 제어까지, 한 공정을 끝까지 파고든다.':
       'Team CACADACA. Four of us, from the scan through force control, digging all the way into one process.',
     '남는 것은 문서와 값이다 — 팀 CACADACA': 'What is left is the documents and the values — team CACADACA',
-    '기록되지 않으면 사라진다': 'What is not recorded disappears',
-    '40년의 감은 은퇴와 함께 사라진다. 우리는 결과물이 아니라 결과를 만든 값을 남기는 쪽을 택했다.':
-      'Forty years of feel walks out with the retirement. We chose to keep the values that made the result, not the result.',
-    '모든 공정 이벤트를 타임스탬프로 기록': 'Every process event timestamped',
-    '전 스텝 폴리싱 로깅 17열 체계·CSV 내보내기': '17-column logging on every polishing step, CSV export',
+    '고객사의 공정은 고객사의 것이다': 'The customer’s process belongs to the customer',
+    '같은 실행에서 나온 로그라도 성격이 다르다. 언제 무엇을 했는지는 나눌 수 있지만, 어떤 각도로 얼마의 힘을 줬는지는 공정 그 자체다. 저장하는 단계에서부터 둘을 갈라 놓는다.':
+      'Logs from the same run are not all alike. When something happened can be shared; at what angle and under how much force is the process itself. We split the two at the point of storage.',
+    '이벤트 로그는 공유, 접촉력·관절각은 분리 보관': 'Event logs shared, contact force and joint angles held separately',
+    '조회·설정·제어 3단계 권한 · ISO 27001 기준 대응': 'View / configure / control — three permission tiers, aligned to ISO 27001',
     '로그 이원화 설계 — 공유 가능 데이터와 고객사 자산':
       'Split logging by design — what can be shared and what is the customer’s',
     '검증 없이는 주장하지 않는다': 'Nothing is claimed without validation',
@@ -661,8 +658,8 @@
       'Team and roles — proposal 5.2 [table 7] · the source is managed together on the team GitHub (ddoo0922/rokey_Corp3)',
 
     /* ── 우리의 성과 ── */
-    '2026년 7–9월, 대표 항목 22개 중 완료 12 · 진행 5 · 예정 5. 수치는 전부 실측이다.':
-      'July to September 2026: of 22 headline items, 12 done, 5 in progress, 5 planned. Every figure is measured.',
+    '사람이 연마하고 나면 남는 측정값은 0개다. 같은 공정을 트윈에서 돌려 17열을 남겼다 — 정상 구간 접촉력 변동계수 3.23%, 목표대역 체류 100%, 과압 0회. 합성 숙련공 기준선(9.96%)의 약 1/3이다. 2026년 7–9월, 대표 항목 22개 중 완료 12 · 진행 5 · 예정 5. 수치는 전부 실측이다.':
+      'When a person finishes polishing, zero measurements remain. We ran the same process in the twin and kept 17 columns — contact-force CV of 3.23% through the steady-state segment, 100% time in the target band, zero overpressure events. About a third of the synthetic veteran baseline (9.96%). July to September 2026: of 22 headline items, 12 done, 5 in progress, 5 planned. Every figure is measured.',
     '결과 분석 — 도달 영역 · 예상 공정 시간 · 권장 파라미터':
       'Result analysis — reached area, estimated cycle time, recommended parameters',
     '자동 생성 웨이포인트': 'waypoints generated automatically',
@@ -885,8 +882,6 @@
     /* ── 확장 로드맵 ── */
     '이식되는 것은 결과물이 아니라 절차다. 계측 → 재현 → 판정 3단계가 성립하면 대상 공정·설비·품목은 교체할 수 있다. 곡면 차체는 접촉 공정 중 가장 까다로운 대상이라, 여기서 세운 절차는 평판·저접촉 공정으로 갈수록 요구 조건이 완화된다.':
       'What ports across is the procedure, not the output. Once measure → reproduce → judge holds, the process, the equipment and the part can all be swapped. A curved car body is the hardest thing a contact process meets, so a procedure set here only gets easier on flat and low-contact work.',
-    '확장 로드맵 4단계 — 기획서 4.5 [표 4] · 차체는 곡면 난이도가 높아 절차 검증용 기준 대상으로 유지':
-      'Four stages of expansion — proposal 4.5 [table 4] · the car body stays as the reference case because its curvature is the hard one',
     '다음 단계는 이미 목록에 있다': 'The next steps are already on the list',
     '현직 광택 숙련공 인터뷰(2026-08-28)에서 확보한 항목이 강화학습 확장 과제로 등록돼 있다. 예산은 클리어코트 한 층의 두께다.':
       'Items from an interview with a working polishing veteran (2026-08-28) are registered as RL extension tasks. The budget is the thickness of one clear coat.',
@@ -898,15 +893,53 @@
       'RPM from a fixed 3,000 to a variable action, with separate rules for edges',
     '도장면 단면 — 확장 과제의 예산은 클리어코트 한 층 안에 있다':
       'Paint cross-section — the budget for every extension sits inside one clear coat',
-    '정책 흐름과 겹친다': 'It lines up with policy',
-    '2026년 정부 AI 예산은 9.9조 원으로 전년의 3배다. 폴리트윈은 AI 팩토리와 AI 로봇 두 축이 겹치는 뿌리산업 과제 구간에 있다.':
-      'The 2026 government AI budget is 9.9tn KRW, three times last year. PolyTwin sits in the root-industry bracket where the AI factory and AI robot tracks overlap.',
-    '산업부 M.AX 1조 1,000억 원 — 2배 확대': 'MOTIE M.AX 1.1tn KRW — doubled',
-    '중기부 제조AI 특화 스마트공장 800억 원 · 400개 과제':
-      'MSS manufacturing-AI smart factory 80bn KRW across 400 projects',
-    '피지컬 AI 정책금융 약 16조 원': 'About 16tn KRW of policy finance for physical AI',
-    '가상 작업장 파이프라인 — 같은 절차가 공정을 갈아끼운다':
-      'The virtual work cell pipeline — the same procedure swaps the process out',
+    '힘을 만드는 쪽은 결국 이 팔이다': 'The force comes from this arm in the end',
+    '로봇 팔 불러오는 중': 'Loading the robot arm',
+    'Doosan M0609 · 6축': 'Doosan M0609 · 6 axes',
+    '로봇 팔을 불러오지 못했다': 'The robot arm could not be loaded',
+    'WebGL 모듈을 읽지 못했다': 'WebGL modules failed to load',
+    '모델 파일을 읽지 못했다': 'The model file failed to load',
+    '회전 관절': 'rotary joints',
+    '목표 접촉력': 'target contact force',
+    '경로 웨이포인트': 'path waypoints',
+    '동시 제어 — 천장·측면·레일': 'controlled at once — ceiling, side, rail',
+    '실제와 같은 물리 조건으로 차체·로봇·연마 도구를 재현한다. 6축 로봇 팔은 실제 Doosan M0609 의 링크 길이를 그대로 쓰고, 명령과 측정값은 ROS 2 통신망으로 실시간 왕복한다.':
+      'The body, the robot and the tooling are reproduced under real physical conditions. The six-axis arm uses the link lengths of an actual Doosan M0609, and commands and measurements travel over ROS 2 in real time.',
+    '실제 로봇 형상 그대로 — 아래 모델은 시뮬레이터가 쓰는 것과 같은 파일이다':
+      'The real robot geometry — the model below is the same file the simulator runs',
+    '공고가 내건 조건과 우리가 이미 가진 것이 같은 자리에 있다':
+      'What the calls ask for and what we already have sit in the same place',
+    '2026 정책 기조': '2026 policy direction',
+    '폴리트윈이 대는 것': 'What PolyTwin brings',
+    '산업부 M.AX': 'MOTIE M.AX',
+    '1조 1,000억 원 · 2배 확대': '1.1tn KRW, doubled',
+    '제조 공정에 AI 를 넣어 실증할 것': 'Put AI into a manufacturing process and prove it',
+    '재질별 파라미터 프로파일': 'Per-material parameter profiles',
+    '차체에서 세운 절차를 유리·금형으로 이식': 'The procedure set on car bodies, ported to glass and moulds',
+    '중기부 제조AI 스마트공장': 'MSS manufacturing-AI smart factory',
+    '800억 원 · 400개 과제': '80bn KRW across 400 projects',
+    '중소 제조 현장에 적용할 것': 'Apply it on small and mid-size shop floors',
+    '숙련공 실측 데이터 연계': 'Linking measured veteran data',
+    '검증 리포트 250만 원 — 지원 한도 안': 'A 2.5m KRW validation report — inside the support ceiling',
+    '피지컬 AI 정책금융': 'Physical-AI policy finance',
+    '약 16조 원': 'About 16tn KRW',
+    '로봇이 물리 세계를 다룰 것': 'Have robots handle the physical world',
+    '접촉력·마찰까지 계산하는 힘 제어': 'Force control that computes contact and friction',
+    '목표 1.5 N 추종 · 과압 0회': 'Tracking a 1.5 N target, zero overpressure events',
+    '1단계 · 완료': 'Stage 1 · done',
+    '2단계': 'Stage 2',
+    '3단계': 'Stage 3',
+    '세 축 모두 우리가 이미 만든 것 또는 로드맵에 올린 것과 맞물린다':
+      'All three tracks meet something we have already built or already put on the roadmap',
+    '2·3·4단계를 굴릴 재원이 밖에 있다': 'Stages 2, 3 and 4 have funding outside the company',
+    '확장 단계는 재질 시험 가공과 모션캡처 실측을 요구한다 — 우리 자체 예산으로는 감당할 수 없는 항목이다. 2026년 정부 AI 예산이 9.9조 원으로 전년의 3배가 되면서, 그 비용을 댈 과제 공고가 우리가 가려는 방향과 같은 곳을 겨냥하고 있다.':
+      'The expansion stages call for trial machining on each material and motion-capture measurement — line items our own budget cannot carry. With the 2026 government AI budget at 9.9tn KRW, three times last year, the calls that would fund them point where we are already headed.',
+    '산업부 M.AX 1조 1,000억 원(2배 확대) — 2단계 재질별 프로파일 확장이 여기 걸린다':
+      'MOTIE M.AX 1.1tn KRW, doubled — this is where stage 2, the per-material profiles, fits',
+    '중기부 제조AI 특화 스마트공장 800억 원 · 400개 과제 — 3단계 숙련공 실측 연계의 현장 확보처':
+      'MSS manufacturing-AI smart factory, 80bn KRW across 400 projects — the shop floors for stage 3, the veteran measurement link',
+    '피지컬 AI 정책금융 약 16조 원 — 4단계 타 공정 확장의 자금 경로':
+      'About 16tn KRW of policy finance for physical AI — the funding route for stage 4, expansion to other processes',
 
     /* ── 기술혁신 ── */
     '움직임만 흉내 내는 시뮬레이션이 아니라, 접촉력·마찰·제거량까지 계산하는 물리 기반 가상 작업장이다. NVIDIA Isaac Sim 위에서 ROS 2 로 명령과 측정값이 실시간으로 오간다.':
@@ -1035,8 +1068,6 @@
     'ISO/TS 15066 최저 한계(안면 65 N) 대비 상한':
       'ceiling against the lowest ISO/TS 15066 limit (face, 65 N)',
     '실행 전 차단 항목': 'risks blocked before the run',
-    '실행 전 안전 게이트 3단 — 기획서 4.1 [그림 16]':
-      'Three safety gates before the run — proposal 4.1 [figure 16]',
     '리스크 5종을 실행 전에 차단한다': 'Five risks stopped before the run',
     '기존 방식의 위험은 전부 실물에서 발견됐다 — 발견 시점에 이미 노출된 뒤다. 폴리트윈은 다섯 항목 모두를 실행 전 검증으로 옮긴다.':
       'Under the old way every risk was found on the real machine — by which time it had already happened. PolyTwin moves all five into validation before the run.',
@@ -1044,8 +1075,6 @@
       'The adopting company can submit these verdicts as-is for the ISO/TS 15066 risk assessment',
     '검증 안 된 구간은 통과가 아니라 미검증으로 표기':
       'What was not validated is marked unvalidated, not passed',
-    '안전 리스크 대응 — 기존 방식 대비 실행 전 차단 항목 5종 · 기획서 4.1 [표 5]':
-      'Safety risks — five items blocked before the run, against the old way · proposal 4.1 [table 5]',
     '규격 기준선 — ISO/TS 15066': 'The standard as baseline — ISO/TS 15066',
     '연마는 사람과 같은 공간에서 이뤄지는 협동로봇 공정이다. 정상 작업 대역 3–8 N 은 규격이 정한 인체 허용 한계에서 한 자릿수 배율만큼 떨어져 있다. 실제 위험은 이상 상황 — 과압입·경로 이탈·급가속 — 이고, 그것이 앞의 게이트가 걸러내는 대상이다.':
       'Polishing is a collaborative-robot process that happens in the same space as people. The normal 3–8 N working band sits an order of magnitude below the human limits the standard sets. The real danger is the abnormal case — over-press, path departure, sudden acceleration — and that is what the gates above filter out.',
@@ -1061,7 +1090,6 @@
     '스캔 / 경로 생성 / 실행 로그 단계별 분리 저장':
       'Scan, path generation and run logs stored separately by stage',
     '제어 통신 / 시각화 통신 분리': 'Control and visualisation links separated',
-    '시스템 오류 대비 및 복구 — 제출본 3.5': 'Failure handling and recovery — submission 3.5',
 
     /* ── PR ── News · Media · Blog · FAQ ── */
     '보도자료와 소식. 최신순.': 'Press and news. Newest first.',

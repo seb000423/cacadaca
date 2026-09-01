@@ -507,7 +507,7 @@ section { position: relative; scroll-margin-top: var(--header-h); }
 /* 인상 > 작업 > 참조 순으로 여백을 차등한다 */
 .sec--impress { padding-block: clamp(128px, 22vh, 260px); }   /* 문장 하나 */
 .sec          { padding-block: clamp(96px, 14vh, 176px); }    /* 공정·기능 */
-.sec--tight   { padding-block: clamp(56px, 7vh, 88px); }      /* 사양 */
+.sec--tight   { padding-block: clamp(56px, 7vh, 88px); }      /* 결과 */
 .sec + .sec { border-top: 1px solid var(--line); }
 
 .sec-head { display: grid; gap: 16px; margin-bottom: 56px; max-width: 62ch; }
@@ -517,7 +517,7 @@ section { position: relative; scroll-margin-top: var(--header-h); }
 }
 .sec-head p { text-wrap: pretty; }
 .sec-head p { font-size: 17px; color: var(--text-mid); max-width: 54ch; }
-/* 사양처럼 수치가 주인공인 섹션. 제목이 수치와 같은 크기면 둘 다 안 읽힌다 */
+/* 결과 스트립처럼 수치가 주인공인 섹션. 제목이 수치와 같은 크기면 둘 다 안 읽힌다 */
 .sec-head--tight { margin-bottom: 28px; gap: 10px; }
 .sec-head--tight h2 { font-size: clamp(18px, 2vw, 22px); font-weight: 500; letter-spacing: -0.005em; }
 
@@ -568,6 +568,8 @@ section { position: relative; scroll-margin-top: var(--header-h); }
   letter-spacing: -0.03em; color: var(--text-hi);
 }
 .readout__v small { font-size: 15px; font-weight: 500; color: var(--text-lo); margin-inline-start: 4px; letter-spacing: 0.06em; }
+.readout__v.is-pass { color: var(--accent); }
+.readout--ref .readout__v { color: var(--text-lo); }
 .scan__hud .btn { pointer-events: auto; }
 
 .scan__note {
@@ -708,7 +710,7 @@ section { position: relative; scroll-margin-top: var(--header-h); }
 .tbl .num { color: var(--text-hi); }
 .tbl th:nth-child(n+2), .tbl td:nth-child(n+2) { text-align: end; }
 
-/* ── 사양 스트립 ─────────────────────────────────── */
+/* ── 결과 스트립 ─────────────────────────────────── */
 .spec { background: var(--bg-base); }
 .spec__grid {
   display: grid; gap: 1px; background: var(--line);
@@ -1024,7 +1026,7 @@ section { position: relative; scroll-margin-top: var(--header-h); }
       <div class="menu-page__list">
         <a href="#scan">공정</a>
         <a href="#flow">기능</a>
-        <a href="#spec">사양</a>
+        <a href="#spec">결과</a>
       </div>
     </nav>
     <nav class="menu-main" aria-label="사이트">
@@ -1111,7 +1113,7 @@ section { position: relative; scroll-margin-top: var(--header-h); }
       <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="square" aria-hidden="true">
         <path d="M4 16.5V10M10 16.5V4M16 16.5v-4.5M2.5 16.5h15"/>
       </svg>
-      <span>사양</span>
+      <span>결과</span>
     </a>
   </div>
   <div class="rail__end">
@@ -1165,11 +1167,11 @@ section { position: relative; scroll-margin-top: var(--header-h); }
   <section class="sec sec--impress statement" id="statement">
     <div class="wrap statement__grid">
       <blockquote class="rise">
-        40년의 감은 은퇴와 함께 <b>사라진다.</b>
+        숙련공의 감은 은퇴와&nbsp;함께 <b>사라진다.</b>
       </blockquote>
       <footer class="rise" style="--d:80ms">
-        남는 건 결과물뿐이다. 그 결과를 만든 압력·속도·경로는 어디에도 기록되지 않는다.
-        아래부터가 그 값을 남기는 방법이다.
+        남는 건 결과물뿐이다. 그 결과를 만든 암묵지(압력·속도·경로)는 어디에도 기록되지 못했다.
+        아래부터가 그 암묵지를 남기는 방법이다.
       </footer>
     </div>
   </section>
@@ -1179,10 +1181,11 @@ section { position: relative; scroll-margin-top: var(--header-h); }
     <div class="wrap">
       <div class="sec-head rise">
         <p class="label">01 — 공정</p>
-        <h2>스캔 라인이 지나간 자리에서 무광이 유광으로 바뀐다</h2>
+        <h2>잘 닦였는지는 눈이 아니라 표면 수치로 판정한다</h2>
         <p>
-          로봇이 실제로 지나간 경로만 광택이 오른다. 덜 지난 면은 덜 지난 대로 남는다.
-          가공 결과를 눈으로 판정하지 않고 표면 상태로 읽는다.
+          차체를 3,600칸 격자로 나눠 칸마다 표면을 잰다. 거칠기 Ra 0.20 µm 이하,
+          극단 거칠기 Rz 2.0 µm 이하, 잔여 클리어코트 35 µm 이상 — 한 칸이라도 벗어나면 합격이 아니다.
+          숙련공이 합격을 매길 때 보는 것도 이 수치다.
         </p>
       </div>
 
@@ -1198,6 +1201,10 @@ section { position: relative; scroll-margin-top: var(--header-h); }
             <div class="readout">
               <span class="label">거칠기 Ra</span>
               <span class="readout__v" id="scanRa">0.82<small>µm</small></span>
+            </div>
+            <div class="readout readout--ref">
+              <span class="label">합격선</span>
+              <span class="readout__v">0.20<small>µm</small></span>
             </div>
           </div>
           <button class="btn btn--ghost" type="button" id="scanBtn">다시 재생</button>
@@ -1345,34 +1352,38 @@ section { position: relative; scroll-margin-top: var(--header-h); }
     </div>
   </section>
 
-  <!-- ══════════ 사양 ══════════
-       네 값 모두 실측이다. 근거는 각각:
-       1.41MB = car+robot_arm+lift+rail .opt.glb 실측 1,447.56KB (2026-08-31) · 93.5% = 차체 4,097.52KB → 264.44KB
-       192KB        = assets/fonts/Pretendard-{300,500,700}.subset.woff2 합계 (928자, 2026-08-31 재생성)
-       6종          = 위 02 패널의 프리셋 칩 개수와 같다
+  <!-- ══════════ 결과 ══════════
+       네 값 모두 실측이다. 출처는 전부 데이터셋/seg_best_kpi.json (2026-08-29 생성,
+       원본 sweep_traj_csv 183.1MB). 산출은 아래와 같다:
+       595회  = 15구간 runCount 합 (구간당 37–40회)
+       10종   = header 의 p_* 컬럼 수 (force·stiffness·damping·speed·press_vel·
+                adm_damping·adm_mass·lag_gain·force_alpha·creep_advance)
+       15구간 = segments 길이 (천장 C 8 + 사이드 SL 7) · waypoints 합 829
+       94.4%  = 구간별 best inband 평균 0.9435 (기준값 baselineInband 평균 0.7414)
+       자산 용량(모델 MB·폰트 KB)은 공정 지표가 아니라서 뺐다. 2026-09-01.
        근거 없는 수치는 여기 올리지 않는다. -->
   <section class="sec sec--tight spec" id="spec">
     <div class="wrap">
       <div class="sec-head sec-head--tight rise">
-        <p class="label">03 — 사양</p>
-        <h2>추정값은 싣지 않았다</h2>
+        <p class="label">03 — 결과</p>
+        <h2>강화학습 탐색 기록</h2>
       </div>
       <div class="spec__grid rise" style="--d:60ms">
       <div>
-        <span class="spec__v">1.41<small>MB</small></span>
-        <span class="label">3D 모델 4종 합계</span>
+        <span class="spec__v">595<small>회</small></span>
+        <span class="label">파라미터 스윕 시행</span>
       </div>
       <div>
-        <span class="spec__v">93.5<small>%</small></span>
-        <span class="label">차체 모델 압축률</span>
+        <span class="spec__v">10<small>종</small></span>
+        <span class="label">학습이 조절하는 파라미터</span>
       </div>
       <div>
-        <span class="spec__v">6<small>종</small></span>
-        <span class="label">한 프리셋에 묶이는 값</span>
+        <span class="spec__v">15<small>구간</small></span>
+        <span class="label">차체 곡면 · 웨이포인트 829</span>
       </div>
       <div>
-        <span class="spec__v">192<small>KB</small></span>
-        <span class="label">폰트 서브셋 3벌 · 928자</span>
+        <span class="spec__v">94.4<small>%</small></span>
+        <span class="label">접촉력 밴드 유지율 · 기준 74.1%</span>
       </div>
       </div>
     </div>
@@ -1417,7 +1428,7 @@ section { position: relative; scroll-margin-top: var(--header-h); }
 }
 </script>
 
-<script src="/assets/js/i18n.js?v=2026-09-01"></script>
+<script src="/assets/js/i18n.js?v=2026-09-01b"></script>
 <script src="/assets/js/auth-client.js?v=2026-09-01"></script>
 
 <script>
@@ -1970,6 +1981,7 @@ async function boot() {
   const SPAN = scanU.uMaxZ.value - scanU.uMinZ.value;
   const DUR  = 3.4;          // 초
   const RA_MATTE = 0.82, RA_GLOSS = 0.14;
+  const RA_PASS = 0.20;      // 데이터셋/quality_kpi.json 의 criteria.ra.limit
 
   let t = REDUCED ? DUR : 0;
   let playing = !REDUCED;
@@ -1979,7 +1991,9 @@ async function boot() {
     scanU.uScanZ.value = scanU.uMinZ.value + SPAN * (1 - p) - SPAN * 0.02;
     /* 값은 즉시 갱신한다. 이징을 넣으면 현재값을 읽을 수 없다 (CLAUDE.md) */
     pctEl.innerHTML = `${Math.round(p * 100)}<small>%</small>`;
-    raEl.innerHTML  = `${(RA_MATTE + (RA_GLOSS - RA_MATTE) * p).toFixed(2)}<small>µm</small>`;
+    const ra = RA_MATTE + (RA_GLOSS - RA_MATTE) * p;
+    raEl.innerHTML  = `${ra.toFixed(2)}<small>µm</small>`;
+    raEl.classList.toggle('is-pass', ra <= RA_PASS);
   }
   applyScan();
 
