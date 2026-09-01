@@ -30,3 +30,18 @@ def fl(k):
 for k, lab in (("gu_final", "GU 최종"), ("scratch_final_um", "자국 최종 μm"), ("clearcoat_min_um", "CC 최소 μm"), ("passes", "패스 수")):
     v = fl(k)
     if v: print(f"[{lab}] 평균 {sum(v)/len(v):.2f}  최소 {min(v):.2f}  최대 {max(v):.2f}")
+
+# ── 곡률 vs 결과 (첫 배치 관찰: 과부하 실패가 강곡률 셀에 몰림) ──
+try:
+    def curv(r): return abs(float(r["quad_c3"])) + abs(float(r["quad_c5"]))
+    buckets = [(0, 2, "|c3|+|c5| < 2 (완만)"), (2, 5, "2–5 (중간)"), (5, 99, "≥ 5 (강곡률)")]
+    print("\n[곡률 구간별]")
+    for lo, hi, lab in buckets:
+        g = [r for r in rows if lo <= curv(r) < hi]
+        if not g: continue
+        p = sum(b(r["overall_pass"]) for r in g); ov = sum(r.get("outcome") == "fail_force_overload" for r in g)
+        print(f"  {lab:22s} {p:4d}/{len(g):<4d} 합격 ({100*p/len(g):5.1f}%)  과부하 {ov}")
+    q = [r for r in rows if r.get("outcome") == "fail_force_overload" and float(r["gu_final"] or 0) >= 70]
+    print(f"[과부하 실패 중 품질(GU≥70)은 이미 충족] {len(q)}셀")
+except Exception as e:
+    print("(곡률 분석 생략:", e, ")")
