@@ -463,11 +463,14 @@ def main():
             from isaaclab.utils.math import quat_apply as _qapply
             # 패드 위치 = link_6 실제 위치 + (IK 오프셋 규약과 동일하게) 명령 자세로 회전한 로컬 중심.
             # 물리 body 프레임의 quat 은 시각 프림 프레임과 축이 달라(실측: 로컬 −Z 가 위) 쓰지 않는다.
+            # 실제 손목(link_6 body) 자세로 부착 — 명령 자세를 쓰면 팔이 명령을 못 따라가는 복귀
+            # 스트로크 동안 패드가 하우징에서 떨어져 보인다. body 프레임 오프셋 × 실제 xyzw 쿼터니언.
             _ee = robot.data.body_pose_w.torch[:, ee_body]
-            _pp = _ee[:, 0:3] + torch.tensor(pad_center_world, dtype=torch.float32, device=sim.device)
+            _pp = _ee[:, 0:3] + _qapply(_ee[:, 3:7], torch.tensor(
+                PAD_CENTER_BODY, dtype=torch.float32, device=sim.device).expand(E, 3))
             if _os.environ.get("DEMO_PAD_DEBUG"):      # 진단: 패드 마커를 작업면 위 공중 고정 위치에
                 _pp = torch.tensor([[PATCH_CENTER[0], PATCH_CENTER[1], 0.70]], device=sim.device).expand(E, 3) + scene.env_origins
-            pad_markers.visualize(translations=_pp, orientations=quat_cmd)
+            pad_markers.visualize(translations=_pp, orientations=_ee[:, 3:7])
             if sub == _stride * 3:
                 print(f"[demo][pad] marker count={pad_markers.count} pos0={_pp[0].tolist()} ee0={_ee[0, :3].tolist()}", flush=True)
         sim.step(render=_rendered)

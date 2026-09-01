@@ -45,14 +45,38 @@ app = AppLauncher(args).app
 
 import numpy as np  # noqa: E402
 import torch  # noqa: E402
+from rsl_rl.models.mlp_model import MLPModel  # noqa: E402
+from tensordict import TensorDict  # noqa: E402
 
 from learning.rl.env.robot_polish_env import RobotPolishEnv  # noqa: E402
 from learning.rl.env.robot_polish_env_cfg import RobotPolishEnvCfg  # noqa: E402
-from learning.rl.repolish_eval import load_policy  # noqa: E402
 from learning.vehicle_export.export_vehicle_results import (  # noqa: E402
     CLEARCOAT_SAFE_MIN_UM, GU_PASS_MIN, RA_PASS_MAX_UM, RZ_PASS_MAX_UM)
 from scripts.polishing_v5_modules.common import load_ply_points  # noqa: E402
 from scripts.polishing_v5_modules.rl_bridge import CellRegistry  # noqa: E402
+
+# repolish_eval.load_policy 와 동일 (그 모듈은 임포트 시 argparse 를 실행하므로 인라인)
+def load_policy(checkpoint, device):
+    ck = torch.load(checkpoint, map_location=device, weights_only=False)
+    state = ck["actor_state_dict"]
+    obs_dim = int(state["mlp.0.weight"].shape[1])
+    dummy = TensorDict({"policy": torch.zeros(1, obs_dim, device=device)}, batch_size=[1])
+    actor = MLPModel(
+        dummy, {"actor": ["policy"]}, "actor", 2,
+        hidden_dims=[128, 128], activation="elu", obs_normalization=True,
+        distribution_cfg={"class_name": "GaussianDistribution", "init_std": 0.3,
+                          "std_type": "scalar"}).to(device)
+    actor.load_state_dict(state)
+    actor.eval()
+
+    def policy(obs):
+        x = obs["policy"][:, :obs_dim]
+        td = TensorDict({"policy": x}, batch_size=[len(x)])
+        return actor(td).clamp(-1.0, 1.0)
+
+    print(f"[repolish] loaded {checkpoint} (obs_dim={obs_dim})")
+    return policy
+
 
 COLUMNS = [
     "cell_id", "region", "center_x_m", "center_y_m", "center_z_m", "tilt_deg", "is_side",
