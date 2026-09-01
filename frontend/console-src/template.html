@@ -362,6 +362,29 @@
     </div>
   </aside>
 
+  <sc-if value="{{ showCondModal }}" hint-placeholder-val="{{ false }}">
+    <div style="position: absolute; inset: 0; z-index: 60; background: rgb(var(--bg-void-ch) / 0.7); backdrop-filter: blur(6px); display: flex; align-items: center; justify-content: center; padding: 24px">
+      <div style="width: min(560px, 100%); background: var(--bg-base); border: 1px solid var(--warn); padding: 26px 30px; display: flex; flex-direction: column; gap: 16px">
+        <div style="font-size: 16px; font-weight: 500; letter-spacing: 0.14em; text-transform: uppercase; color: var(--warn)">공정 실행 조건 오류</div>
+        <div style="font-size: 17px; color: var(--text-mid); line-height: 1.6; word-break: keep-all">시뮬레이션(Isaac Sim)이 보고한 공정 조건과 이 화면의 설정이 다릅니다. 화면의 3D·수치는 시뮬 조건 기준으로만 맞습니다.</div>
+        <div style="border: 1px solid var(--bg-panel); background: var(--bg-void)">
+          <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; padding: 11px 18px; border-bottom: 1px solid var(--bg-panel); font-size: 13px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-lo)">
+            <div>항목</div><div>시뮬레이션</div><div>화면 설정</div>
+          </div>
+          <sc-for list="{{ condRows }}" as="r" hint-placeholder-count="2">
+            <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; padding: 10px 18px; font-size: 15px; color: var(--text-mid); border-bottom: 1px solid var(--bg-base)">
+              <div>{{ r.name }}</div><div style="color: var(--text-hi); font-family: var(--f-mono)">{{ r.sim }}</div><div style="color: var(--warn); font-family: var(--f-mono)">{{ r.ui }}</div>
+            </div>
+          </sc-for>
+        </div>
+        <div style="display: flex; gap: 10px; justify-content: flex-end">
+          <div sc-camel-on-click="{{ condClose }}" tabindex="0" style="padding: 10px 18px; border: 1px solid var(--line); font-size: 14px; color: var(--text-lo); cursor: pointer">닫기</div>
+          <div sc-camel-on-click="{{ condApply }}" tabindex="0" style="padding: 10px 18px; border: 1px solid var(--accent); background: rgb(var(--accent-ch) / 0.12); font-size: 14px; color: var(--text-hi); cursor: pointer">시뮬 조건으로 맞추기</div>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+
   <sc-if value="{{ showEvalModal }}" hint-placeholder-val="{{ false }}">
     <div style="position: absolute; inset: 0; z-index: 50; background: rgb(var(--bg-void-ch) / 0.88); backdrop-filter: blur(8px); display: flex; align-items: center; justify-content: center; padding: 24px">
       <div style="width: min(1060px, 100%); max-height: 100%; overflow: auto; background: var(--bg-base); border: 1px solid var(--line); padding: 30px 36px; display: flex; flex-direction: column; gap: 18px">
@@ -532,6 +555,8 @@ class Component extends DCLogic {
     runs: [],            // 서버에 저장된 시뮬 기록 목록 (/api/runs)
     replayId: '',        // 재생 중인 기록 id
     cellsOn: false,      // 3D 셀 판정 지도 표시 (기본 끔)
+    simCond: null,       // 시뮬(피드/기록)이 보고한 공정 조건 {recipe, robots, params} — 상태줄·조건 대조
+    showCondModal: false, condRows: [],   // 공정 실행 조건 오류 팝업
     replay: null,        // 재생기 상태 {t, duration, playing, speed, follow, status, active}
   };
 
@@ -623,6 +648,8 @@ class Component extends DCLogic {
           if (pr.recipe) env.recipe = String(pr.recipe);
           this.setState(env, () => this.push());
         }
+        const meta = (run && run.meta) || {};
+        this._noteSimCond({ recipe: meta.recipe_values || null, robots: (meta.robots || []).map((r) => r.id), params: meta.params || null });
         pl.play(); this.push();
       }).catch((e) => console.warn('기록 로드 실패', e));
     });
@@ -641,6 +668,40 @@ class Component extends DCLogic {
     v.replay.seek(Number(e.target.value) / 1000 * this.state.replay.duration);
   }
   replaySpeed(e) { const v = this.vp(); if (v && v._replay) v.replay.setSpeed(Number(e.target.value) || 1); }
+
+  /* ══ 공정 실행 조건 대조 — 시뮬(피드/기록)이 보고한 조건과 콘솔 설정이 다르면 "공정 실행 조건 오류" 팝업 ══ */
+  _noteSimCond(cond) {
+    const sig = JSON.stringify(cond);
+    if (sig === this._condSig) return;
+    this._condSig = sig;
+    this.setState({ simCond: cond }, () => this.checkSimCond());
+  }
+  checkSimCond() {
+    const s = this.state, c = s.simCond; if (!c) return;
+    const t = toolOf(s.tool), rows = [];
+    const add = (name, sim, ui) => { if (sim !== undefined && sim !== null && String(sim) !== String(ui)) rows.push({ name, sim: String(sim), ui: String(ui) }); };
+    if (c.robots && c.robots.length) add('로봇 대수', c.robots.length + '대 (' + c.robots.join('/') + ')', s.robotCount + '대');
+    if (c.recipe && c.recipe.pad_radius_m) add('패드 지름', Math.round(c.recipe.pad_radius_m * 2000) + ' mm', t.pad + ' mm');
+    if (c.params) {
+      if (c.params.hasRail !== undefined) add('이동 레일', c.params.hasRail ? '있음' : '없음', s.hasRail ? '있음' : '없음');
+      if (c.params.hasLift !== undefined) add('작업 리프트', c.params.hasLift ? '있음' : '없음', s.hasLift ? '있음' : '없음');
+      if (c.params.tool) add('툴', c.params.tool, s.tool);
+    }
+    const sig = JSON.stringify(rows);
+    if (rows.length && sig !== this._condShown) { this._condShown = sig; this.setState({ showCondModal: true, condRows: rows }); }
+    if (!rows.length) this.setState({ showCondModal: false, condRows: [] });
+  }
+  condApply() {
+    const c = this.state.simCond || {}, env = {};
+    if (c.params) {
+      if (c.params.robotCount) env.robotCount = Math.max(1, Math.min(3, Number(c.params.robotCount)));
+      if (c.params.hasRail !== undefined) env.hasRail = !!c.params.hasRail;
+      if (c.params.hasLift !== undefined) env.hasLift = !!c.params.hasLift;
+      if (c.params.tool) env.tool = c.params.tool;
+    } else if (c.robots && c.robots.length) env.robotCount = Math.max(1, Math.min(3, c.robots.length));
+    this._condShown = null;
+    this.setState({ ...env, showCondModal: false, condRows: [] }, () => { this.push(); this.checkSimCond(); });
+  }
 
   /* ══ 실행 중 컨트롤 — 일시정지/재개, 힘·이송 배율(정책 배율 위에 곱함). 서버가 워커/로컬 시뮬에 전달 ══ */
   sendControl(patch) {
@@ -724,6 +785,7 @@ class Component extends DCLogic {
     const hist = this._hist || (this._hist = []);
     hist.push(force); if (hist.length > 44) hist.shift();
     const prog = feed ? Math.max(0, Math.min(1, Number(feed.progress) || 0)) : 0;
+    if (feed && (feed.recipe || (feed.robots && feed.robots.length))) this._noteSimCond({ recipe: feed.recipe || null, robots: (feed.robots || []).map((r) => r.id) });
     return { prog, force, dev: force - target, target, rpm: t.rpm, feed: t.feed * 1000,
              cov: prog * 100, hist: hist.slice(), cells: [], points: 0, assigned: 0, live: !!feed,
              starting: !feed };   // 피드가 아직 없음 = 작업 대기 또는 Isaac 기동 중
@@ -1073,9 +1135,13 @@ class Component extends DCLogic {
     const evOk = ev.length > 0 && failed === 0 && qFailed === 0;
     const ref = s.refSeg;
     const noSeed = !ref;
-    const spacing = Math.round(tool.pad * (1 - tool.overlap / 100));
+    const rc = (s.simCond && s.simCond.recipe) || null;   // 시뮬이 보고한 유효 레시피가 있으면 상태줄은 그 값
+    const spacing = rc && rc.step_over_ratio && rc.pad_radius_m ? Math.round(rc.step_over_ratio * rc.pad_radius_m * 2000) : Math.round(tool.pad * (1 - tool.overlap / 100));
     // 작업 폭 약 1850mm 기준. 공구를 바꾸면 패스 수와 예상 시간이 따라 움직인다
-    const passes = Math.round(1850 / spacing);
+    const passes = rc && rc.n_passes ? rc.n_passes : Math.round(1850 / spacing);
+    const m0 = s.mon;
+    const simEta = m0 && m0.live && m0.prog > 0.02 && this.state.runEl ? Math.max(0, Math.round((this.state.runEl / 1000) * (1 - m0.prog) / m0.prog)) : null;
+    const rpEta = s.replay && s.replay.active ? Math.max(0, Math.round(s.replay.duration - s.replay.t)) : null;
     return {
       vehicles: CARS.map((c) => ({
         name: c.name, swatch: c.swatch,
@@ -1121,7 +1187,11 @@ class Component extends DCLogic {
       liftDotLeft: s.hasLift ? '20px' : '2px',
       spacing: String(spacing),
       passes: String(passes),
-      eta: mmss(Math.round(passes * 8)),
+      eta: rpEta !== null ? mmss(rpEta) : simEta !== null ? mmss(simEta) : mmss(Math.round(passes * 8)),
+      showCondModal: s.showCondModal,
+      condRows: s.condRows,
+      condApply: () => this.condApply(),
+      condClose: () => { this.setState({ showCondModal: false }); },
       runLabel: s.running ? (s.mon && s.mon.starting && this._liveRun ? 'Isaac 기동 중 — 잠시 기다려 주세요' : '공정 중단') : (s.replay && s.replay.active ? '재생 중지' : 'RL 공정 시작'),
       hasRuns: s.runs.length > 0,
       runOpts: s.runs.map((r) => ({ id: String(r.id),
