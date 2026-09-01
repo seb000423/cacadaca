@@ -317,6 +317,7 @@
                   </div>
                   <div style="flex: 1"></div>
                   <div style="display: flex; gap: 8px; align-items: stretch">
+                    <sc-if value="{{ c.hasRun }}" hint-placeholder-val="{{ false }}"><a href="{{ c.replayHref }}" style="flex: 1; padding: 10px 0; border: 1px solid var(--line); font-size: 15px; color: var(--text-mid); text-align: center; text-decoration: none">3D 재생</a></sc-if>
                     <button type="button" sc-camel-on-click="{{ c.load }}" style="flex: 1; padding: 10px 0; background: rgb(var(--accent-ch) / 0.14); border: 1px solid var(--accent); font-size: 15px; font-weight: 500; color: var(--text-hi); text-align: center; cursor: pointer; transition: background var(--t-fast) var(--e-out), color var(--t-fast) var(--e-out)" style-hover="background: var(--accent); color: var(--bg-void)">불러오기</button>
                     <button type="button" sc-camel-on-click="{{ c.viz }}" style="flex: 1; padding: 10px 0; border: 1px solid {{ c.vizBorder }}; background: {{ c.vizBg }}; font-size: 15px; color: {{ c.vizColor }}; text-align: center; cursor: pointer; transition: background-color var(--t-fast) var(--e-out), border-color var(--t-fast) var(--e-out), color var(--t-fast) var(--e-out)" style-hover="border-color: var(--text-lo)">{{ c.vizLabel }}</button>
                   </div>
@@ -356,6 +357,7 @@
                 <div style="font-family: var(--f-mono); font-size: 16px; color: var(--text-lo); font-variant-numeric: tabular-nums">{{ c.date }}</div>
                 <div style="display: flex; justify-content: flex-end; gap: 8px">
                   <button type="button" sc-camel-on-click="{{ c.viz }}" style="padding: 6px 12px; border: 1px solid {{ c.vizBorder }}; background: {{ c.vizBg }}; font-size: 14px; color: {{ c.vizColor }}; cursor: pointer">{{ c.vizLabel }}</button>
+                  <sc-if value="{{ c.hasRun }}" hint-placeholder-val="{{ false }}"><a href="{{ c.replayHref }}" style="padding: 6px 12px; border: 1px solid var(--line); font-size: 14px; color: var(--text-mid); text-decoration: none">3D 재생</a></sc-if>
                   <button type="button" sc-camel-on-click="{{ c.load }}" style="padding: 6px 14px; background: rgb(var(--accent-ch) / 0.14); border: 1px solid var(--accent); color: var(--text-hi); font-size: 14px; font-weight: 500; cursor: pointer; transition: background var(--t-fast) var(--e-out), color var(--t-fast) var(--e-out)" style-hover="background: var(--accent); color: var(--bg-void)">불러오기</button>
                 </div>
               </div>
@@ -503,13 +505,30 @@ function unitOfSeg(sg) {
 // 파라미터는 RL 이 낸 값, 로그와 KPI 는 대조 기준이 된 정답 run 의 것이다.
 function unitOfSaved(rec) {
   const sg = rec.ref;
-  if (!sg || !sg.trace || !rec.rl) return null;
-  return { id: rec.id, rowId: rec.rowId, kind: 'saved', src: 'RL 저장', seg: rec.seg, sg: sg,
-           name: rec.name, date: rec.date,
-           /* 누가 합격시켰는지 — 전에는 브라우저마다 달라서 적을 수 없었다 */
-           who: rec.owner ? (rec.owner + ' · RL 검증') : 'RL 검증',
-           p: { force: rec.rl.force, stiffness: rec.rl.stiffness,
-                damping: rec.rl.damping, speed: rec.rl.speed } };
+  if (!rec.rl) return null;
+  if (sg && sg.trace) {
+    return { id: rec.id, rowId: rec.rowId, kind: 'saved', src: 'RL 저장', seg: rec.seg, sg: sg,
+             name: rec.name, date: rec.date, runId: rec.run_id || null,
+             /* 누가 합격시켰는지 — 전에는 브라우저마다 달라서 적을 수 없었다 */
+             who: rec.owner ? (rec.owner + ' · RL 검증') : 'RL 검증',
+             p: { force: rec.rl.force, stiffness: rec.rl.stiffness,
+                  damping: rec.rl.damping, speed: rec.rl.speed } };
+  }
+  /* 실제 시뮬 실행 결과(자동 등록) — 정답 세그먼트가 없으므로 카드가 읽는 필드를 시뮬 요약으로 채운다.
+     힘 트레이스는 기록(run)에 있으므로 여기서는 목표힘 평탄선; '재생' 으로 실제 움직임·힘을 본다. */
+  const sim = rec.sim; if (!sim) return null;
+  const f = Number(rec.rl.force) || 0, n = 40;
+  const cells = sim.cells || {};
+  const inband = Number(rec.rl.inband) || 0;
+  const robot = rec.env && Number(rec.env.robotCount) === 1 ? 'C' : rec.env && Number(rec.env.robotCount) === 2 ? 'SL/SR' : 'C/SL/SR';
+  const sgSim = { seg: rec.seg || 'sim', robot, inband, baselineInband: inband, delta: 0, overRatio: 0, overSteps: 0, forceStd: 0,
+                  waypoints: Number(cells.cells) || 0, runCount: 1, byteStart: 0, byteEnd: 0, simOnly: true,
+                  trace: { f: Array.from({ length: n }, () => f), c: Array.from({ length: n }, () => 1), tgt: f, n },
+                  p: { force: f, stiffness: rec.rl.stiffness, damping: rec.rl.damping, speed: rec.rl.speed }, sim };
+  return { id: rec.id, rowId: rec.rowId, kind: 'saved', src: 'RL 실행', seg: rec.seg, sg: sgSim, simOnly: true,
+           name: rec.name, date: rec.date, runId: rec.run_id || null,
+           who: rec.owner ? (rec.owner + ' · RL 실행') : 'RL 실행',
+           p: { force: f, stiffness: rec.rl.stiffness, damping: rec.rl.damping, speed: rec.rl.speed } };
 }
 
 // ── CSV 한 줄을 고정폭으로 ── 첫 열(run_id)만 왼쪽, 나머지는 오른쪽 정렬.
@@ -646,7 +665,11 @@ class Component extends DCLogic {
     const cards = list.map((u) => {
       const sg = u.sg, on = s.viz.indexOf(u.id) >= 0, full = !on && s.viz.length >= MAX_VIZ;
       const sp = sparkPath(sg.trace);
-      const comments = [
+      const comments = u.simOnly && sg.sim ? [
+        '#GU_' + (sg.sim.quality && sg.sim.quality.glossMean != null ? Number(sg.sim.quality.glossMean).toFixed(1) : '-'),
+        '#셀_' + ((sg.sim.cells && sg.sim.cells.pass) || 0) + '/' + ((sg.sim.cells && sg.sim.cells.cells) || 0),
+        '#CC_' + (sg.sim.quality && sg.sim.quality.clearcoat != null ? Number(sg.sim.quality.clearcoat).toFixed(1) + 'μm' : '-'),
+      ] : [
         '#baseline_' + sg.baselineInband.toFixed(3),
         '#개선_+' + (sg.delta * 100).toFixed(1) + '%p',
         sg.overSteps === 0 ? '#과압_없음' : '#과압_' + sg.overSteps + '스텝',
@@ -664,7 +687,10 @@ class Component extends DCLogic {
         date: u.date,
         expert: u.who,
         standard: sg.inband >= 0.95,
-        badge: u.kind === 'saved' ? 'RL 합격' : '정답 인증',
+        badge: u.simOnly ? 'RL 실행' : u.kind === 'saved' ? 'RL 합격' : '정답 인증',
+        hasRun: !!u.runId,
+        replayHref: u.runId ? ('PolyTwin%20Console.html?run=' + u.runId) : '',
+        loadLabel: u.simOnly ? '재생' : '불러오기',
         border: on ? colorOf(u.id) : 'var(--line)',
         stdIconBg: sg.inband >= 0.95 ? 'var(--accent)' : 'var(--line)',
         tags: [sg.robot + ' 로봇', 'waypoint ' + sg.waypoints, sg.runCount + ' run'],
@@ -681,7 +707,7 @@ class Component extends DCLogic {
         vizBg: on ? 'rgb(var(--accent-ch) / 0.07)' : 'transparent',
         vizColor: on ? 'var(--text-hi)' : (full ? 'var(--line-hi)' : 'var(--text-mid)'),
         viz: () => this.toggleViz(u.id),
-        load: () => this.startLoad(u),
+        load: () => { if (u.simOnly) { if (u.runId) window.location.href = 'PolyTwin%20Console.html?run=' + u.runId; } else this.startLoad(u); },
       };
     });
 
