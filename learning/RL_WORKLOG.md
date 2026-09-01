@@ -846,3 +846,10 @@ v5 의 접촉 상태기계(스파이크 소프트 리트랙트·암 가드·크�
 - **오케스트레이터** `car_cells_robot.py`: 점군 → CellRegistry(491셀) → 셀 점군 최소제곱 quad
   (실측 rms 1~5 mm, sagitta 최대 ±19 mm) → 배치(num_envs)로 env 스폰 → 로봇 트랙 챔피언
   `model_ppo_curved.pt` + 재폴리싱 상태기계 → 5종 판정·보증·처분 CSV. `run_car_cells.sh` 로 순차 배치.
+
+**첫 배치 (2026-09-01, 셀 300~303·100·101·250·251, PhysX 실접촉, `model_ppo_curved`)**:
+8셀 중 **5 합격**(윗면 301·302, 좌측면 100·101, 우측면 251 — GU 최대 53→71, 자국 0.36→0.04),
+303 재작업 후보(자국 0.86 μm 깊음, 코트 예산 소진 36.5), 300·250 은 첫 접촉 스파이크 트립
+(300 은 품질 GU 72.1 로 합격 수준) → 하드리밋 **디바운스**(6 substep=50 ms 연속) 추가 후
+전체 순회 시작: `overnight.sh` = 클로즈업 재녹화 → `run_car_cells.sh 0 490 16` (31배치, ~8 h).
+결과: `learning/rl/robot/results/car_cells.csv` (판정 5종·보증·처분, 셀별 quad 계수·rms 포함).
