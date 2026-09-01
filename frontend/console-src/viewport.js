@@ -694,7 +694,9 @@ function robotCell(parts, mats) {
 
   // 패드 앵커 — 원점이 접촉면, +Z 가 바깥 법선
   const padAnchor = new THREE.Object3D();
-  padAnchor.position.copy(j6a).multiplyScalar(PAD_OFFSET + 0.036);   // 하우징 면(+0.046) + 플레이트/폼 두께 → 스펀지 접촉면
+  /* 샌더 메시 실측(robot_arm.opt.glb, tool_sander 정점 19,522개): 하우징은 관절 6 축선에서 옆으로 1.85 cm(리그 월드 +z 방향) 비껴 있고
+     바닥면은 축 방향 +0.030 m. 앵커(스펀지 접촉면) = 그 바닥면 + 플레이트 0.8 cm + 폼 2.8 cm = +0.066, 횡오프셋 포함. */
+  padAnchor.position.set(0.0004, -0.0002, 0.0185).addScaledVector(j6a, 0.066);
   padAnchor.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), j6a);
   parent.add(padAnchor);
 
@@ -705,7 +707,7 @@ function robotCell(parts, mats) {
   const padDisc = new THREE.Group();
   const foam = new THREE.Mesh(new THREE.CylinderGeometry(0.052, 0.055, 0.028, 40), mats.pad);
   foam.rotation.x = Math.PI / 2; foam.position.z = -0.014; foam.castShadow = true;
-  const plate = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.01, 40), mats.dark);
+  const plate = new THREE.Mesh(new THREE.CylinderGeometry(0.068, 0.072, 0.01, 40), mats.dark);   // 하우징 바닥(반경 ≈7.6 cm)에 맞는 백킹 플레이트
   plate.rotation.x = Math.PI / 2; plate.position.z = -0.033;
   // 회전이 보이게: 폼 옆면에 어두운 띠 무늬 2개 (대칭 원통은 돌아도 안 보인다)
   for (const a of [0, Math.PI]) {
@@ -2001,7 +2003,7 @@ class PolyTwinViewport extends HTMLElement {
         // solveIK 는 월드 좌표로 푼다 — 여기서 로컬로 바꾸면 안 된다.
         // 경로선은 z-fighting 을 피하려고 도장면에서 13 mm 띄워 그린다.
         // 패드는 그 선이 아니라 도장면을 짚어야 하므로 되돌려 겨눈다.
-        _ikPad.copy(pt).addScaledVector(nrm, -PATH_LIFT);
+        _ikPad.copy(pt).addScaledVector(nrm, -PATH_LIFT + 0.002);   // 표면에서 2 mm 띄운다(패드가 파묻혀 보이지 않게)
         _ikBack.copy(_ikPad).addScaledVector(nrm, 0.12);
         if (contact) {   // 작업 중 손목이 살짝 흔들린다(±1.2 cm, 1.3 Hz) — 진짜 폴리싱처럼 팔에 움직임이 보이게
           const side = new THREE.Vector3(nrm.z, 0, -nrm.x); if (side.lengthSq() < 1e-6) side.set(1, 0, 0); side.normalize();
@@ -2044,7 +2046,7 @@ class PolyTwinViewport extends HTMLElement {
         // 패드 자전 + 듀얼액션 궤도(4 mm, 5 Hz) — 공정 중일 때만. 어느 배속에서도 '작업 중' 이 보인다
         const rpm = p.rpm || 3000;
         cell.userData.padDisc.rotation.z += (rpm / 60) * Math.PI * 2 * dt;
-        const orb = contact ? 0.004 : 0.0, ph = t * 2 * Math.PI * 5;
+        const orb = contact ? 0.002 : 0.0, ph = t * 2 * Math.PI * 5;   // 듀얼액션 궤도 2 mm
         cell.userData.padDisc.position.set(orb * Math.cos(ph), orb * Math.sin(ph), 0);
 
         // 지나간 자리를 무광에서 유광으로 — 빛이 닿는 표면 작업점(패드가 조금 떠도 광택은 정확히 그 자리)
