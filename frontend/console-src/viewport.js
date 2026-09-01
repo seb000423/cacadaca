@@ -1390,6 +1390,23 @@ class PolyTwinViewport extends HTMLElement {
   _driveWorkArea(dt, t, p) {
     const feed = this._live; if (!feed) return;
     this._waActive = true;
+    /* 진행률 모드(기본): 기록에서는 전체 진행률만 쓴다. 로봇마다 배정된 레인 경로(work)의 p 지점까지 훑는다.
+       패드가 지나간 자리가 유광이 되므로 p=1 이면 차 전체가 닦여 있다. 설비는 작업점을 따라온다(_liftFollow). */
+    if (!this._lanes || !this._lanes.length) return;
+    const prog = Math.max(0, Math.min(1, Number(feed.progress) || 0));
+    for (const cell of this._cells) {
+      if (!cell.userData.work || cell.userData.work.length < 2) continue;
+      const len = cell.userData.pathLen || 0;
+      const sTarget = prog * len;
+      const cur = cell.userData.s || 0;
+      const maxStep = Math.max(0.02, 1.2 * dt);                    // 따라붙는 최대 속도 1.2 m/s (탐색 점프도 부드럽게)
+      const d = sTarget - cur;
+      cell.userData.s = Math.abs(d) > maxStep ? cur + Math.sign(d) * maxStep : sTarget;
+      if (sTarget < cur - 0.5) { cell.userData.s = sTarget; cell.userData.cursor = 0; }   // 뒤로 탐색: 즉시
+    }
+    this._liftFollow = true;
+    this._animateLanes(dt, t, p, true);
+    return;
     for (const cell of this._cells) {
       const rid = cell.userData.robotId;
       const r = (rid && feed.robots.find((x) => x.id === rid)) || null;
@@ -1429,6 +1446,7 @@ class PolyTwinViewport extends HTMLElement {
 
   /** 완료된 셀 전체를 광택 마스크에 찍는다(셀 12 cm → 반경 9 cm 원). 팔 동작과 무관하게 판정 완료 = 닦임. */
   stampCells(snapshot, scene) {
+    if (this._liveWorkArea) return;                                 // 진행률 모드: 광택은 패드가 지나간 자리로만 (레인이 전 표면을 덮는다)
     const items = snapshot && Array.isArray(snapshot.items) ? snapshot.items : [];
     if (!this._liveWorkArea && !this._liveXf && scene) this._buildLiveXform(scene);
     const xf = this._liveXf; if ((!xf && !this._liveWorkArea) || !this._polish) return;
@@ -1496,6 +1514,7 @@ class PolyTwinViewport extends HTMLElement {
     const had = !!this._live;
     this._live = feed && feed.robots && feed.robots.some((r) => Array.isArray(r.q) || r.tcp) ? feed : null;
     this._liveWorkArea = !!(this._live && typeof this._live.kind === 'string' && this._live.kind.indexOf('result_replay') === 0);
+    if (this._liveWorkArea && !had) { this.resetPolish(); for (const c of this._cells) { c.userData.s = 0; c.userData.cursor = 0; } }
     if (this._live && !had && !this._liveWorkArea && this._vehicle !== 'scan') {   // 실제 Isaac 기록: 관절 추종 → Isaac 과 같은 스캔 차체
       this._vehicleBefore = this._vehicle;
       this.setVehicle('scan').then(() => { this._liveXf = null; if (this._live && this._live.scene) this._buildLiveXform(this._live.scene); }).catch(() => {});
@@ -1507,7 +1526,7 @@ class PolyTwinViewport extends HTMLElement {
     if (had && !this._live) {
       this.raster.visible = true;
       this.clearCells();
-      if (this._waActive) { this._waActive = false; for (const c of this._cells) { c.userData.waPt = null; } this.assignWork(); this.resetPolish(); }
+      if (this._waActive) { this._waActive = false; this._liftFollow = false; for (const c of this._cells) { c.userData.waPt = null; } this._cellSig = null; this.layoutCells(); this.resetPolish(); }
       this._liveScene = null;
       if (this._vehicleBefore && this._vehicleBefore !== 'scan') { const vb = this._vehicleBefore; this._vehicleBefore = null; this.setVehicle(vb).catch(() => {}); }
       if (this._liveLift0 !== undefined) { this._params.carLift = this._liveLift0; this._liveLift0 = undefined; this._applyCarLift(); }
@@ -1772,7 +1791,7 @@ class PolyTwinViewport extends HTMLElement {
 
   /** 콘솔 자체 공정 애니메이션 — 셀마다 배정된 레인(work)을 이송속도로 훑는다: 레일 슬라이딩·접근/후퇴·IK·패드 회전·광택 스탬프.
       데모 모드와 '작업영역 추종' 재생 모드가 함께 쓴다. */
-  _animateLanes(dt, t, p) {
+  _animateLanes(dt, t, p, holdS = false) {
     if (this._lanes && this._lanes.length && this._cells.length) {
       // 실제 이송속도(m/s)에 데모 배속을 곱한다. 0.03 m/s 그대로면
       // 한 패스에 2분이 넘어 심사에서 아무 일도 안 일어나 보인다.
@@ -1788,8 +1807,13 @@ class PolyTwinViewport extends HTMLElement {
         /* 자기 구역을 이송속도로 훑는다. 진행량은 비율이 아니라 미터다 —
            작업점이 몇 개든 패드가 실제로 움직이는 속도가 같아야 팔이 따라온다. */
         const cum = cell.userData.cum, len = cell.userData.pathLen;
-        let s = (cell.userData.s || (ci * len * 0.31)) + speed * dt;
-        if (s >= len) s -= len * Math.floor(s / len);
+        let s;
+        if (holdS) {                                   // 진행률 모드: s 는 기록의 % 로 정해져 있다 (끝에서 멈춤)
+          s = Math.min(len - 1e-4, Math.max(0, cell.userData.s || 0));
+        } else {
+          s = (cell.userData.s || (ci * len * 0.31)) + speed * dt;
+          if (s >= len) s -= len * Math.floor(s / len);
+        }
         cell.userData.s = s;
         // 이전 위치에서 이어 찾는다(대부분 한두 칸)
         let k = cell.userData.cursor || 0;
@@ -1813,6 +1837,31 @@ class PolyTwinViewport extends HTMLElement {
         if (hop > 0) pt.addScaledVector(nrm, hop);
         const contact = hop < 0.004;
         if (ci === 0) lead = _leadP.copy(pt);
+
+        /* 설비가 작업점을 따라온다(진짜 공정처럼): 천장 로봇은 갠트리를 따라 이동하며 매달림 기둥을 신축해
+           어깨를 작업점 위 0.65 m 에, 측면 로봇은 텔레리프트로 어깨를 작업점 높이 근처에 둔다. */
+        if (this._liftFollow) {
+          const LONG2 = (this._axes && this._axes.LONG) || 'z';
+          if (cell.userData.ceiling) {
+            const beamY = this._beamY || (cell.position.y + 1.0);
+            const stepL = RAIL_SPEED * dt, stepY = 0.35 * dt;
+            cell.position[LONG2] += THREE.MathUtils.clamp(pt[LONG2] - cell.position[LONG2], -stepL, stepL);
+            const wantY = THREE.MathUtils.clamp(pt.y + 0.65, pt.y + 0.35, beamY - 0.3);
+            cell.position.y += THREE.MathUtils.clamp(wantY - cell.position.y, -stepY, stepY);
+            if (this._hang && this._liftGeo) {
+              this._hang.position.set(cell.position.x, beamY, cell.position.z);
+              this._hang.scale.y = Math.max(0.05, beamY - cell.position.y) / this._liftGeo.userData.size.y;
+            }
+            cell.updateMatrixWorld(true);
+          } else if (p.hasLift) {
+            const root = cell.userData.armRoot;
+            const wantY = THREE.MathUtils.clamp(pt.y - 0.15, 0.55, 1.75);
+            const stepY = 0.25 * dt;
+            root.position.y += THREE.MathUtils.clamp(wantY - root.position.y, -stepY, stepY);
+            this._setStandHeight(cell, root.position.y);
+            cell.updateMatrixWorld(true);
+          }
+        }
 
         // 레일 위 셀은 목표를 따라 길이 방향으로 미끄러진다
         if (cell.userData.onRail) {
