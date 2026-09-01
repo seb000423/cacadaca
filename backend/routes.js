@@ -151,6 +151,51 @@ function validateSignup(loginId, password, name) {
    local : 이 서버가 Isaac 을 직접 띄운다 (UI 서버와 GPU 가 같은 PC)
    queue : 작업 큐에 넣고 GPU PC 의 워커(sim_worker.py)가 가져간다 (Vercel 배포 기본)
    PT_SIM_MODE 로 강제, 없으면 Vercel 이면 queue, 아니면 local. ── */
+/* ── 로컬 기록 테일러 ──────────────────────────────────────────────
+   로컬 spawn(또는 GUI 로 직접 띄운 v5)이 쓰는 SimRecorder sqlite 를 2 s 마다 읽어 서버 DB(sim_runs/sim_chunks)에
+   그대로 넣는다 → 워커 없이도 콘솔이 지연 재생으로 따라간다. 기록 파일이 생기기 전엔 기다린다. */
+function startRunTailer(store, filePath, { jobId = null, name = '' } = {}) {
+  const fs = require('node:fs');
+  const st = { runId: null, seq: 0, ev: 0, cell: 0, db: null, timer: null, done: false, filePath };
+  const open = () => {
+    if (st.db || !fs.existsSync(filePath)) return false;
+    try {
+      const { DatabaseSync } = require('node:sqlite');
+      const db = new DatabaseSync(filePath, { readOnly: true });
+      const meta = {}; for (const r of db.prepare('SELECT key, value FROM meta').all()) { try { meta[r.key] = JSON.parse(r.value); } catch { meta[r.key] = r.value; } }
+      if (!meta.scene && !meta.hz) { db.close(); return false; }     // 아직 스키마/메타 전
+      st.db = db; st.meta = meta;
+      return true;
+    } catch { return false; }
+  };
+  const pull = async (final) => {
+    if (!st.db && !open()) return;
+    if (!st.runId) st.runId = await store.createRun({ jobId, name: name || require('node:path').basename(filePath), meta: st.meta });
+    try {
+      const chunks = st.db.prepare('SELECT seq, t0, t1, n, data FROM chunks WHERE seq > ? ORDER BY seq LIMIT 400').all(st.seq);
+      if (chunks.length) { await store.appendChunks(st.runId, chunks.map((c) => ({ ...c, data: Buffer.from(c.data) }))); st.seq = chunks[chunks.length - 1].seq; }
+      const ev = st.db.prepare('SELECT id, t, robot, level, msg FROM events WHERE id > ? ORDER BY id').all(st.ev);
+      if (ev.length) { await store.addRunEvents(st.runId, ev); st.ev = ev[ev.length - 1].id; }
+      const cells = st.db.prepare('SELECT id, t, data FROM cells WHERE id > ? ORDER BY id').all(st.cell);
+      if (cells.length) { await store.addRunCells(st.runId, cells.map((c) => ({ ...c, data: Buffer.from(c.data) }))); st.cell = cells[cells.length - 1].id; }
+      const metaNow = {}; for (const r of st.db.prepare('SELECT key, value FROM meta').all()) { try { metaNow[r.key] = JSON.parse(r.value); } catch { metaNow[r.key] = r.value; } }
+      const ended = metaNow.t_end !== undefined;
+      if (final || ended) {
+        await store.updateRunMeta(st.runId, metaNow);
+        const rr = st.db.prepare('SELECT data FROM result WHERE id = 1').get();
+        let result = null; try { result = rr ? JSON.parse(rr.data) : null; } catch { result = null; }
+        await store.finishRun(st.runId, final && final.failed ? 'failed' : 'done', result);
+        stop();
+      }
+    } catch (e) { console.warn('[tailer] 읽기 실패(계속):', e.message); }
+  };
+  const stop = () => { if (st.timer) clearInterval(st.timer); st.timer = null; st.done = true; try { if (st.db) st.db.close(); } catch { /* */ } st.db = null; };
+  st.timer = setInterval(() => { pull().catch(() => {}); }, 2000);
+  st.stop = async (failed) => { if (st.done) return; if (st.timer) clearInterval(st.timer); st.timer = null; await pull({ failed: !!failed }); if (!st.done) stop(); };
+  st.id = () => st.runId;
+  return st;
+}
+
 function simMode() {
   const m = String(process.env.PT_SIM_MODE || '').toLowerCase();
   if (m === 'local' || m === 'queue') return m;
@@ -398,6 +443,7 @@ async function handleApi(req, res, pathname) {
       } catch (e) { result = null; }
       return json(res, 200, {
         running, pid: S.pid, startedAt: S.startedAt, params: S.params, exitCode: S.exitCode, log: S.log,
+        run_id: S.tailer ? S.tailer.id() : null,
         elapsed_s: S.startedAt ? Math.round((Date.now() - S.startedAt) / 1000) : 0, result,
       });
     }
@@ -444,7 +490,7 @@ async function handleApi(req, res, pathname) {
         POLISH_RAIL: params.hasRail === false ? '0' : '1', POLISH_LIFT: params.hasLift === false ? '0' : '1',
         POLISH_PAD_RADIUS: (Number(params.pad || 110) / 2000).toFixed(4),
         POLISH_CAR_LIFT_Z: (0.90 + Number(params.carLift || 0) / 1000).toFixed(3),
-        POLISH_RECORD: path.join(OUT, 'run_local_' + Date.now() + '.sqlite'),
+        POLISH_RECORD: (S.recordPath = path.join(OUT, 'run_local_' + Date.now() + '.sqlite')),
       });
       const args = [ 'polishing_v5.py', '--obj_name', 'car', '--headless' ];
       if (body.dry_run) return json(res, 200, { ok: true, dry_run: true, cmd: ISAAC + ' ' + args.join(' '), cwd: path.join(REPO, 'scripts'), recipe, feed });
@@ -457,7 +503,9 @@ async function handleApi(req, res, pathname) {
         return json(res, 500, { error: '시뮬레이션을 시작하지 못했습니다: ' + e.message });
       }
       S.proc = proc; S.pid = proc.pid; S.startedAt = Date.now(); S.params = params; S.exitCode = null; S.log = logPath;
-      proc.on('exit', (code) => { S.exitCode = code === null ? -1 : code; });
+      if (S.tailer) { try { S.tailer.stop(true); } catch { /* */ } }
+      S.tailer = startRunTailer(store, S.recordPath, { name: 'local ' + new Date().toISOString().slice(0, 16).replace('T', ' ') });
+      proc.on('exit', (code) => { S.exitCode = code === null ? -1 : code; if (S.tailer) S.tailer.stop(S.exitCode !== 0).catch(() => {}); });
       proc.unref();
       await store.log(sess.login_id, 'sim.start', String(proc.pid), JSON.stringify(params));
       return json(res, 201, { ok: true, pid: proc.pid, params, recipe, feed, log: logPath });
@@ -468,8 +516,19 @@ async function handleApi(req, res, pathname) {
   if (pathname.indexOf('/api/runs') === 0) {
     const sess = await sessionOf(req);
     if (!sess) return json(res, 401, { error: '로그인이 필요합니다.' });
-    const mm = pathname.match(/^\/api\/runs(?:\/(\d+)(?:\/(chunks|events|cells))?|\/import)?$/);
+    const mm = pathname.match(/^\/api\/runs(?:\/(\d+)(?:\/(chunks|events|cells))?|\/import|\/watch)?$/);
     if (!mm) return json(res, 404, { error: 'not found' });
+    if (pathname === '/api/runs/watch' && method === 'POST') {
+      /* 로컬 전용: GUI 로 직접 띄운 v5(run_v5_rl_view.sh, POLISH_RECORD)의 기록 파일을 따라간다 → 콘솔 목록에 '기록 중' 으로 뜸 */
+      if (process.env.VERCEL) return json(res, 501, { error: '배포 서버에서는 워커 업로드만 지원합니다.' });
+      const body = await readBody(req);
+      const file = String(body.path || '');
+      if (!file) return json(res, 400, { error: 'path 가 필요합니다.' });
+      global.__ptTailers = global.__ptTailers || [];
+      const t = startRunTailer(store, file, { name: String(body.name || ('watch ' + require('node:path').basename(file))) });
+      global.__ptTailers.push(t);
+      return json(res, 200, { ok: true, watching: file });
+    }
     const runPublic = (r) => ({ id: r.id, job_id: r.job_id, name: r.name, status: r.status, t_sim_end: Number(r.t_sim_end || 0),
       n_frames: Number(r.n_frames || 0), created_at: Number(r.created_at), finished_at: r.finished_at ? Number(r.finished_at) : null,
       meta: (() => { try { return JSON.parse(r.meta || '{}'); } catch { return {}; } })(),

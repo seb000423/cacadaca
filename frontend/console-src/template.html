@@ -499,6 +499,7 @@ class Component extends DCLogic {
   componentDidMount() {
     this.push();
     this.fetchRuns();
+    this._runsTimer = setInterval(() => { if (!this.state.running && !(this.state.replay && this.state.replay.active)) this.fetchRuns(); }, 10000);
     /* credentials 를 빼면 세션 쿠키가 안 실려 401 이 온다 */
     fetch(SEED_URL, { credentials: 'same-origin' })
       .then((r) => r.json().catch(() => ({})).then((d) => {
@@ -619,10 +620,11 @@ class Component extends DCLogic {
       const viaReplay = !!(this.state.replay && this.state.replay.active);
       if (!viaReplay && v && v.setLive) v.setLive(feed);   // 3D 팔 = Isaac 관절 그대로 (폴링 경로)
       /* 워커가 이 작업의 기록(run)을 올리기 시작하면 지연 재생기로 전환 — 청크를 미리 받아 보간하므로 렉이 없다 */
-      if (!viaReplay && st && st.job && st.job.id && !this._liveReplayTried && v && v.replay) {
+      if (!viaReplay && st && (st.run_id || (st.job && st.job.id)) && !this._liveReplayTried && v && v.replay) {
         this._liveReplayTried = performance.now();
-        fetch('/api/runs', { credentials: 'same-origin', cache: 'no-store' }).then((r) => r.json()).then((d) => {
-          const run = (d.runs || []).find((r) => r.job_id === st.job.id);
+        if (st.run_id) { this.loadReplay(st.run_id, true); this.fetchRuns(); }      // 로컬 모드: 서버 테일러가 만든 기록
+        else fetch('/api/runs', { credentials: 'same-origin', cache: 'no-store' }).then((r) => r.json()).then((d) => {
+          const run = (d.runs || []).find((r) => r.job_id === st.job.id);          // 큐 모드: 워커가 올리는 기록
           if (run) { this.setState({ runs: d.runs || [] }); this.loadReplay(run.id, true); }
           else this._liveReplayTried = null;                      // 아직 없음 — 다음 폴링에서 다시
         }).catch(() => { this._liveReplayTried = null; });
