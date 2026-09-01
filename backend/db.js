@@ -89,6 +89,30 @@ CREATE INDEX IF NOT EXISTS idx_segments_ord ON segments(ord);
 /* 데이터셋의 머리말 — generated/note/source/header 처럼 세그먼트
    바깥에 있던 것들, 그리고 quality_kpi.json 통째.
    화면에 돌려줄 때 segments 와 다시 합쳐 원래 JSON 모양을 만든다 */
+/* 시뮬레이션 작업 큐 — 배포(Vercel)에서는 서버가 Isaac 을 못 띄운다.
+   콘솔의 실행 요청을 여기 넣고, GPU PC 의 워커(learning/ui_bridge/sim_worker.py)가
+   폴링해 실행한다. 진행 피드·결과도 워커가 밀어 올려 sim_state 에 둔다.
+   status: queued → running → done | failed | stopped ;  stop_requested 는 플래그 */
+CREATE TABLE IF NOT EXISTS sim_jobs (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id       INTEGER NOT NULL,
+  status        TEXT    NOT NULL DEFAULT 'queued',
+  stop_requested INTEGER NOT NULL DEFAULT 0,
+  params        TEXT    NOT NULL,
+  worker        TEXT    NOT NULL DEFAULT '',
+  created_at    INTEGER NOT NULL,
+  started_at    INTEGER,
+  finished_at   INTEGER,
+  exit_code     INTEGER,
+  result        TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_sim_jobs_status ON sim_jobs(status, created_at);
+/* 최신 피드 스냅샷 한 줄 (key='feed') — 워커가 0.5~1 s 마다 덮어쓴다 */
+CREATE TABLE IF NOT EXISTS sim_state (
+  key        TEXT    PRIMARY KEY,
+  payload    TEXT    NOT NULL,
+  updated_at INTEGER NOT NULL
+);
 CREATE TABLE IF NOT EXISTS dataset_meta (
   key        TEXT    PRIMARY KEY,
   payload    TEXT    NOT NULL,
@@ -249,6 +273,38 @@ const store = {
     );
   },
 
+  /* ── 시뮬레이션 작업 큐 / 상태 ──────────────────────────── */
+  async createJob({ userId, params }) {
+    const r = await be.run('INSERT INTO sim_jobs (user_id, params, created_at) VALUES (?, ?, ?)',
+      [userId, JSON.stringify(params), now()]);
+    return store.getJob(r.lastId);
+  },
+  getJob: (id) => be.get('SELECT * FROM sim_jobs WHERE id = ?', [id]),
+  activeJob: () => be.get("SELECT * FROM sim_jobs WHERE status IN ('queued','running') ORDER BY created_at ASC LIMIT 1"),
+  latestJob: () => be.get('SELECT * FROM sim_jobs ORDER BY created_at DESC LIMIT 1'),
+  async claimNextJob(worker) {
+    const j = await be.get("SELECT * FROM sim_jobs WHERE status = 'queued' ORDER BY created_at ASC LIMIT 1");
+    if (!j) return null;
+    const r = await be.run("UPDATE sim_jobs SET status = 'running', worker = ?, started_at = ? WHERE id = ? AND status = 'queued'",
+      [worker, now(), j.id]);
+    if (!r.changes) return null;            /* 다른 워커가 먼저 가져감 */
+    return store.getJob(j.id);
+  },
+  requestStop: (id) => be.run('UPDATE sim_jobs SET stop_requested = 1 WHERE id = ?', [id]),
+  async finishJob(id, { status = 'done', exitCode = 0, result = null }) {
+    await be.run('UPDATE sim_jobs SET status = ?, exit_code = ?, finished_at = ?, result = COALESCE(?, result) WHERE id = ?',
+      [status, exitCode, now(), result ? JSON.stringify(result) : null, id]);
+    return store.getJob(id);
+  },
+  setJobResult: (id, result) => be.run('UPDATE sim_jobs SET result = ? WHERE id = ?', [JSON.stringify(result), id]),
+  getState: (key) => be.get('SELECT * FROM sim_state WHERE key = ?', [key]),
+  async putState(key, payload) {
+    await be.run(
+      `INSERT INTO sim_state (key, payload, updated_at) VALUES (?, ?, ?)
+       ON CONFLICT(key) DO UPDATE SET payload = excluded.payload, updated_at = excluded.updated_at`,
+      [key, JSON.stringify(payload), now()],
+    );
+  },
   getMeta: (key) => be.get('SELECT * FROM dataset_meta WHERE key = ?', [key]),
 
   async putMeta(key, payload) {

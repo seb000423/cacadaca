@@ -147,6 +147,30 @@ function validateSignup(loginId, password, name) {
 /* ══════════════════════════════════════════════════════════════
    API
    ══════════════════════════════════════════════════════════════ */
+/* ── 시뮬레이션 실행 모드 ─────────────────────────────────
+   local : 이 서버가 Isaac 을 직접 띄운다 (UI 서버와 GPU 가 같은 PC)
+   queue : 작업 큐에 넣고 GPU PC 의 워커(sim_worker.py)가 가져간다 (Vercel 배포 기본)
+   PT_SIM_MODE 로 강제, 없으면 Vercel 이면 queue, 아니면 local. ── */
+function simMode() {
+  const m = String(process.env.PT_SIM_MODE || '').toLowerCase();
+  if (m === 'local' || m === 'queue') return m;
+  return process.env.VERCEL ? 'queue' : 'local';
+}
+function workerAuthed(req) {
+  const want = process.env.PT_WORKER_TOKEN || '';
+  if (!want) return false;
+  const got = String(req.headers['x-pt-worker'] || '');
+  return got.length === want.length && require('crypto').timingSafeEqual(Buffer.from(got), Buffer.from(want));
+}
+function jobPublic(j) {
+  if (!j) return null;
+  let params = null, result = null;
+  try { params = JSON.parse(j.params); } catch { params = null; }
+  try { result = j.result ? JSON.parse(j.result) : null; } catch { result = null; }
+  return { id: j.id, status: j.status, stopRequested: !!j.stop_requested, params, worker: j.worker,
+           createdAt: j.created_at, startedAt: j.started_at, finishedAt: j.finished_at, exitCode: j.exit_code, result };
+}
+
 async function handleApi(req, res, pathname) {
   const method = req.method;
 
@@ -237,6 +261,76 @@ async function handleApi(req, res, pathname) {
        POST /api/sim/stop
        GET  /api/sim/status → {running, pid, startedAt, elapsed_s, params, exitCode, result}
      경로: PT_SIM_REPO(시뮬 저장소, 기본 ../cacadaca), PT_ISAAC_PY(기본 ~/isaacsim/python.sh) ══ */
+  /* ── 워커 전용 (X-PT-Worker 토큰) — 큐 모드의 GPU PC 가 부른다 ── */
+  if (pathname.indexOf('/api/sim/jobs') === 0) {
+    if (!workerAuthed(req)) return json(res, 401, { error: '워커 토큰이 필요합니다.' });
+    if (pathname === '/api/sim/jobs/next' && method === 'GET') {
+      const u = new URL(req.url, 'http://localhost');
+      const worker = String(u.searchParams.get('worker') || 'gpu');
+      const j = await store.claimNextJob(worker);
+      return json(res, 200, { job: jobPublic(j) });
+    }
+    const m = pathname.match(/^\/api\/sim\/jobs\/(\d+)\/(feed|result|exit|state)$/);
+    if (m) {
+      const id = Number(m[1]); const kind = m[2];
+      const j = await store.getJob(id);
+      if (!j) return json(res, 404, { error: '없는 작업입니다.' });
+      if (kind === 'state' && method === 'GET') return json(res, 200, { job: jobPublic(j) });
+      if (method !== 'POST') return json(res, 405, { error: '지원하지 않는 요청입니다.' });
+      const body = await readBody(req, 512 * 1024);
+      if (kind === 'feed') { await store.putState('feed', body.feed || body); return json(res, 200, { ok: true, stopRequested: !!j.stop_requested }); }
+      if (kind === 'result') { await store.setJobResult(id, body.result || body); return json(res, 200, { ok: true }); }
+      if (kind === 'exit') {
+        const code = Number(body.exitCode);
+        const status = body.status || (j.stop_requested ? 'stopped' : (code === 0 ? 'done' : 'failed'));
+        const jj = await store.finishJob(id, { status, exitCode: Number.isFinite(code) ? code : -1, result: body.result || null });
+        return json(res, 200, { ok: true, job: jobPublic(jj) });
+      }
+    }
+    return json(res, 404, { error: '없는 요청입니다.' });
+  }
+  if (pathname.indexOf('/api/sim/') === 0 && simMode() === 'queue') {
+    /* ── 큐 모드: 콘솔 → 작업 행, 워커가 실행 ── */
+    const sess = await sessionOf(req);
+    if (!sess) return json(res, 401, { error: '로그인이 필요합니다.' });
+    if (sess.status !== 'active') return json(res, 403, { error: '승인 대기 중인 계정입니다.' });
+    if (pathname === '/api/sim/status' && method === 'GET') {
+      const active = await store.activeJob();
+      const j = active || await store.latestJob();
+      const jp = jobPublic(j);
+      return json(res, 200, {
+        mode: 'queue', running: !!(active), queued: !!(active && active.status === 'queued'),
+        pid: null, startedAt: jp ? jp.startedAt : null, params: jp ? jp.params : null,
+        exitCode: jp ? jp.exitCode : null, log: null, job: jp,
+        elapsed_s: jp && jp.startedAt ? Math.round((Date.now() - jp.startedAt) / 1000) : 0,
+        result: jp && (jp.status === 'done' || jp.status === 'stopped' || jp.status === 'failed') ? jp.result : null,
+      });
+    }
+    if (pathname === '/api/sim/stop' && method === 'POST') {
+      const active = await store.activeJob();
+      if (!active) return json(res, 200, { ok: true, running: false });
+      await store.requestStop(active.id);
+      await store.log(sess.login_id, 'sim.stop', String(active.id), 'queue');
+      return json(res, 200, { ok: true, running: true, stopping: true, job: jobPublic(await store.getJob(active.id)) });
+    }
+    if (pathname === '/api/sim/start' && method === 'POST') {
+      const active = await store.activeJob();
+      if (active) return json(res, 409, { error: '이미 대기/실행 중인 작업이 있습니다.', job: jobPublic(active) });
+      const body = await readBody(req, 64 * 1024);
+      const num = (v, d) => (Number.isFinite(Number(v)) ? Number(v) : d);
+      const params = {
+        tool: String(body.tool || 'dual'), force: num(body.force, 5.6), rpm: num(body.rpm, 3000),
+        feed_mm_s: num(body.feed_mm_s, 5.65), overlap: num(body.overlap, 40),
+        robotCount: num(body.robotCount, 3), physical: !!body.physical, max_steps: num(body.max_steps, 6000),
+      };
+      if (params.force < 3 || params.force > 8) return json(res, 400, { error: '접촉력은 3~8 N 대역 안이어야 합니다.' });
+      if (body.dry_run) return json(res, 200, { ok: true, dry_run: true, mode: 'queue', params });
+      const j = await store.createJob({ userId: Number(sess.id), params });
+      await store.log(sess.login_id, 'sim.start', String(j.id), JSON.stringify(params));
+      return json(res, 201, { ok: true, mode: 'queue', job: jobPublic(j) });
+    }
+    return json(res, 404, { error: '없는 요청입니다.' });
+  }
   if (pathname.indexOf('/api/sim/') === 0) {
     const sess = await sessionOf(req);
     if (!sess) return json(res, 401, { error: '로그인이 필요합니다.' });
@@ -320,6 +414,14 @@ async function handleApi(req, res, pathname) {
   if (pathname === '/api/monitor' && method === 'GET') {
     const sess = await sessionOf(req);
     if (!sess) return json(res, 401, { error: '로그인이 필요합니다.' });
+    if (simMode() === 'queue') {
+      /* 배포/큐 모드: 워커가 POST /api/sim/jobs/:id/feed 로 올린 최신 스냅샷 */
+      const row = await store.getState('feed');
+      if (!row) return json(res, 200, { live: false, age_s: null, feed: null });
+      let data = null; try { data = JSON.parse(row.payload); } catch { data = null; }
+      const age = (Date.now() - Number(row.updated_at)) / 1000;
+      return json(res, 200, { live: !!data && age < 8, age_s: Math.round(age * 10) / 10, feed: data });
+    }
     const fs = require('fs'), path = require('path');
     const feed = process.env.PT_MONITOR_FEED
       || path.join(__dirname, '..', '..', 'cacadaca', 'learning', 'ui_bridge', 'out', 'monitor_feed.json');
