@@ -67,7 +67,7 @@ def launch(params: dict, feed_path: str, fake: bool, isaac_py: str) -> subproces
     log = open(os.path.join(OUT, "sim_run.log"), "w")
     rec_path = params.get("_record_path") or ""
     if fake:
-        cmd = [sys.executable, os.path.join(_HERE, "feed_demo.py"), str(params.get("fake_seconds", 40)), feed_path]
+        cmd = [sys.executable, os.path.join(_HERE, "feed_demo.py"), str(params.get("fake_seconds", 40)), feed_path]   # 합성 길이(s) — --fake_seconds
         if rec_path: cmd.append(rec_path)
         return subprocess.Popen(cmd, stdout=log, stderr=subprocess.STDOUT, start_new_session=True)
     recipe = write_recipe(params)
@@ -141,6 +141,7 @@ class RunUploader:
 
 def run_job(job: dict, args) -> None:
     jid = job["id"]; params = dict(job.get("params") or {})
+    if args.fake: params.setdefault("fake_seconds", args.fake_seconds)
     feed_path = os.path.join(OUT, "monitor_feed.json")
     rec_path = os.path.join(OUT, f"run_job{jid}_{time.strftime('%Y%m%d_%H%M%S')}.sqlite")
     params["_record_path"] = rec_path
@@ -209,6 +210,7 @@ def main():
     ap.add_argument("--upload_interval", type=float, default=2.0, help="기록 청크 업로드 주기(s) — 지연 재생 지연 ≈ 이 값 + 1 s")
     ap.add_argument("--isaac", default=os.path.expanduser("~/isaacsim/python.sh"))
     ap.add_argument("--fake", action="store_true", help="Isaac 대신 합성 피드(feed_demo.py) — 연결 검증용")
+    ap.add_argument("--fake_seconds", type=float, default=40.0, help="--fake 합성 시뮬 길이(s); 긴 기록 재생 시험용 (예 600)")
     ap.add_argument("--once", action="store_true", help="작업 하나만 처리하고 종료")
     args = ap.parse_args()
     if not args.token:
