@@ -396,6 +396,48 @@ def main(simulation_app, obj_name="car"):
             agent.rl_bridge = rl_bridge
         print(f"[main] POLISH_RL=1 — 잔차 정책 브리지 연결 ({len(agents)}대), 셀 {len(rl_registry.cells)}개")
 
+    # ★ UI2 모니터 피드 (POLISH_MONITOR_FEED=<json 경로>): 20 스텝마다 로봇 힘·상태·진행·셀 판정 기록
+    monitor_feed = None
+    _feed_path = os.environ.get("POLISH_MONITOR_FEED", "")
+    if _feed_path:
+        from learning.ui_bridge.monitor_feed import MonitorFeed
+        monitor_feed = MonitorFeed(_feed_path)
+        monitor_feed.event("C", f"공정 시작 — 로봇 {len(agents)}대, 정책 {'ON' if rl_registry is not None else 'OFF'}", "info", 0.0)
+        print(f"[main] 모니터 피드 → {_feed_path}")
+    _NAMES = {"C": "천장", "SL": "좌측", "SR": "우측"}
+    def _feed_tick():
+        if monitor_feed is None:
+            return
+        robots = []
+        for a in agents:
+            st_name = str(getattr(a, "run_state", "POLISH")).split(".")[-1]
+            seg_prog = (a.current_path_idx_float / max(len(a.path) - 1, 1)) if len(getattr(a, "path", [])) else 0.0
+            robots.append({"id": a.label, "name": _NAMES.get(a.label, a.label),
+                           "force": float(a.filtered_contact_force), "target": float(getattr(a, "_target_force", 0.0)),
+                           "state": st_name, "progress": float(min(max(seg_prog, 0.0), 1.0)),
+                           "rl_force_scale": float(getattr(a, "_rl_force_scale", 1.0)),
+                           "rl_feed_scale": float(getattr(a, "_rl_feed_scale", 1.0))})
+        try:
+            cov = polish_viz.covered_count() / max(polish_viz.total_count(), 1)
+        except Exception:
+            cov = 0.0
+        cells = {}
+        if rl_registry is not None:
+            try:
+                from .rl_bridge import judge_cells
+                rows = judge_cells(rl_registry)
+                cells = {"total": len(rows),
+                         "pass": sum(1 for r in rows if r["overall_pass"]),
+                         "rework": sum(1 for r in rows if r["disposition"] == "rework_candidate"),
+                         "repaint": sum(1 for r in rows if r["disposition"] == "spot_repaint_review"),
+                         "not_reached": sum(1 for r in rows if r["disposition"] == "not_reached"),
+                         "items": [[float(r["center_x_m"]), float(r["center_y_m"]), float(r["center_z_m"]),
+                                    r["disposition"], float(r["gu_proxy_after"])] for r in rows if r["visits"] > 0]}
+            except Exception as exc:
+                cells = {"error": str(exc)[:80]}
+        overall_state = "DONE" if all(a.done for a in agents) else robots[0]["state"] if robots else "POLISH"
+        monitor_feed.update(overall_state, cov, robots, elapsed_s=sim_step / 60.0, cells=cells)
+
     # 물리 초기화
     world.reset()
     for agent in agents:
@@ -561,6 +603,8 @@ def main(simulation_app, obj_name="car"):
 
         for agent in agents:
             agent.step(stage)
+        if monitor_feed is not None and sim_step % 20 == 0:
+            _feed_tick()
         if rl_registry is not None and sim_step % 3000 == 0:      # ~50 s 마다 중간 판정 저장
             _rl_flush("periodic")
 

@@ -906,3 +906,22 @@ v5 의 접촉 상태기계(스파이크 소프트 리트랙트·암 가드·크�
 중단 시 진행 중 배치(≤16셀, ~10분)만 유실. 재개: `setsid nohup bash learning/rl/robot/results/resume_sweep.sh &`
 (CSV 에 없는 첫 셀부터). 강곡률 재실행 옵션 패치는 `learning/rl/robot/results/apply_rerun_patch.py`
 (순회 종료 후 `python3` 로 적용 → `car_cells_robot.py --force_scale 0.7 --pad_radius 0.035 --tag ...`).
+
+### 9.37 UI 통합 — polytwin_UI2 콘솔 (2026-09-01)
+
+기존 ROS/vite 대시보드(`web_dashboard/`, `run_dashboard.sh`, `dashboard_launcher.py`) 삭제(사용자 요청).
+통합 대상 = `origin/polytwin_UI2`(Node 백엔드 + SQLite, ⓪랜딩 ①사전설정 ②모니터 ③④라이브러리).
+UI2 는 공정 결과·모니터를 난수(LCG)로 흉내내고 품질 판정은 polytwin 타일 CSV(`data_sample.txt`)
+→ `make_quality.py` → `quality_kpi.json` 으로 만든다.
+
+**시뮬 측 (`learning/ui_bridge/`)**: ① `export_ui2_dataset.py` — 잔차 정책 리플레이(판정 루프 동일)를
+UI2 타일 스키마(+thermal_damage_proxy)로 출력 → 그들의 `make_quality.py` 그대로 통과 확인(2셀→7,200행→
+에피소드 2, 광택 복합판정 포함). ② `monitor_feed.py` — 러너가 `POLISH_MONITOR_FEED=<json>` 일 때 20스텝
+마다 로봇별 힘·목표·상태·진행·잔차 배율, 커버리지, 셀 판정 집계, 이벤트를 기록(원자적 교체).
+③ `feed_demo.py` — 합성 피드로 연결 검증.
+**UI2 측 (브랜치 `polytwin_UI2`, 커밋 64cce30)**: `GET /api/monitor`(로그인 필요, PT_MONITOR_FEED 경로,
+5 s 이상 오래되면 live:false) + `monitor.html` LIVE 모드(0.5 s 폴링, 힘/진행/상태/이벤트/지표 타일을
+피드에서, 끊기면 데모 복귀, fps 배지에 LIVE/DEMO). 로컬 실행: Node 22(nvm) `node backend/server.js`
+(포트 8000, admin/polytwin2026) — 합성 피드로 live:true 확인.
+남은 것: 실제 v5+RL 실행 피드(GPU 여유 시), RL 150셀 리플레이 → quality_kpi 시드, 라이브러리 기록
+POST(세그먼트 기준 rl 레코드), ③ 결과 화면에 셀 판정 지도.
