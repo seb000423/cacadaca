@@ -1288,10 +1288,14 @@ class PolyTwinViewport extends HTMLElement {
     this._sideFields = buildSideFields(this.renderer, this._model);
   }
 
+  /** 기록 재생기 (지연 생성) — 콘솔이 v.replay.load(id) / play() / pause() / seek(t) / setSpeed(x) 로 쓴다 */
+  get replay() { return this._replay || (this._replay = new ReplayPlayer(this)); }
+
   /** 시뮬 피드(/api/monitor 의 feed) 를 넣으면 팔이 Isaac 관절을 그대로 따른다. null 이면 해제. */
-  setLive(feed) {
+  setLive(feed, snap = false) {
     const had = !!this._live;
     this._live = feed && feed.robots && feed.robots.some((r) => Array.isArray(r.q)) ? feed : null;
+    this._liveSnap = !!snap;
     if (this._live && this._live.scene && !this._liveXf) this._buildLiveXform(this._live.scene);
     if (had && !this._live) {
       // 해제: 받침대 다시 보이고 배치 자세로
@@ -1333,7 +1337,7 @@ class PolyTwinViewport extends HTMLElement {
       // 관절: 오프셋·부호 보정 후 속도 제한으로 따라붙기
       const tgt = cell.userData.liveQ || (cell.userData.liveQ = cell.userData.q.slice());
       for (let j = 0; j < 6; j++) tgt[j] = LIVE_Q_SIGN[j] * ((Number(r.q[j]) || 0) - LIVE_Q_OFFSET[j]);
-      const q = cell.userData.q, step = LIVE_JOINT_RATE * dt;
+      const q = cell.userData.q, step = this._liveSnap ? 1e9 : LIVE_JOINT_RATE * dt;
       for (let j = 0; j < 6; j++) q[j] += THREE.MathUtils.clamp(tgt[j] - q[j], -step, step);
       setCellQ(cell, q);
       // 베이스 자세: 피드에 있으면 Isaac 위치·자세를 그대로(레일 이동·리프트 포함)
@@ -1621,6 +1625,127 @@ class PolyTwinViewport extends HTMLElement {
     }
 
     this.renderer.render(this.scene, this.camera);
+  }
+}
+
+/* ── 기록 재생기 ─────────────────────────────────────────────────────
+   서버(/api/runs/:id/chunks)에서 gzip 청크를 미리 받아 두고, 재생 시계에 맞춰 이웃 프레임을 보간해
+   viewport.setLive(frame, true) 로 넣는다. 네트워크·시뮬 속도와 무관하게 60 fps 로 매끈하다.
+   실시간(기록 중) 런은 끝(t_sim_end)에서 LIVE_LAG 초 뒤를 따라간다 → 지연 재생. */
+const REPLAY_PREFETCH_S = 30;   // 앞으로 미리 받아 둘 구간
+const REPLAY_LIVE_LAG_S = 3.0;  // 기록 중 런을 따라갈 때의 지연
+
+async function gunzipJson(b64) {
+  const bin = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+  const ds = new DecompressionStream('gzip');
+  const w = ds.writable.getWriter(); w.write(bin); w.close();
+  const txt = await new Response(ds.readable).text();
+  return JSON.parse(txt);
+}
+
+class ReplayPlayer {
+  constructor(viewport) {
+    this.vp = viewport;
+    this.run = null; this.frames = []; this.loadedTo = -1; this.loading = false;
+    this.t = 0; this.speed = 1; this.playing = false; this.follow = false;
+    this.onFrame = null; this.onState = null;
+    this._raf = null; this._last = 0; this._lastEmit = 0;
+  }
+  async load(runId) {
+    this.stop();
+    const r = await fetch('/api/runs/' + runId, { credentials: 'same-origin', cache: 'no-store' }).then((x) => x.json());
+    this.run = r.run; this.frames = []; this.loadedTo = -1; this.t = 0;
+    this.follow = this.run.status === 'recording';
+    this.scene = (this.run.meta && this.run.meta.scene) || null;
+    await this._ensure(0);
+    this._emitState();
+    return this.run;
+  }
+  get duration() { return this.run ? Number(this.run.t_sim_end || 0) : 0; }
+  async _refreshRun() {
+    try {
+      const r = await fetch('/api/runs/' + this.run.id, { credentials: 'same-origin', cache: 'no-store' }).then((x) => x.json());
+      if (r && r.run) this.run = r.run;
+    } catch { /* 유지 */ }
+  }
+  /* t 부터 REPLAY_PREFETCH_S 앞까지 받아 둔다 (중복 요청 방지) */
+  async _ensure(t) {
+    if (!this.run || this.loading) return;
+    const need = t + REPLAY_PREFETCH_S;
+    if (this.loadedTo >= need && this.loadedTo >= this.duration) return;
+    if (this.loadedTo >= need) return;
+    this.loading = true;
+    try {
+      const from = Math.max(0, this.loadedTo);
+      const r = await fetch(`/api/runs/${this.run.id}/chunks?from=${from}&to=${need}`, { credentials: 'same-origin', cache: 'no-store' }).then((x) => x.json());
+      const have = new Set(this.frames.map((f) => f.t));
+      for (const c of r.chunks || []) {
+        const fr = await gunzipJson(c.data);
+        for (const f of fr) if (!have.has(f.t)) { this.frames.push(f); have.add(f.t); }
+        this.loadedTo = Math.max(this.loadedTo, c.t1);
+      }
+      this.frames.sort((a, b) => a.t - b.t);
+      if (!(r.chunks || []).length) this.loadedTo = Math.max(this.loadedTo, need);
+    } catch (err) { console.warn('리플레이 청크 로드 실패:', err); }
+    finally { this.loading = false; }
+  }
+  play() { if (!this.run) return; this.playing = true; this._last = performance.now(); if (!this._raf) this._raf = requestAnimationFrame((n) => this._tick(n)); this._emitState(); }
+  pause() { this.playing = false; this._emitState(); }
+  stop() { this.playing = false; if (this._raf) cancelAnimationFrame(this._raf); this._raf = null; this.vp.setLive(null); this._emitState(); }
+  seek(t) { this.t = Math.max(0, Math.min(t, this.duration)); this._ensure(this.t); this._apply(); this._emitState(true); }
+  setSpeed(x) { this.speed = x; this._emitState(); }
+  _emitState(force) {
+    if (this.onState) this.onState({ t: this.t, duration: this.duration, playing: this.playing, speed: this.speed, follow: this.follow,
+                                     status: this.run ? this.run.status : '', loaded: this.loadedTo });
+  }
+  _tick(now) {
+    this._raf = requestAnimationFrame((n) => this._tick(n));
+    const dt = Math.min(0.1, (now - this._last) / 1000); this._last = now;
+    if (!this.playing || !this.run) return;
+    if (this.follow) {
+      // 기록 중: 끝에서 LAG 만큼 뒤를 따라간다 (5 s 마다 런 정보 갱신)
+      if (!this._lastRefresh || now - this._lastRefresh > 5000) { this._lastRefresh = now; this._refreshRun().then(() => { if (this.run.status !== 'recording') this.follow = false; }); }
+      const target = Math.max(0, this.duration - REPLAY_LIVE_LAG_S);
+      this.t = Math.min(target, this.t + dt * this.speed);
+    } else {
+      this.t += dt * this.speed;
+      if (this.t >= this.duration) { this.t = this.duration; this.playing = false; }
+    }
+    this._ensure(this.t);
+    this._apply();
+    if (now - this._lastEmit > 200) { this._lastEmit = now; this._emitState(); }
+  }
+  /* 현재 시각의 프레임을 이웃 두 프레임에서 보간해 뷰포트·콜백에 준다 */
+  _apply() {
+    const F = this.frames; if (!F.length) return;
+    let lo = 0, hi = F.length - 1;
+    while (lo < hi) { const mid = (lo + hi + 1) >> 1; if (F[mid].t <= this.t) lo = mid; else hi = mid - 1; }
+    const a = F[lo], b = F[Math.min(lo + 1, F.length - 1)];
+    const u = b.t > a.t ? Math.max(0, Math.min(1, (this.t - a.t) / (b.t - a.t))) : 0;
+    const feed = ReplayPlayer.interp(a, b, u, this.scene);
+    this.vp.setLive(feed, true);
+    if (this.onFrame) this.onFrame(feed, a);
+  }
+  static interp(a, b, u, scene) {
+    const L = (x, y) => x + (y - x) * u;
+    const robots = a.r.map((ra, i) => {
+      const rb = (b.r && b.r[i]) || ra;
+      const r = { id: ra[0], force: L(ra[1], rb[1]), target: L(ra[2], rb[2]), state: ra[3], progress: L(ra[4], rb[4]),
+                  rl_force_scale: L(ra[5], rb[5]), rl_feed_scale: L(ra[6], rb[6]) };
+      if (ra[7] && rb[7]) r.q = ra[7].map((v, j) => L(v, rb[7][j])); else if (ra[7]) r.q = ra[7].slice();
+      if (ra[8]) {
+        const pos = rb[8] ? ra[8].map((v, j) => L(v, rb[8][j])) : ra[8].slice();
+        let quat = ra[9];
+        if (ra[9] && rb[9]) {
+          const qa = new THREE.Quaternion(ra[9][1], ra[9][2], ra[9][3], ra[9][0]);
+          const qb = new THREE.Quaternion(rb[9][1], rb[9][2], rb[9][3], rb[9][0]);
+          qa.slerp(qb, u); quat = [qa.w, qa.x, qa.y, qa.z];
+        }
+        r.base = { pos, quat };
+      }
+      return r;
+    });
+    return { ts: Date.now() / 1000, state: a.s, progress: L(a.p, b.p), elapsed_s: L(a.e, b.e), robots, scene, t_sim: L(a.t, b.t) };
   }
 }
 

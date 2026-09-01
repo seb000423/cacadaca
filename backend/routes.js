@@ -262,6 +262,49 @@ async function handleApi(req, res, pathname) {
        GET  /api/sim/status → {running, pid, startedAt, elapsed_s, params, exitCode, result}
      경로: PT_SIM_REPO(시뮬 저장소, 기본 ../cacadaca), PT_ISAAC_PY(기본 ~/isaacsim/python.sh) ══ */
   /* ── 워커 전용 (X-PT-Worker 토큰) — 큐 모드의 GPU PC 가 부른다 ── */
+  /* ── 워커 → 시뮬 기록 업로드 (리플레이/지연 재생용) ── */
+  if (pathname.indexOf('/api/sim/runs') === 0) {
+    if (!workerAuthed(req)) return json(res, 401, { error: '워커 토큰이 필요합니다.' });
+    const mm = pathname.match(/^\/api\/sim\/runs(?:\/(\d+)(?:\/(chunks|events|cells|finish|meta))?)?$/);
+    if (!mm) return json(res, 404, { error: 'not found' });
+    const b64 = (v) => Buffer.from(String(v || ''), 'base64');
+    if (!mm[1] && method === 'POST') {
+      const body = await readBody(req);
+      const id = await store.createRun({ jobId: body.job_id != null ? Number(body.job_id) : null, name: String(body.name || ''), meta: body.meta || {} });
+      return json(res, 200, { ok: true, run_id: id });
+    }
+    const run = mm[1] ? await store.getRun(Number(mm[1])) : null;
+    if (!run) return json(res, 404, { error: 'run not found' });
+    if (mm[2] === 'chunks' && method === 'POST') {
+      const body = await readBody(req, 8 * 1024 * 1024);
+      const chunks = (body.chunks || []).map((c) => ({ seq: Number(c.seq), t0: Number(c.t0), t1: Number(c.t1), n: Number(c.n), data: b64(c.data) }));
+      await store.appendChunks(run.id, chunks);
+      return json(res, 200, { ok: true, last_seq: await store.lastChunkSeq(run.id) });
+    }
+    if (mm[2] === 'events' && method === 'POST') {
+      const body = await readBody(req);
+      await store.addRunEvents(run.id, body.events || []);
+      return json(res, 200, { ok: true });
+    }
+    if (mm[2] === 'cells' && method === 'POST') {
+      const body = await readBody(req, 8 * 1024 * 1024);
+      await store.addRunCells(run.id, (body.cells || []).map((c) => ({ id: Number(c.id), t: Number(c.t), data: b64(c.data) })));
+      return json(res, 200, { ok: true });
+    }
+    if (mm[2] === 'meta' && method === 'POST') {
+      const body = await readBody(req);
+      await store.updateRunMeta(run.id, body.meta || {});
+      return json(res, 200, { ok: true });
+    }
+    if (mm[2] === 'finish' && method === 'POST') {
+      const body = await readBody(req);
+      await store.finishRun(run.id, body.status === 'failed' ? 'failed' : 'done', body.result || null);
+      return json(res, 200, { ok: true });
+    }
+    if (!mm[2] && method === 'GET') return json(res, 200, { ok: true, run: { ...run, last_seq: await store.lastChunkSeq(run.id) } });
+    return json(res, 405, { error: 'method' });
+  }
+
   if (pathname.indexOf('/api/sim/jobs') === 0) {
     if (!workerAuthed(req)) return json(res, 401, { error: '워커 토큰이 필요합니다.' });
     if (pathname === '/api/sim/jobs/next' && method === 'GET') {
@@ -411,6 +454,56 @@ async function handleApi(req, res, pathname) {
     }
     return json(res, 404, { error: '없는 요청입니다.' });
   }
+  /* ── 브라우저 ← 시뮬 기록 (리플레이) ── */
+  if (pathname.indexOf('/api/runs') === 0) {
+    const sess = await sessionOf(req);
+    if (!sess) return json(res, 401, { error: '로그인이 필요합니다.' });
+    const mm = pathname.match(/^\/api\/runs(?:\/(\d+)(?:\/(chunks|events|cells))?|\/import)?$/);
+    if (!mm) return json(res, 404, { error: 'not found' });
+    const runPublic = (r) => ({ id: r.id, job_id: r.job_id, name: r.name, status: r.status, t_sim_end: Number(r.t_sim_end || 0),
+      n_frames: Number(r.n_frames || 0), created_at: Number(r.created_at), finished_at: r.finished_at ? Number(r.finished_at) : null,
+      meta: (() => { try { return JSON.parse(r.meta || '{}'); } catch { return {}; } })(),
+      result: (() => { try { return r.result ? JSON.parse(r.result) : null; } catch { return null; } })() });
+    if (pathname === '/api/runs/import' && method === 'POST') {
+      /* 로컬 전용: 기록 sqlite 파일을 서버 DB 로 복사한다 (Vercel 은 워커 업로드 경로만) */
+      if (process.env.VERCEL) return json(res, 501, { error: '배포 서버에서는 워커 업로드만 지원합니다.' });
+      const body = await readBody(req);
+      const file = String(body.path || '');
+      if (!file || !require('node:fs').existsSync(file)) return json(res, 400, { error: '파일이 없습니다.' });
+      const { DatabaseSync } = require('node:sqlite');
+      const src = new DatabaseSync(file, { readOnly: true });
+      const meta = {}; for (const r of src.prepare('SELECT key, value FROM meta').all()) { try { meta[r.key] = JSON.parse(r.value); } catch { meta[r.key] = r.value; } }
+      const id = await store.createRun({ jobId: body.job_id != null ? Number(body.job_id) : null, name: String(body.name || require('node:path').basename(file)), meta });
+      const chunks = src.prepare('SELECT seq, t0, t1, n, data FROM chunks ORDER BY seq').all();
+      for (let i = 0; i < chunks.length; i += 200) await store.appendChunks(id, chunks.slice(i, i + 200).map((c) => ({ ...c, data: Buffer.from(c.data) })));
+      await store.addRunEvents(id, src.prepare('SELECT id, t, robot, level, msg FROM events ORDER BY id').all());
+      await store.addRunCells(id, src.prepare('SELECT id, t, data FROM cells ORDER BY id').all().map((c) => ({ ...c, data: Buffer.from(c.data) })));
+      const rr = src.prepare('SELECT data FROM result WHERE id = 1').get();
+      let result = null; try { result = rr ? JSON.parse(rr.data) : null; } catch { result = null; }
+      await store.finishRun(id, 'done', result);
+      src.close();
+      return json(res, 200, { ok: true, run: runPublic(await store.getRun(id)), chunks: chunks.length });
+    }
+    if (!mm[1] && method === 'GET') return json(res, 200, { runs: (await store.listRuns(50)).map(runPublic) });
+    const run = mm[1] ? await store.getRun(Number(mm[1])) : null;
+    if (!run) return json(res, 404, { error: 'run not found' });
+    if (!mm[2] && method === 'GET') return json(res, 200, { run: runPublic(run), last_seq: await store.lastChunkSeq(run.id) });
+    if (mm[2] === 'chunks' && method === 'GET') {
+      const u = new URL(req.url, 'http://x');
+      const from = Number(u.searchParams.get('from') || 0), to = Number(u.searchParams.get('to') || (from + 30));
+      const rows = await store.getChunks(run.id, from, to, 120);
+      return json(res, 200, { run_id: run.id, from, to, chunks: rows.map((c) => ({ seq: Number(c.seq), t0: Number(c.t0), t1: Number(c.t1), n: Number(c.n),
+        data: Buffer.from(c.data).toString('base64') })) });
+    }
+    if (mm[2] === 'events' && method === 'GET') return json(res, 200, { events: await store.getRunEvents(run.id) });
+    if (mm[2] === 'cells' && method === 'GET') {
+      const u = new URL(req.url, 'http://x');
+      const rows = await store.getRunCells(run.id, Number(u.searchParams.get('after') || 0), 20);
+      return json(res, 200, { cells: rows.map((c) => ({ id: Number(c.id), t: Number(c.t), data: Buffer.from(c.data).toString('base64') })) });
+    }
+    return json(res, 405, { error: 'method' });
+  }
+
   if (pathname === '/api/monitor' && method === 'GET') {
     const sess = await sessionOf(req);
     if (!sess) return json(res, 401, { error: '로그인이 필요합니다.' });

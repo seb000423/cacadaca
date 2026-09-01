@@ -113,6 +113,38 @@ CREATE TABLE IF NOT EXISTS sim_state (
   payload    TEXT    NOT NULL,
   updated_at INTEGER NOT NULL
 );
+/* 시뮬 기록(리플레이) — 워커가 SimRecorder(sqlite) 의 내용을 청크 단위로 올린다.
+   chunks.data = gzip(JSON [frame,...]) 1 초 묶음. 브라우저는 시간 범위로 청크를 받아 보간 재생한다. */
+CREATE TABLE IF NOT EXISTS sim_runs (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  job_id      INTEGER,
+  name        TEXT NOT NULL DEFAULT '',
+  status      TEXT NOT NULL DEFAULT 'recording',   -- recording | done | failed
+  meta        TEXT NOT NULL DEFAULT '{}',
+  result      TEXT,
+  t_sim_end   REAL NOT NULL DEFAULT 0,
+  n_frames    INTEGER NOT NULL DEFAULT 0,
+  created_at  INTEGER NOT NULL,
+  finished_at INTEGER
+);
+CREATE TABLE IF NOT EXISTS sim_chunks (
+  run_id INTEGER NOT NULL,
+  seq    INTEGER NOT NULL,
+  t0     REAL NOT NULL,
+  t1     REAL NOT NULL,
+  n      INTEGER NOT NULL,
+  data   BLOB NOT NULL,
+  PRIMARY KEY (run_id, seq)
+);
+CREATE INDEX IF NOT EXISTS idx_sim_chunks_t ON sim_chunks(run_id, t0, t1);
+CREATE TABLE IF NOT EXISTS sim_run_events (
+  run_id INTEGER NOT NULL, id INTEGER NOT NULL, t REAL NOT NULL, robot TEXT, level TEXT, msg TEXT,
+  PRIMARY KEY (run_id, id)
+);
+CREATE TABLE IF NOT EXISTS sim_run_cells (
+  run_id INTEGER NOT NULL, id INTEGER NOT NULL, t REAL NOT NULL, data BLOB NOT NULL,
+  PRIMARY KEY (run_id, id)
+);
 CREATE TABLE IF NOT EXISTS dataset_meta (
   key        TEXT    PRIMARY KEY,
   payload    TEXT    NOT NULL,
@@ -297,6 +329,42 @@ const store = {
     return store.getJob(id);
   },
   setJobResult: (id, result) => be.run('UPDATE sim_jobs SET result = ? WHERE id = ?', [JSON.stringify(result), id]),
+  /* ── 시뮬 기록(리플레이) ── */
+  async createRun({ jobId = null, name = '', meta = {} }) {
+    const r = await be.run('INSERT INTO sim_runs (job_id, name, meta, created_at) VALUES (?, ?, ?, ?)',
+      [jobId, name, JSON.stringify(meta), Date.now()]);
+    return r.lastId;
+  },
+  getRun: (id) => be.get('SELECT * FROM sim_runs WHERE id = ?', [id]),
+  listRuns: (limit = 50) => be.all('SELECT id, job_id, name, status, t_sim_end, n_frames, created_at, finished_at FROM sim_runs ORDER BY created_at DESC LIMIT ?', [limit]),
+  runByJob: (jobId) => be.get('SELECT * FROM sim_runs WHERE job_id = ? ORDER BY created_at DESC LIMIT 1', [jobId]),
+  async appendChunks(runId, chunks) {
+    let tEnd = 0, n = 0;
+    for (const c of chunks) {
+      await be.run('INSERT OR REPLACE INTO sim_chunks (run_id, seq, t0, t1, n, data) VALUES (?, ?, ?, ?, ?, ?)',
+        [runId, c.seq, c.t0, c.t1, c.n, c.data]);
+      tEnd = Math.max(tEnd, Number(c.t1)); n += Number(c.n);
+    }
+    if (chunks.length) {
+      await be.run('UPDATE sim_runs SET t_sim_end = MAX(t_sim_end, ?), n_frames = n_frames + ? WHERE id = ?', [tEnd, n, runId]);
+    }
+  },
+  lastChunkSeq: async (runId) => { const r = await be.get('SELECT MAX(seq) AS m FROM sim_chunks WHERE run_id = ?', [runId]); return Number((r && r.m) || 0); },
+  getChunks: (runId, t0, t1, limit = 120) =>
+    be.all('SELECT seq, t0, t1, n, data FROM sim_chunks WHERE run_id = ? AND t1 >= ? AND t0 <= ? ORDER BY seq LIMIT ?', [runId, t0, t1, limit]),
+  async addRunEvents(runId, events) {
+    for (const e of events) await be.run('INSERT OR REPLACE INTO sim_run_events (run_id, id, t, robot, level, msg) VALUES (?, ?, ?, ?, ?, ?)',
+      [runId, e.id, e.t, e.robot || '', e.level || 'info', e.msg || '']);
+  },
+  getRunEvents: (runId) => be.all('SELECT id, t, robot, level, msg FROM sim_run_events WHERE run_id = ? ORDER BY id', [runId]),
+  async addRunCells(runId, cells) {
+    for (const c of cells) await be.run('INSERT OR REPLACE INTO sim_run_cells (run_id, id, t, data) VALUES (?, ?, ?, ?)', [runId, c.id, c.t, c.data]);
+  },
+  getRunCells: (runId, after = 0, limit = 50) => be.all('SELECT id, t, data FROM sim_run_cells WHERE run_id = ? AND id > ? ORDER BY id LIMIT ?', [runId, after, limit]),
+  finishRun: (id, status, result) => be.run('UPDATE sim_runs SET status = ?, result = COALESCE(?, result), finished_at = ? WHERE id = ?',
+    [status, result ? JSON.stringify(result) : null, Date.now(), id]),
+  updateRunMeta: (id, meta) => be.run('UPDATE sim_runs SET meta = ? WHERE id = ?', [JSON.stringify(meta), id]),
+
   getState: (key) => be.get('SELECT * FROM sim_state WHERE key = ?', [key]),
   async putState(key, payload) {
     await be.run(
