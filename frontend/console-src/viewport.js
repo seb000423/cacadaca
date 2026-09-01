@@ -38,11 +38,14 @@ const ROUGH_MATTE = 0.82, ROUGH_GLOSS = 0.14;
    렌더되는데, 그때 initPolish 가 아직 안 돌아 three.js 가 null 을 Vector3 로
    업로드하려다 터진다. uPolishOn 이 0 이라 값 자체는 쓰이지 않는다. */
 const polishU = {
-  uPolish: { value: null },        // 샘플러는 null 이어도 기본 텍스처가 바인딩된다
+  /* 광택 마스크 3장 — 면의 법선이 향하는 축으로 고른다(트라이플래너). 위에서 본 XZ(윗면), 옆에서 본 (길이, 높이)(옆면),
+     앞뒤에서 본 (폭, 높이)(앞뒤면). 한 장짜리 위 투영은 옆면·앞뒤면에 엉뚱한 광택을 만들었다. */
+  uPolishTop: { value: null }, uPolishSide: { value: null }, uPolishEnd: { value: null },
   uLongSel: { value: new THREE.Vector3(0, 0, 1) },   // 월드 좌표에서 long 축을 뽑는 선택자
   uCrossSel: { value: new THREE.Vector3(1, 0, 0) },
-  uFieldMin: { value: new THREE.Vector2(0, 0) },     // (l0, c0)
-  uFieldSpan: { value: new THREE.Vector2(1, 1) },    // (l1-l0, c1-c0)
+  uTopMin: { value: new THREE.Vector2(0, 0) }, uTopSpan: { value: new THREE.Vector2(1, 1) },      // (long, cross)
+  uSideMin: { value: new THREE.Vector2(0, 0) }, uSideSpan: { value: new THREE.Vector2(1, 1) },    // (long, y)
+  uEndMin: { value: new THREE.Vector2(0, 0) }, uEndSpan: { value: new THREE.Vector2(1, 1) },      // (cross, y)
   uPolishOn: { value: 0 },
 };
 
@@ -50,32 +53,37 @@ function attachPolish(mat) {
   mat.onBeforeCompile = (shader) => {
     Object.assign(shader.uniforms, polishU);
     shader.vertexShader = shader.vertexShader
-      .replace('#include <common>', '#include <common>\nvarying vec3 vPolishPos;')
+      .replace('#include <common>', '#include <common>\nvarying vec3 vPolishPos;\nvarying vec3 vPolishN;')
       .replace('#include <worldpos_vertex>',
-        '#include <worldpos_vertex>\n  vPolishPos = (modelMatrix * vec4(transformed, 1.0)).xyz;');
+        '#include <worldpos_vertex>\n  vPolishPos = (modelMatrix * vec4(transformed, 1.0)).xyz;\n  vPolishN = normalize(mat3(modelMatrix) * objectNormal);');
     shader.fragmentShader = shader.fragmentShader
       .replace('#include <common>', [
         '#include <common>',
         'varying vec3 vPolishPos;',
-        'uniform sampler2D uPolish;',
+        'varying vec3 vPolishN;',
+        'uniform sampler2D uPolishTop;',
+        'uniform sampler2D uPolishSide;',
+        'uniform sampler2D uPolishEnd;',
         'uniform vec3 uLongSel;',
         'uniform vec3 uCrossSel;',
-        'uniform vec2 uFieldMin;',
-        'uniform vec2 uFieldSpan;',
+        'uniform vec2 uTopMin; uniform vec2 uTopSpan;',
+        'uniform vec2 uSideMin; uniform vec2 uSideSpan;',
+        'uniform vec2 uEndMin; uniform vec2 uEndSpan;',
         'uniform float uPolishOn;',
+        'float polishLookup(sampler2D t, vec2 uv) { return (uv.x > 0.0 && uv.x < 1.0 && uv.y > 0.0 && uv.y < 1.0) ? texture2D(t, uv).r : 0.0; }',
       ].join('\n'))
       .replace('#include <roughnessmap_fragment>', [
         '#include <roughnessmap_fragment>',
         'float polished = 0.0;',
         'if (uPolishOn > 0.5) {',
-        '  vec2 pUv = vec2(',
-        '    (dot(vPolishPos, uLongSel) - uFieldMin.x) / uFieldSpan.x,',
-        '    (dot(vPolishPos, uCrossSel) - uFieldMin.y) / uFieldSpan.y);',
-        '  if (pUv.x > 0.0 && pUv.x < 1.0 && pUv.y > 0.0 && pUv.y < 1.0) {',
-        '    polished = texture2D(uPolish, pUv).r;',
-        '  }',
+        '  vec3 pn = normalize(vPolishN);',
+        '  float ay = abs(pn.y), ax = abs(dot(pn, uCrossSel)), az = abs(dot(pn, uLongSel));',
+        '  float L = dot(vPolishPos, uLongSel), C = dot(vPolishPos, uCrossSel), Y = vPolishPos.y;',
+        '  if (ay >= ax && ay >= az) polished = polishLookup(uPolishTop, (vec2(L, C) - uTopMin) / uTopSpan);',
+        '  else if (ax >= az)        polished = polishLookup(uPolishSide, (vec2(L, Y) - uSideMin) / uSideSpan);',
+        '  else                      polished = polishLookup(uPolishEnd, (vec2(C, Y) - uEndMin) / uEndSpan);',
         '  roughnessFactor = mix(0.82, 0.14, polished);',
-        '  diffuseColor.rgb *= mix(1.0, 1.45, polished);',   // 닦인 곳은 눈에 띄게 밝아진다 (어두운 도장에서도 읽히게)
+        '  diffuseColor.rgb *= mix(1.0, 1.45, polished);',   // 닦인 곳은 눈에 띄게 밝아진다
         '}',
       ].join('\n'))
       // 광택은 클리어코트가 만든다. 여기까지 같이 보간해야 무광->유광이 읽힌다.
@@ -173,20 +181,29 @@ async function loadCar(url) {
   bake(new THREE.Matrix4().makeTranslation(-c.x, -b.min.y, -c.z));
 
   const group = new THREE.Group();
+  const paintPts = [];      // 도장 면 정점(로컬) — 레인은 이 정점 근처에만 내고, 광택도 도장 재질에만
   geos.forEach((g, i) => {
     if (!g.attributes.normal) g.computeVertexNormals();
     const src = mats[i];
+    const name = (src && src.name) || '';
     const lum = src && src.color ? 0.2126 * src.color.r + 0.7152 * src.color.g + 0.0722 * src.color.b : 0;
-    const mat = attachPolish(new THREE.MeshPhysicalMaterial({
+    /* 도장 판정: 재질 이름에 paint 가 있으면 도장. 이름이 없는(단일 재질) 모델은 밝은 큰 면을 도장으로 본다.
+       유리·휠·그릴·트림은 도장이 아니므로 광택 셰이더를 붙이지 않는다 → 절대 닦이지 않는다. */
+    const isPaint = /paint|body|carpaint|lack/i.test(name) || (!name && lum > 0.5) || (mats.length === 1);
+    const base = new THREE.MeshPhysicalMaterial({
       color: lum > 0.5 ? 0x2f343b : (src && src.color ? src.color.getHex() : 0x22262c),
-      metalness: 0.35, roughness: ROUGH_MATTE,
-      clearcoat: 1, clearcoatRoughness: 0.28, envMapIntensity: 1.4,
-    }));
+      metalness: 0.35, roughness: isPaint ? ROUGH_MATTE : 0.5,
+      clearcoat: isPaint ? 1 : 0.3, clearcoatRoughness: 0.28, envMapIntensity: 1.4,
+    });
+    const mat = isPaint ? attachPolish(base) : base;
     const m = new THREE.Mesh(g, mat);
+    m.userData.paint = isPaint;
     m.castShadow = true; m.receiveShadow = true;
     group.add(m);
+    if (isPaint) { const a = g.attributes.position; for (let k = 0; k < a.count; k++) paintPts.push(new THREE.Vector3(a.getX(k), a.getY(k), a.getZ(k))); }
   });
   group.userData.size = bbox().getSize(new THREE.Vector3());
+  group.userData.paintPts = paintPts;
   return group;
 }
 
@@ -326,6 +343,22 @@ function buildSideFields(renderer, model, nU = 256, nV = 96) {
   return [1, -1].map((dir) => buildField(renderer, model, {
     u: long, v: 'y', d: cross, dir, nU, nV, u0, u1, v0, v1,
     // 창을 통해 반대편 옆면이 보이는 표본은 버린다 — 카메라 쪽 절반만 남긴다
+    keep: (c) => c * dir > cd * dir,
+    skip: WHEEL,
+  }));
+}
+
+/** 앞·뒤에서 두 장 — 범퍼·보닛 앞끝·트렁크 뒷면. u = 폭, v = 높이, d = 길이축. */
+function buildEndFields(renderer, model, nU = 160, nV = 96) {
+  const b = new THREE.Box3().setFromObject(model);
+  const size = b.getSize(new THREE.Vector3());
+  const long = size.x >= size.z ? 'x' : 'z';
+  const cross = long === 'x' ? 'z' : 'x';
+  const u0 = b.min[cross] + size[cross] * 0.06, u1 = b.max[cross] - size[cross] * 0.06;
+  const v0 = b.min.y + size.y * 0.12, v1 = b.max.y - size.y * 0.35;
+  const cd = (b.min[long] + b.max[long]) / 2;
+  return [1, -1].map((dir) => buildField(renderer, model, {
+    u: cross, v: 'y', d: long, dir, nU, nV, u0, u1, v0, v1,
     keep: (c) => c * dir > cd * dir,
     skip: WHEEL,
   }));
@@ -945,53 +978,61 @@ class PolyTwinViewport extends HTMLElement {
 
   /** 연마 마스크를 하이트필드와 같은 격자로 만든다. */
   initPolish() {
-    const f = this._field;
-    const data = new Uint8Array(f.nLong * f.nCross);
-    const tex = new THREE.DataTexture(data, f.nLong, f.nCross, THREE.RedFormat, THREE.UnsignedByteType);
-    tex.minFilter = tex.magFilter = THREE.LinearFilter;
-    tex.wrapS = tex.wrapT = THREE.ClampToEdgeWrapping;
-    tex.needsUpdate = true;
-    this._polish = { tex, data };
+    const f = this._field; if (!f || !this._model) return;
+    this._model.updateMatrixWorld(true);
+    const b = new THREE.Box3().setFromObject(this._model);
+    const LONG = f.long, CROSS = f.cross;
+    const mk = (nx, ny) => { const data = new Uint8Array(nx * ny); const tex = new THREE.DataTexture(data, nx, ny, THREE.RedFormat, THREE.UnsignedByteType);
+      tex.minFilter = tex.magFilter = THREE.LinearFilter; tex.wrapS = tex.wrapT = THREE.ClampToEdgeWrapping; tex.needsUpdate = true; return { tex, data, nx, ny }; };
+    const top = mk(f.nLong, f.nCross);                       // (long, cross)
+    const side = mk(256, 96);                                // (long, y)
+    const end = mk(160, 96);                                 // (cross, y)
+    this._polish = { top, side, end,
+      topMin: [f.l0, f.c0], topSpan: [f.l1 - f.l0, f.c1 - f.c0],
+      sideMin: [b.min[LONG], b.min.y], sideSpan: [b.max[LONG] - b.min[LONG], b.max.y - b.min.y],
+      endMin: [b.min[CROSS], b.min.y], endSpan: [b.max[CROSS] - b.min[CROSS], b.max.y - b.min.y], LONG, CROSS };
     const sel = (axis) => new THREE.Vector3(axis === 'x' ? 1 : 0, 0, axis === 'z' ? 1 : 0);
-    polishU.uPolish.value = tex;
-    polishU.uLongSel.value = sel(f.long);
-    polishU.uCrossSel.value = sel(f.cross);
-    polishU.uFieldMin.value = new THREE.Vector2(f.l0, f.c0);
-    polishU.uFieldSpan.value = new THREE.Vector2(f.l1 - f.l0, f.c1 - f.c0);
+    polishU.uPolishTop.value = top.tex; polishU.uPolishSide.value = side.tex; polishU.uPolishEnd.value = end.tex;
+    polishU.uLongSel.value = sel(LONG); polishU.uCrossSel.value = sel(CROSS);
+    polishU.uTopMin.value = new THREE.Vector2(...this._polish.topMin); polishU.uTopSpan.value = new THREE.Vector2(...this._polish.topSpan);
+    polishU.uSideMin.value = new THREE.Vector2(...this._polish.sideMin); polishU.uSideSpan.value = new THREE.Vector2(...this._polish.sideSpan);
+    polishU.uEndMin.value = new THREE.Vector2(...this._polish.endMin); polishU.uEndSpan.value = new THREE.Vector2(...this._polish.endSpan);
     polishU.uPolishOn.value = 1;
   }
 
   /** 패드가 지나간 자리를 마스크에 찍는다. 반지름은 패드 지름 파라미터 그대로. */
   stampPolish(worldPos, radius, flat = false, gain = 1.0) {
-    const P = this._polish, f = this._field;
-    if (!P) return;
-    const u = (worldPos[f.long] - f.l0) / (f.l1 - f.l0);
-    const v = (worldPos[f.cross] - f.c0) / (f.c1 - f.c0);
-    if (u < 0 || u > 1 || v < 0 || v > 1) return;
-    const ci = u * (f.nLong - 1), cj = v * (f.nCross - 1);
-    const ri = Math.max(1, radius / ((f.l1 - f.l0) / (f.nLong - 1)));
-    const rj = Math.max(1, radius / ((f.c1 - f.c0) / (f.nCross - 1)));
-    let touched = false;
-    for (let j = Math.floor(cj - rj); j <= Math.ceil(cj + rj); j++) {
-      if (j < 0 || j >= f.nCross) continue;
-      for (let i = Math.floor(ci - ri); i <= Math.ceil(ci + ri); i++) {
-        if (i < 0 || i >= f.nLong) continue;
-        const d = Math.hypot((i - ci) / ri, (j - cj) / rj);
-        if (d > 1) continue;
-        // 가장자리는 덜 먹인다 — 패드 압력 분포와 같은 모양. flat 이면 셀 면적을 균일하게(점박이 없이) 채운다
-        const k = j * f.nLong + i;
-        const nv = Math.min(255, P.data[k] + 255 * (flat ? gain : (1 - d * d) * 0.9));
-        if (nv !== P.data[k]) { P.data[k] = nv; touched = true; }
+    const P = this._polish; if (!P) return;
+    const L = worldPos[P.LONG], C = worldPos[P.CROSS], Y = worldPos.y;
+    // 세 마스크 모두에 찍는다 — 셰이더가 면의 법선으로 한 장을 고르므로, 옆면 아래쪽에 엉뚱한 광택이 생기지 않는다
+    const stamp = (m, a, b, aMin, aSpan, bMin, bSpan) => {
+      const u = (a - aMin) / aSpan, v = (b - bMin) / bSpan;
+      if (u < -0.05 || u > 1.05 || v < -0.05 || v > 1.05) return;
+      const ci = u * (m.nx - 1), cj = v * (m.ny - 1);
+      const ri = Math.max(1, radius / (aSpan / (m.nx - 1))), rj = Math.max(1, radius / (bSpan / (m.ny - 1)));
+      let touched = false;
+      for (let j = Math.floor(cj - rj); j <= Math.ceil(cj + rj); j++) {
+        if (j < 0 || j >= m.ny) continue;
+        for (let i = Math.floor(ci - ri); i <= Math.ceil(ci + ri); i++) {
+          if (i < 0 || i >= m.nx) continue;
+          const d = Math.hypot((i - ci) / ri, (j - cj) / rj);
+          if (d > 1) continue;
+          const k = j * m.nx + i;
+          const nv = Math.min(255, m.data[k] + 255 * (flat ? gain : (1 - d * d) * 0.9));
+          if (nv !== m.data[k]) { m.data[k] = nv; touched = true; }
+        }
       }
-    }
-    if (touched) P.tex.needsUpdate = true;
+      if (touched) m.tex.needsUpdate = true;
+    };
+    stamp(P.top, L, C, P.topMin[0], P.topSpan[0], P.topMin[1], P.topSpan[1]);
+    stamp(P.side, L, Y, P.sideMin[0], P.sideSpan[0], P.sideMin[1], P.sideSpan[1]);
+    stamp(P.end, C, Y, P.endMin[0], P.endSpan[0], P.endMin[1], P.endSpan[1]);
   }
 
   /** 차종을 바꾸거나 공정을 다시 시작할 때 연마 상태를 지운다. */
   resetPolish() {
     if (!this._polish) return;
-    this._polish.data.fill(0);
-    this._polish.tex.needsUpdate = true;
+    for (const m of [this._polish.top, this._polish.side, this._polish.end]) { m.data.fill(0); m.tex.needsUpdate = true; }
   }
 
   /** 차체 바운딩 박스를 기준으로 셀을 배치한다. 대수는 setParams 로 바뀐다. */
@@ -1312,6 +1353,26 @@ class PolyTwinViewport extends HTMLElement {
     this._model.updateMatrixWorld(true);
     this._field = buildHeightField(this.renderer, this._model);
     this._sideFields = buildSideFields(this.renderer, this._model);
+    this._endFields = buildEndFields(this.renderer, this._model);
+    // 도장 정점 격자(월드) — 레인 점을 도장 면 근처로 제한(유리·휠·그릴 제외)
+    const pts = (this._model.userData && this._model.userData.paintPts) || [];
+    const grid = new Map(); const CELL = 0.12;
+    const key = (x, y, z) => (Math.floor(x / CELL)) + ',' + (Math.floor(y / CELL)) + ',' + (Math.floor(z / CELL));
+    const w = new THREE.Vector3();
+    for (const q of pts) { w.copy(q).applyMatrix4(this._model.matrixWorld); const k = key(w.x, w.y, w.z); let arr = grid.get(k); if (!arr) grid.set(k, arr = []); arr.push(w.clone()); }
+    this._paintGrid = { grid, CELL, n: pts.length };
+  }
+
+  /** 월드 점이 도장 정점에서 r 이내인가 (도장 정점이 수집되지 않은 모델은 항상 true) */
+  _nearPaint(pt, r = 0.09) {
+    const G = this._paintGrid; if (!G || !G.n) return true;
+    const c = G.CELL, r2 = r * r;
+    const ix = Math.floor(pt.x / c), iy = Math.floor(pt.y / c), iz = Math.floor(pt.z / c);
+    for (let dx = -1; dx <= 1; dx++) for (let dy = -1; dy <= 1; dy++) for (let dz = -1; dz <= 1; dz++) {
+      const arr = G.grid.get((ix + dx) + ',' + (iy + dy) + ',' + (iz + dz)); if (!arr) continue;
+      for (const q of arr) if (q.distanceToSquared(pt) <= r2) return true;
+    }
+    return false;
   }
 
   /** ③ 셀 판정 지도 — snapshot = {total, pass, rework, repaint, not_reached, items:[[x,y,z,disposition,gu],...]} (Isaac 월드).
@@ -1406,13 +1467,7 @@ class PolyTwinViewport extends HTMLElement {
     }
     this._liftFollow = true;
     this._animateLanes(dt, t, p, true);
-    // 마무리 보정: 100 % 에 도달하면 배정에서 빠진 레인 조각까지 전부 유광으로 (Voronoi 배정이 버린 짧은 구간 대비)
-    if (prog >= 0.995 && !this._waFilled && this._flat && this._flat.length) {
-      this._waFilled = true;
-      const r = (p.pad / 1000) / 2;
-      for (let i = 0; i < this._flat.length; i += 2) this.stampPolish(this._flat[i], r, true, 1.0);
-    } else if (prog < 0.9) this._waFilled = false;
-    return;
+    return;   // 광택은 패드가 실제로 지나간 자리만 (레인이 도장 면 전체를 덮으므로 100 % 에서 전부 닦인다)
     for (const cell of this._cells) {
       const rid = cell.userData.robotId;
       const r = (rid && feed.robots.find((x) => x.id === rid)) || null;
@@ -1725,12 +1780,21 @@ class PolyTwinViewport extends HTMLElement {
 
       // 위에서 한 장 + 옆에서 두 장. 옆면 레인이 없으면 도어에는 경로 자체가 없다.
       const pts = [], lanes = [], normals = [];
-      for (const f of [this._field].concat(this._sideFields || [])) {
+      for (const f of [this._field].concat(this._sideFields || [], this._endFields || [])) {
         if (!f) continue;
         const r = tracePath(f, spacing);
-        for (let k = 0; k < r.pts.length; k++) pts.push(r.pts[k]);
-        for (let k = 0; k < r.lanes.length; k++) { lanes.push(r.lanes[k]); normals.push(r.normals[k]); }
+        for (let k = 0; k < r.lanes.length; k++) {
+          // 도장 면 근처의 점만 남기고(유리·그릴·휠 제외), 끊긴 곳에서 레인을 나눈다
+          const L = r.lanes[k], N = r.normals[k];
+          let cur = [], curN = [];
+          for (let i = 0; i < L.length; i++) {
+            if (this._nearPaint(L[i])) { cur.push(L[i]); curN.push(N[i]); }
+            else if (cur.length) { if (cur.length >= 3) { lanes.push(cur); normals.push(curN); } cur = []; curN = []; }
+          }
+          if (cur.length >= 3) { lanes.push(cur); normals.push(curN); }
+        }
       }
+      for (const L of lanes) for (const q of L) pts.push(q);
       this.raster.geometry.dispose();
       this.raster.geometry = new THREE.BufferGeometry().setFromPoints(pts);
       this._lanes = lanes;
