@@ -433,6 +433,7 @@ async function handleApi(req, res, pathname) {
       const active = await store.activeJob();
       if (active) return json(res, 409, { error: '이미 대기/실행 중인 작업이 있습니다.', job: jobPublic(active) });
       const body = await readBody(req, 64 * 1024);
+      await store.putState('control', { pause: false, force_scale: 1, feed_scale: 1, ts: Date.now() });   // 새 작업은 컨트롤 초기화
       const num = (v, d) => (Number.isFinite(Number(v)) ? Number(v) : d);
       const params = {
         tool: String(body.tool || 'dual'), force: num(body.force, 5.6), rpm: num(body.rpm, 3000),
@@ -485,6 +486,7 @@ async function handleApi(req, res, pathname) {
     if (pathname === '/api/sim/start' && method === 'POST') {
       if (running) return json(res, 409, { error: '이미 실행 중입니다.', pid: S.pid });
       const body = await readBody(req, 64 * 1024);
+      await store.putState('control', { pause: false, force_scale: 1, feed_scale: 1, ts: Date.now() });   // 새 작업은 컨트롤 초기화
       const num = (v, d) => (Number.isFinite(Number(v)) ? Number(v) : d);
       const params = {
         tool: String(body.tool || 'dual'), force: num(body.force, 5.6), rpm: num(body.rpm, 3000),
@@ -553,8 +555,6 @@ async function handleApi(req, res, pathname) {
       /* 로컬 전용: GUI 로 직접 띄운 v5(run_v5_rl_view.sh, POLISH_RECORD)의 기록 파일을 따라간다 → 콘솔 목록에 '기록 중' 으로 뜸 */
       if (process.env.VERCEL) return json(res, 501, { error: '배포 서버에서는 워커 업로드만 지원합니다.' });
       const body = await readBody(req);
-      await store.putState('control', { pause: false, force_scale: 1, feed_scale: 1, ts: Date.now() });
-      await store.putState('control', { pause: false, force_scale: 1, feed_scale: 1, ts: Date.now() });
       const file = String(body.path || '');
       if (!file) return json(res, 400, { error: 'path 가 필요합니다.' });
       global.__ptTailers = global.__ptTailers || [];
