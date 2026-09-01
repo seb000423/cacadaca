@@ -1572,6 +1572,8 @@ class PolyTwinViewport extends HTMLElement {
     }
     if (jumped || this._waNeedGloss) { this._waNeedGloss = false; this._rebuildGlossForProgress(p); }   // 점프·레인 재구성 뒤: 그 시점까지의 광택 재계산
     this._liftFollow = true;
+    if (!this._waT0) this._waT0 = t;
+    this._rateScale = Math.min(1, 0.15 + (t - this._waT0) / 2.5);   // 시작 2.5 s 동안 관절·설비 속도를 서서히 올린다 (첫 프레임에 팍 튀지 않게)
     this._animateLanes(dt, t, p, true);
     return;   // 광택은 패드가 실제로 지나간 자리만 (레인이 도장 면 전체를 덮으므로 100 % 에서 전부 닦인다)
     for (const cell of this._cells) {
@@ -1711,6 +1713,7 @@ class PolyTwinViewport extends HTMLElement {
     if (this._live && this._live.cells && Array.isArray(this._live.cells.items)) this.setCells(this._live.cells, this._live.scene);   // 셀 스냅샷: 광택 스탬프(항상) + 구슬 표시(옵션)
     if (this._live) { this.raster.visible = false; this.head.visible = false; }   // 시뮬을 따를 땐 데모 경로선은 의미가 없다
     if (had && !this._live) {
+      this._waT0 = null; this._rateScale = 1;
       this.raster.visible = true;
       this.clearCells();
       if (this._waActive) { this._waActive = false; this._liftFollow = false; for (const c of this._cells) { c.userData.waPt = null; } this._cellSig = null; this.layoutCells(); this.resetPolish(); }
@@ -2040,7 +2043,8 @@ class PolyTwinViewport extends HTMLElement {
            패드가 도장면을 뚫고 직선으로 지나가면서 지나지도 않은 자리를 연마한다. */
         let hop = seg > 0.20 ? Math.sin(Math.PI * u) * Math.min(0.20, seg * 0.26) : 0;
         const st = cell.userData.liveState;
-        if (holdS && st && st !== 'POLISH') hop = Math.max(hop, 0.12);   // 기록상 폴리싱 중이 아니면 패드를 12 cm 들고 따라만 간다
+        if (holdS && st && st !== 'POLISH') hop = Math.max(hop, cell.userData.ceiling ? 0.35 : 0.12);   // 이동 중: 천장은 차 위 35 cm, 측면은 12 cm 들고 따라간다
+        if (seg > 0.5) hop = Math.max(hop, cell.userData.ceiling ? 0.35 : 0.2);                         // 먼 레인 전환(앞↔뒤)은 높게 넘어간다 — 유리·지붕 관통 금지
         if (hop > 0) pt.addScaledVector(nrm, hop);
         const contact = hop < 0.004;
         if (ci === 0) lead = _leadP.copy(pt);
@@ -2124,8 +2128,8 @@ class PolyTwinViewport extends HTMLElement {
           if (this._armInsideCar(cell)) { _ikBack.copy(_ikPad).addScaledVector(nrm, 0.5); solveIK(cell, _ikPad, _ikBack, 8); }
         }
 
-        // 관절 각속도 제한 — 해가 튀어도 팔은 튀지 않게
-        const maxStep = JOINT_RATE * dt;
+        // 관절 각속도 제한 — 해가 튀어도 팔은 튀지 않게 (재생 시작 직후엔 더 느리게)
+        const maxStep = JOINT_RATE * dt * (this._rateScale || 1);
         let over = false;
         for (let jj = 0; jj < 6; jj++) {
           const d = cell.userData.q[jj] - q0[jj];
@@ -2137,7 +2141,7 @@ class PolyTwinViewport extends HTMLElement {
         // 패드 자전 + 듀얼액션 궤도(4 mm, 5 Hz) — 공정 중일 때만. 어느 배속에서도 '작업 중' 이 보인다
         const rpm = p.rpm || 3000;
         cell.userData.padDisc.rotation.z += (rpm / 60) * Math.PI * 2 * dt;
-        const orb = contact ? 0.002 : 0.0, ph = t * 2 * Math.PI * 5;   // 듀얼액션 궤도 2 mm
+        const orb = contact ? 0.001 : 0.0, ph = t * 2 * Math.PI * 5;   // 듀얼액션 궤도 1 mm
         cell.userData.padDisc.position.set(orb * Math.cos(ph), orb * Math.sin(ph), 0);
 
         // 지나간 자리를 무광에서 유광으로 — 빛이 닿는 표면 작업점(패드가 조금 떠도 광택은 정확히 그 자리)

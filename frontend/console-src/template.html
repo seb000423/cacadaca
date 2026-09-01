@@ -358,11 +358,11 @@
       <sc-if value="{{ hasRuns }}" hint-placeholder-val="{{ false }}">
       <div style="display: flex; flex-direction: column; gap: 8px; padding: 4px 0 6px">
         <div style="display: flex; align-items: baseline; gap: 10px">
-          <div style="font-size: 14px; font-weight: 500; letter-spacing: 0.12em; text-transform: uppercase; color: var(--text-lo)">기록 재생</div>
+          <div style="font-size: 15px; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase; color: var(--text-hi)">기록 재생</div>
           <div style="flex: 1"></div>
-          <div style="font-family: var(--f-mono); font-size: 14px; color: var(--text-mid)">{{ replayTime }}</div>
+          <div style="font-family: var(--f-mono); font-size: 15px; color: var(--text-hi); font-variant-numeric: tabular-nums">{{ replayTime }}</div>
         </div>
-        <select sc-camel-on-input="{{ pickRun }}" aria-label="재생할 기록" style="width: 100%; padding: 8px 10px; border: 1px solid var(--line); background: var(--bg-void); color: var(--text-mid); font-size: 14px; border-radius: var(--r-sm)">
+        <select sc-camel-on-input="{{ pickRun }}" aria-label="재생할 기록" style="width: 100%; padding: 10px 12px; border: 1px solid var(--line-hi); background: var(--bg-void); color: var(--text-hi); font-size: 15px; border-radius: var(--r-sm)">
           <option value="">기록 선택 — DB 에 저장된 시뮬을 보간 재생</option>
           <sc-for list="{{ runOpts }}" as="o" hint-placeholder-count="2"><option value="{{ o.id }}">{{ o.label }}</option></sc-for>
         </select>
@@ -371,7 +371,7 @@
           <input type="range" min="0" max="1000" value="{{ replayPos }}" sc-camel-on-input="{{ replaySeek }}" aria-label="재생 위치(시간)" style="flex: 1">
         </div>
         <div style="display: flex; gap: 8px">
-          <div sc-camel-on-click="{{ replayToggle }}" tabindex="0" style="flex: 1; padding: 9px 0; border: 1px solid var(--line); text-align: center; font-size: 14px; letter-spacing: 0.06em; color: var(--text-mid); cursor: pointer">{{ replayBtn }}</div>
+          <div sc-camel-on-click="{{ replayToggle }}" tabindex="0" style="flex: 1; padding: 11px 0; border: 1px solid var(--accent); background: rgb(var(--accent-ch) / 0.08); text-align: center; font-size: 15px; font-weight: 500; letter-spacing: 0.06em; color: var(--text-hi); cursor: pointer">{{ replayBtn }}</div>
           <div sc-camel-on-click="{{ toggleCells }}" tabindex="0" style="padding: 9px 10px; border: 1px solid var(--line); text-align: center; font-size: 13px; color: var(--text-lo); cursor: pointer; white-space: nowrap">{{ cellsLabel }}</div>
           <div sc-camel-on-click="{{ deleteRun }}" tabindex="0" title="선택한 기록 삭제" style="padding: 9px 10px; border: 1px solid var(--line); text-align: center; font-size: 13px; color: var(--warn); cursor: pointer; white-space: nowrap">삭제</div>
         </div>
