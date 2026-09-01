@@ -990,3 +990,18 @@ python3 learning/ui_bridge/sim_worker.py --server http://127.0.0.1:8000 --token 
 
 **미검증/남은 것**: 실제 Isaac(v5+RL) 을 워커로 띄우는 것(순회가 GPU 를 쓰는 동안 보류; 인자·env 는
 9.37 로컬 런처와 동일), Vercel 실배포 확인, 결과 → 라이브러리 자동 POST, ③ 셀 지도.
+
+### 9.39 차체 시각화 — v5 원코드 + 잔차 정책을 창(GUI)으로 직접 실행 (2026-09-01 19:20)
+
+순회(9.34)는 검증이었고 결과는 고정돼 있으므로, "로봇이 차체를 닦는 모습" 은 다시 판정할 필요 없이
+v5 원코드에 RL 을 켜서 그냥 실행해 보면 된다. 한 줄 실행 스크립트 `scripts/run_v5_rl_view.sh`:
+```
+bash scripts/run_v5_rl_view.sh              # Isaac Sim 창 — 3대(천장 C·측면 SL/SR)가 차체를 닦음, RL 힘·이송 보정 켜짐
+bash scripts/run_v5_rl_view.sh --headless   # 창 없이(검증)
+```
+- 환경: `POLISH_RL=1`, 레시피 `bo_best_recipe_top/side.json`, 가상 접촉(`POLISH_PHYSICAL_CONTACT=0`, 안정),
+  ROS 끔, 매 스텝 렌더, 접촉 중 이송 배속 3.0(검증 상한), 종료 시 셀 판정 `learning/ui_bridge/out/view_cells.csv`.
+  같은 피드 파일(`learning/ui_bridge/out/monitor_feed.json`)을 쓰므로 UI2 서버를 `PT_MONITOR_FEED` 로 띄우면
+  모니터(②) LIVE 가 동시에 뜬다. 스크립트 앞부분의 env 를 바꾸면 물리 접촉/속도/레시피 교체 가능.
+- **Isaac 프로세스는 한 번에 하나** — 순회/재실행이 돌고 있으면 스크립트가 거부한다(둘 동시 실행 시 행/PhysX 실패 경험).
+- 셀 결과 지도(정적): `~/Desktop/car_cells_map.png` (483셀 처분 + 과부하 셀, 스크립트는 scratchpad `cell_map.py`).
