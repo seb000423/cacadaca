@@ -380,7 +380,54 @@ def main(simulation_app, obj_name="car"):
             from .rl_bridge import write_judgement
             out = os.environ.get("POLISH_RL_OUT", os.path.join(_SRC_DIR, "learning", "rl", "logs",
                                                                 "v5_rl", "car_cells_judgement.csv"))
-            write_judgement(rl_registry, out)
+            summary = write_judgement(rl_registry, out)
+            # ★ UI2 콘솔 결과 요약 (learning/ui_bridge/out/last_run.json) — /api/sim/status 가 읽는다
+            try:
+                import json as _json, time as _time
+                from .rl_bridge import judge_cells
+                rows = judge_cells(rl_registry)
+                done = [r for r in rows if r["visits"] > 0]
+                gus = sorted(float(r["gu_proxy_after"]) for r in done)
+                def _mean(xs): return float(sum(xs) / len(xs)) if xs else 0.0
+                def _pct(xs, p):
+                    if not xs: return 0.0
+                    k = max(0, min(len(xs) - 1, int(round(p / 100.0 * (len(xs) - 1))))); return float(xs[k])
+                sd = (sum((g - _mean(gus)) ** 2 for g in gus) / len(gus)) ** 0.5 if gus else 0.0
+                robots_f = {a.label: float(a.filtered_contact_force) for a in agents}
+                rec = {
+                    "ts": _time.time(), "tag": tag, "sim_step": sim_step, "elapsed_s": sim_step / 60.0,
+                    "recipe": {"force": float(rl_bridge.recipe_top.target_contact_force_n),
+                               "feed_mm_s": float(rl_bridge.recipe_top.feed_speed_mm_s),
+                               "rpm": float(rl_bridge.recipe_top.rpm),
+                               "spacing_ratio": float(rl_bridge.recipe_top.step_over_spacing_ratio),
+                               "n_passes": int(rl_bridge.recipe_top.n_passes)},
+                    "cells": summary,
+                    "quality": {
+                        "cells": len(done), "ra": _mean([float(r["ra_after_um"]) for r in done]),
+                        "rz": max([float(r["rz_after_um"]) for r in done], default=0.0),
+                        "clearcoat": min([float(r["clearcoat_remaining_min_um"]) for r in done], default=0.0),
+                        "scratch": _mean([float(r["scratch_after_um"]) for r in done]),
+                        "scratchBefore": _mean([float(r["scratch_before_um"]) for r in done]),
+                        "glossMean": _mean(gus), "glossP10": _pct(gus, 10), "glossStd": sd,
+                        "glossMin": (gus[0] if gus else 0.0), "glossTiles": len(gus),
+                        "glossPass": bool(gus and _mean(gus) >= 70.0 and _pct(gus, 10) >= 60.0 and sd <= 10.0 and gus[0] >= 45.0),
+                        "glossBand": ("target_pass" if gus and _mean(gus) >= 70 else "partial" if gus and _mean(gus) >= 60 else "low"),
+                    },
+                    "rl": {"force": _mean([float(r["force_n"]) for r in done]),
+                           "force_scale_mean": _mean([1.0 + float(r["policy_action_force"]) * 0.3 for r in done]),
+                           "feed_scale_mean": _mean([1.0 + float(r["policy_action_feed"]) * 0.5 for r in done]),
+                           "stiffness": 350.0 if os.environ.get("POLISH_PHYSICAL_CONTACT", "0") != "1" else 2000.0,
+                           "damping": 35.0 if os.environ.get("POLISH_PHYSICAL_CONTACT", "0") != "1" else 200.0,
+                           "robots": robots_f},
+                }
+                _out_dir = os.path.join(_SRC_DIR, "learning", "ui_bridge", "out")
+                os.makedirs(_out_dir, exist_ok=True)
+                _tmp = os.path.join(_out_dir, "last_run.json.tmp")
+                with open(_tmp, "w", encoding="utf-8") as fh:
+                    _json.dump(rec, fh, ensure_ascii=False, indent=1)
+                os.replace(_tmp, os.path.join(_out_dir, "last_run.json"))
+            except Exception as exc:
+                print(f"[main] ⚠ last_run.json 기록 실패: {exc}")
     if os.environ.get("POLISH_RL", "0") == "1":
         from .rl_bridge import CellRegistry, ResidualPolicyBridge
         _ckpt = os.environ.get("POLISH_RL_CKPT") or None

@@ -925,3 +925,11 @@ UI2 타일 스키마(+thermal_damage_proxy)로 출력 → 그들의 `make_qualit
 (포트 8000, admin/polytwin2026) — 합성 피드로 live:true 확인.
 남은 것: 실제 v5+RL 실행 피드(GPU 여유 시), RL 150셀 리플레이 → quality_kpi 시드, 라이브러리 기록
 POST(세그먼트 기준 rl 레코드), ③ 결과 화면에 셀 판정 지도.
+
+**UI ↔ 시뮬 동기화 (2026-09-01 18:10, UI2 커밋 00431af)**: ① 콘솔 실행/정지 → `POST /api/sim/start|stop`
+(백엔드가 콘솔 프리셋(힘·rpm·이송·오버랩→줄간격비)으로 레시피 JSON 을 쓰고 Isaac(v5+RL, 피드, 셀 판정)을
+detached 로 기동, `GET /api/sim/status` 가 실행 상태+`last_run.json` 반환, dry_run 지원, Vercel 501).
+콘솔은 런처 우선·실패 시 데모 폴백, 실행 중엔 `/api/monitor`+`/api/sim/status` 폴링으로 모니터 패널을
+실제 값으로, 종료 시 판정 모달을 `last_run.json`(quality: ra/rz/clearcoat/scratch/gloss 5종, rl: 힘·배율·
+강성·감쇠)로 채움. 러너는 `_rl_flush` 때 `learning/ui_bridge/out/last_run.json` 기록. 실제 E2E(콘솔 →
+Isaac → LIVE → 결과)는 GPU 여유 시 검증 예정. 남은 동기화: 라이브러리(④) POST 자동화, ③ 셀 지도.
