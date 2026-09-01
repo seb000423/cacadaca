@@ -199,8 +199,13 @@ function makeLibsqlBackend() {
   let ready = null;
   const ensure = () => {
     if (!ready) {
+      /* ';' 로 자르기 전에 SQL 주석을 걷어낸다 — 주석 안의 ';' (sim_jobs 의
+         status 설명) 가 문장을 반으로 갈라 "non-terminated block comment" 로
+         죽었다 (2026-09-02). 로컬 node:sqlite 의 exec 는 주석을 스스로 다루므로
+         SCHEMA 원문은 그대로 둔다. */
+      const bare = SCHEMA.replace(/\/\*[\s\S]*?\*\//g, '').replace(/--[^\n]*/g, '');
       ready = client.batch(
-        SCHEMA.split(';').map((s) => s.trim()).filter(Boolean),
+        bare.split(';').map((s) => s.trim()).filter(Boolean),
         'write',
       );
     }
