@@ -43,9 +43,18 @@ def cell_time(r):
     if r["outcome"] == "fail_force_overload" and float(r["passes"] or 0) == 0: return a.trip_s
     return a.cell_s * max(1.0, float(r["passes"] or 1))
 
+_NORMALS = {}
+_np = os.path.join(_REPO, "learning", "rl", "robot", "results", "cell_normals.csv")
+if os.path.exists(_np):
+    for _r in csv.DictReader(open(_np, encoding="utf-8")):
+        _NORMALS[_r["cell_id"]] = [float(_r["nx"]), float(_r["ny"]), float(_r["nz"])]
+
 def cell_normal(r):
-    """셀 법선 근사: 면 분류의 바깥 방향과 tilt(법선-수직 각)로 합성 — CSV 에 법선이 없다."""
+    """셀 법선: CellRegistry 실측(cell_normals.csv) 우선, 없으면 면 분류+tilt 로 합성."""
     import math as _m
+    if r["cell_id"] in _NORMALS:
+        n = _NORMALS[r["cell_id"]]
+        return n if n[2] >= -0.2 or r["region"] != "top" else [-x for x in n]   # 바깥(위) 방향 보장
     reg = r["region"]; tilt = _m.radians(float(r.get("tilt_deg") or 0.0))
     out = {"side_left": (-1, 0, 0), "side_right": (1, 0, 0), "front": (0, 1, 0), "rear": (0, -1, 0)}.get(reg)
     if out is None:   # 윗면: 차 중심에서 바깥으로 살짝 기운 위쪽
