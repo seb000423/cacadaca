@@ -95,6 +95,8 @@ function publicEntry(row) {
     owner: row.owner_name || row.owner_login || '',
     env: body.env || null,
     rl: body.rl || null,
+    sim: body.sim || null,                                   // 실제 시뮬 결과 요약(자동 등록)
+    run_id: body.run_id != null ? Number(body.run_id) : null, // 기록(sim_runs) → 콘솔/모니터 재생 링크
     ref: body.ref || null,
   };
 }
