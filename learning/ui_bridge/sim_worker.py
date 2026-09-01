@@ -63,8 +63,10 @@ def launch(params: dict, feed_path: str, fake: bool, isaac_py: str) -> subproces
         try: os.remove(f)
         except FileNotFoundError: pass
     log = open(os.path.join(OUT, "sim_run.log"), "w")
+    rec_path = params.get("_record_path") or ""
     if fake:
         cmd = [sys.executable, os.path.join(_HERE, "feed_demo.py"), str(params.get("fake_seconds", 40)), feed_path]
+        if rec_path: cmd.append(rec_path)
         return subprocess.Popen(cmd, stdout=log, stderr=subprocess.STDOUT, start_new_session=True)
     recipe = write_recipe(params)
     env = dict(os.environ)
@@ -75,19 +77,79 @@ def launch(params: dict, feed_path: str, fake: bool, isaac_py: str) -> subproces
         "MAX_SIM_STEPS": str(int(params.get("max_steps", 6000))), "POLISH_EXIT_WHEN_DONE": "1",
         "POLISH_PHYSICAL_CONTACT": "1" if params.get("physical") else "0",
     })
+    if rec_path: env["POLISH_RECORD"] = rec_path
     return subprocess.Popen([isaac_py, "polishing_v5.py", "--obj_name", "car", "--headless"],
                             cwd=os.path.join(_REPO, "scripts"), env=env, stdout=log, stderr=subprocess.STDOUT,
                             start_new_session=True)
 
 
+class RunUploader:
+    """SimRecorder sqlite 를 따라가며 새 청크/이벤트/셀을 서버에 올린다 (지연 재생·리플레이용)."""
+    def __init__(self, args, job_id: int, path: str):
+        self.args = args; self.job_id = job_id; self.path = path
+        self.run_id = None; self.seq = 0; self.ev = 0; self.cell = 0; self.reader = None
+
+    def _open(self):
+        if self.reader is not None or not os.path.exists(self.path):
+            return
+        from learning.ui_bridge.sim_recorder import SimReader
+        try:
+            self.reader = SimReader(self.path)
+            meta = self.reader.meta()
+            r = api(self.args.server, self.args.token, "/api/sim/runs",
+                    {"job_id": self.job_id, "name": f"job {self.job_id} " + time.strftime("%Y-%m-%d %H:%M"), "meta": meta})
+            self.run_id = r.get("run_id")
+            print(f"[worker] 기록 업로드 시작 run_id={self.run_id}", flush=True)
+        except Exception as exc:
+            self.reader = None
+            print(f"[worker] 기록 열기 실패(재시도): {exc}", flush=True)
+
+    def tick(self, final: bool = False, result=None, status: str = "done"):
+        self._open()
+        if self.reader is None or self.run_id is None:
+            return
+        import base64
+        try:
+            ch = self.reader.chunks_after(self.seq)
+            for i in range(0, len(ch), 60):
+                part = ch[i:i + 60]
+                api(self.args.server, self.args.token, f"/api/sim/runs/{self.run_id}/chunks",
+                    {"chunks": [{"seq": c[0], "t0": c[1], "t1": c[2], "n": c[3], "data": base64.b64encode(c[4]).decode("ascii")} for c in part]},
+                    timeout=30)
+                self.seq = part[-1][0]
+            ev = [e for i, e in enumerate(self.reader.events(), 1) if i > self.ev]
+            if ev:
+                api(self.args.server, self.args.token, f"/api/sim/runs/{self.run_id}/events",
+                    {"events": [{"id": self.ev + i + 1, "t": e[0], "robot": e[1], "level": e[2], "msg": e[3]} for i, e in enumerate(ev)]})
+                self.ev += len(ev)
+            cells = self.reader.cells_after(self.cell)
+            if cells:
+                api(self.args.server, self.args.token, f"/api/sim/runs/{self.run_id}/cells",
+                    {"cells": [{"id": c[0], "t": c[1], "data": base64.b64encode(c[2]).decode("ascii")} for c in cells]}, timeout=30)
+                self.cell = cells[-1][0]
+            if final:
+                meta = self.reader.meta()
+                api(self.args.server, self.args.token, f"/api/sim/runs/{self.run_id}/meta", {"meta": meta})
+                api(self.args.server, self.args.token, f"/api/sim/runs/{self.run_id}/finish",
+                    {"status": status, "result": result if result is not None else self.reader.result()})
+                print(f"[worker] 기록 업로드 완료 run_id={self.run_id} (청크 {self.seq})", flush=True)
+        except Exception as exc:
+            print(f"[worker] 기록 업로드 실패(계속): {exc}", flush=True)
+
+
 def run_job(job: dict, args) -> None:
-    jid = job["id"]; params = job.get("params") or {}
+    jid = job["id"]; params = dict(job.get("params") or {})
     feed_path = os.path.join(OUT, "monitor_feed.json")
+    rec_path = os.path.join(OUT, f"run_job{jid}_{time.strftime('%Y%m%d_%H%M%S')}.sqlite")
+    params["_record_path"] = rec_path
     print(f"[worker] job {jid} 시작 params={params}", flush=True)
     proc = launch(params, feed_path, args.fake, args.isaac)
-    stop = False; last_ts = None
+    uploader = RunUploader(args, jid, rec_path)
+    stop = False; last_ts = None; last_up = 0.0
     while True:
         code = proc.poll()
+        if time.time() - last_up >= args.upload_interval:
+            uploader.tick(); last_up = time.time()
         # 피드 전달
         try:
             with open(feed_path, encoding="utf-8") as f:
@@ -127,6 +189,7 @@ def run_job(job: dict, args) -> None:
         try: api(args.server, args.token, f"/api/sim/jobs/{jid}/result", {"result": result})
         except Exception as exc: print(f"[worker] 결과 전송 실패: {exc}", flush=True)
     status = "stopped" if stop else ("done" if code == 0 else "failed")
+    uploader.tick(final=True, result=result, status="failed" if code not in (0, None) and not stop else "done")
     try:
         api(args.server, args.token, f"/api/sim/jobs/{jid}/exit", {"exitCode": code, "status": status})
     except Exception as exc:
@@ -141,6 +204,7 @@ def main():
     ap.add_argument("--name", default=os.environ.get("HOSTNAME", "gpu"))
     ap.add_argument("--poll", type=float, default=1.0, help="작업 폴링 주기(s)")
     ap.add_argument("--interval", type=float, default=0.7, help="피드 전송 주기(s)")
+    ap.add_argument("--upload_interval", type=float, default=2.0, help="기록 청크 업로드 주기(s) — 지연 재생 지연 ≈ 이 값 + 1 s")
     ap.add_argument("--isaac", default=os.path.expanduser("~/isaacsim/python.sh"))
     ap.add_argument("--fake", action="store_true", help="Isaac 대신 합성 피드(feed_demo.py) — 연결 검증용")
     ap.add_argument("--once", action="store_true", help="작업 하나만 처리하고 종료")

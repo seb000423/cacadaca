@@ -1,5 +1,6 @@
 """Scene setup and main loop for polishing_v5."""
 import os
+import time
 import sys
 
 import numpy as np
@@ -426,6 +427,9 @@ def main(simulation_app, obj_name="car"):
                 with open(_tmp, "w", encoding="utf-8") as fh:
                     _json.dump(rec, fh, ensure_ascii=False, indent=1)
                 os.replace(_tmp, os.path.join(_out_dir, "last_run.json"))
+                if recorder is not None:
+                    try: recorder.finish(_res)
+                    except Exception as _exc: print(f"[main] ⚠ 기록 종료 실패: {_exc}", flush=True)
             except Exception as exc:
                 print(f"[main] ⚠ last_run.json 기록 실패: {exc}")
     if os.environ.get("POLISH_RL", "0") == "1":
@@ -453,12 +457,29 @@ def main(simulation_app, obj_name="car"):
         print(f"[main] 모니터 피드 → {_feed_path}")
     _NAMES = {"C": "천장", "SL": "좌측", "SR": "우측"}
     _FEED_EVERY = max(1, int(os.environ.get("POLISH_MONITOR_FEED_EVERY", "6")))   # 6 스텝 ≈ 10 Hz (팔 동기화용)
+    # 기록기(POLISH_RECORD=<sqlite 경로> 또는 1): UI 리플레이/지연 재생용 — 피드와 같은 주기로 프레임을 DB 에 쓴다
+    recorder = None
+    _rec_env = os.environ.get("POLISH_RECORD", "")
+    if _rec_env:
+        try:
+            from learning.ui_bridge.sim_recorder import SimRecorder
+            _rec_path = _rec_env if _rec_env != "1" else os.path.join(_SRC_DIR, "learning", "ui_bridge", "out",
+                                                                       time.strftime("run_%Y%m%d_%H%M%S.sqlite"))
+            recorder = SimRecorder(_rec_path, meta={"scene": _feed_scene, "hz": 60.0 / _FEED_EVERY,
+                                                     "robots": [{"id": a.label, "name": _NAMES.get(a.label, a.label)} for a in agents],
+                                                     "recipe": {"top": os.environ.get("POLISH_RL_RECIPE_TOP", ""),
+                                                                "side": os.environ.get("POLISH_RL_RECIPE_SIDE", "")},
+                                                     "rl": os.environ.get("POLISH_RL", "0") == "1",
+                                                     "physical_contact": os.environ.get("POLISH_PHYSICAL_CONTACT", "0") == "1"})
+            print(f"[main] 기록기 → {_rec_path}", flush=True)
+        except Exception as _exc:
+            print(f"[main] ⚠ 기록기 생성 실패(시뮬 계속): {_exc}", flush=True)
     # 콘솔이 Isaac 월드(Z-up, 차 길이축 Y)를 자기 좌표계로 옮길 때 쓰는 기준: 차 점군 bbox
     _feed_scene = {"up": "z", "long": "y",
                    "car_min": [float(v) for v in np.min(raw_points, axis=0)] if len(raw_points) else [0, 0, 0],
                    "car_max": [float(v) for v in np.max(raw_points, axis=0)] if len(raw_points) else [0, 0, 0]}
     def _feed_tick():
-        if monitor_feed is None:
+        if monitor_feed is None and recorder is None:
             return
         robots = []
         for a in agents:
@@ -500,7 +521,15 @@ def main(simulation_app, obj_name="car"):
             except Exception as exc:
                 cells = {"error": str(exc)[:80]}
         overall_state = "DONE" if all(a.done for a in agents) else robots[0]["state"] if robots else "POLISH"
-        monitor_feed.update(overall_state, cov, robots, elapsed_s=sim_step / 60.0, cells=cells, scene=_feed_scene)
+        if recorder is not None:
+            try:
+                recorder.frame(sim_step / 60.0, overall_state, cov, sim_step / 60.0, robots)
+                if cells and sim_step % (_FEED_EVERY * 100) == 0:     # 셀 판정 스냅샷은 ~10 s 마다
+                    recorder.cells(sim_step / 60.0, cells)
+            except Exception as _exc:
+                print(f"[main] ⚠ 기록 실패: {_exc}", flush=True)
+        if monitor_feed is not None:
+            monitor_feed.update(overall_state, cov, robots, elapsed_s=sim_step / 60.0, cells=cells, scene=_feed_scene)
 
     # 물리 초기화
     world.reset()
@@ -667,7 +696,7 @@ def main(simulation_app, obj_name="car"):
 
         for agent in agents:
             agent.step(stage)
-        if monitor_feed is not None and sim_step % _FEED_EVERY == 0:
+        if (monitor_feed is not None or recorder is not None) and sim_step % _FEED_EVERY == 0:
             _feed_tick()
         if rl_registry is not None and sim_step % 3000 == 0:      # ~50 s 마다 중간 판정 저장
             _rl_flush("periodic")

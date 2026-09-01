@@ -13,7 +13,14 @@ from learning.ui_bridge.monitor_feed import MonitorFeed  # noqa: E402
 
 dur = float(sys.argv[1]) if len(sys.argv) > 1 else 120.0
 path = sys.argv[2] if len(sys.argv) > 2 else os.path.join(_HERE, "out", "monitor_feed.json")
+rec_path = sys.argv[3] if len(sys.argv) > 3 else os.environ.get("POLISH_RECORD", "")   # 세 번째 인자: 기록 sqlite
 feed = MonitorFeed(path)
+recorder = None
+if rec_path:
+    from learning.ui_bridge.sim_recorder import SimRecorder
+    recorder = SimRecorder(rec_path, meta={"scene": {"up": "z", "long": "y", "car_min": [-0.92, -2.3, 0.05], "car_max": [0.92, 2.3, 1.45]},
+                                          "hz": 10.0, "robots": [{"id": "C", "name": "천장"}, {"id": "SL", "name": "좌측"}, {"id": "SR", "name": "우측"}],
+                                          "recipe": {"synthetic": True}, "rl": False, "physical_contact": False})
 feed.event("C", "합성 피드 시작 (feed_demo.py)", "info", 0.0)
 t0 = time.time(); n = 0
 while time.time() - t0 < dur:
@@ -38,6 +45,10 @@ while time.time() - t0 < dur:
              "not_reached": 491 - int(prog * 440), "items": []}
     scene = {"up": "z", "long": "y", "car_min": [-0.92, -2.3, 0.05], "car_max": [0.92, 2.3, 1.45]}
     feed.update("POLISH" if prog < 1.0 else "DONE", prog, robots, elapsed_s=t, cells=cells, scene=scene)
+    if recorder is not None:
+        recorder.frame(t, "POLISH" if prog < 1.0 else "DONE", prog, t, robots)
+        if n % 40 == 0: recorder.event(t, "SL", "info", f"셀 {n // 40} 판정 통과 — GU {71 + (n % 5) * 0.4:.1f}")
+        if n % 100 == 0: recorder.cells(t, cells)
     time.sleep(0.1)   # 10 Hz — 팔 동기화 확인용
 # 연결 검증용 결과 요약(last_run.json) — 실제 러너의 _rl_flush 와 같은 자리에 같은 모양으로
 import json as _json
@@ -49,4 +60,6 @@ _res = {"ts": time.time(), "tag": "feed_demo", "sim_step": n * 30, "elapsed_s": 
                     "glossPass": True, "glossBand": "target_pass"},
         "rl": {"force": 5.2, "force_scale_mean": 0.97, "feed_scale_mean": 1.04, "stiffness": 350.0, "damping": 35.0}}
 _json.dump(_res, open(os.path.join(os.path.dirname(path), "last_run.json"), "w", encoding="utf-8"), ensure_ascii=False, indent=1)
+if recorder is not None:
+    recorder.finish(_res); recorder.close(); print(f"기록 → {rec_path} ({recorder.n_frames} 프레임)")
 print("feed_demo 종료 (last_run.json 기록)")
