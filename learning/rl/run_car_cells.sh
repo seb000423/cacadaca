@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # 차 전체 셀 순회 드라이버 — 한 배치(num_envs 셀) = Isaac 프로세스 하나. 순차 실행.
 #   bash learning/rl/run_car_cells.sh [start] [end] [batch] [checkpoint] [out_csv]
-# 예: 전체 491셀  → bash learning/rl/run_car_cells.sh 0 490 8
+# 예: 전체 483셀  → bash learning/rl/run_car_cells.sh 0 482 8
 #     detached    → setsid nohup bash learning/rl/run_car_cells.sh 0 490 8 > learning/rl/robot/results/car_cells.log 2>&1 &
 set -u
 cd "$(dirname "$0")/../.."

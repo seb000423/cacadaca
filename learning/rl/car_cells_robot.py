@@ -37,6 +37,11 @@ parser.add_argument("--cooldown_s", type=float, default=20.0)
 parser.add_argument("--pass_time_factor", type=float, default=1.7)
 parser.add_argument("--max_control_steps", type=int, default=120000)
 parser.add_argument("--registry_seed", type=int, default=7000)
+parser.add_argument("--force_scale", type=float, default=1.0,
+                    help="강곡률 재실행: 레시피 목표 힘 배율 (감압, 예 0.7)")
+parser.add_argument("--pad_radius", type=float, default=None,
+                    help="강곡률 재실행: 물리 패드 반경 m (예 0.035 = Ø70 소형 패드)")
+parser.add_argument("--tag", type=str, default="", help="결과 checkpoint 열에 붙일 태그")
 parser.add_argument("--out", type=str,
                     default=os.path.join(_REPO, "learning", "rl", "robot", "results", "car_cells.csv"))
 AppLauncher.add_app_launcher_args(parser)
@@ -130,6 +135,27 @@ def main():
               f"quad c3={c[3]:+.3f} c5={c[5]:+.3f} rms={rms*1000:.2f}mm init={cell.init}")
 
     env_cfg = RobotPolishEnvCfg()
+    # ── 강곡률 재실행 옵션 (2026-09-01): 감압 / 소형 패드 ──
+    if args.force_scale != 1.0:
+        import json, tempfile
+        from learning.rl.env.polish_env import _load_recipe
+        base = _load_recipe(env_cfg.recipe_json_path)
+        d = json.load(open(env_cfg.recipe_json_path))
+        key = "target_contact_force_n"
+        d[key] = float(base.target_contact_force_n * args.force_scale)
+        tmp = tempfile.NamedTemporaryFile("w", suffix="_recipe.json", delete=False)
+        json.dump(d, tmp); tmp.close()
+        env_cfg.recipe_json_path = tmp.name
+        print(f"[car_cells] 감압: 목표 힘 {base.target_contact_force_n:.2f} → {d[key]:.2f} N ({args.force_scale}×)")
+    if args.pad_radius is not None:
+        import scripts.polishing_v5_modules.common as _v5c
+        import learning.rl.env.robot_polish_env as _rpe
+        from learning.polytwin import config as _PC
+        _v5c.POLISHING_DISK_RADIUS = float(args.pad_radius)
+        _rpe.POLISHING_DISK_RADIUS = float(args.pad_radius)
+        _PC.PAD_RADIUS_M = float(args.pad_radius); _PC.PAD_DIAMETER_M = 2.0 * float(args.pad_radius)
+        print(f"[car_cells] 소형 패드: 물리 반경 {args.pad_radius} m (footprint/raster 도 동일; "
+              f"제거 모델 pad_radius 는 보정 설정값 유지 — 주의)")
     env_cfg.surface_kind = "quad"
     env_cfg.carcell_quads = quads
     env_cfg.carcell_init = inits
@@ -189,7 +215,7 @@ def main():
                 "gu_target_pass": gu_pass, "ra_target_pass": ra_pass, "rz_target_pass": rz_pass,
                 "scratch_improved": scr_ok, "clearcoat_safe": cc_safe,
                 "warranty_removal_ok": warranty, "overall_pass": overall, "disposition": disp,
-                "checkpoint": os.path.basename(args.checkpoint),
+                "checkpoint": os.path.basename(args.checkpoint) + (f"|{args.tag}" if args.tag else ""),
             }
             print(f"[car_cells] cell {cell.cell_id} {cell.region}: {log['outcome']} passes={log['passes']} "
                   f"GU {b['gu']:.1f}→{f['gu']:.1f} scr {b['scratch']:.2f}→{f['scratch']:.2f} "
