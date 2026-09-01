@@ -1426,7 +1426,7 @@ class PolyTwinViewport extends HTMLElement {
     if (!this._waBox) { this._model.updateMatrixWorld(true); this._waBox = new THREE.Box3().setFromObject(this._model); }
     const b = this._waBox, mn = sc.car_min, mx = sc.car_max;
     const u = (pt[0] - mn[0]) / Math.max(1e-6, mx[0] - mn[0]);   // Isaac x(가로) → 콘솔 x
-    const w = (pt[1] - mn[1]) / Math.max(1e-6, mx[1] - mn[1]);   // Isaac y(길이, 앞 +) → 콘솔 z(앞 +)
+    const w = 1 - (pt[1] - mn[1]) / Math.max(1e-6, mx[1] - mn[1]);   // Isaac y(길이, 앞 +) → 콘솔 길이축. 콘솔 Z4 는 앞이 −z 라 반전 (좌우는 그대로 맞음)
     const v = (pt[2] - mn[2]) / Math.max(1e-6, mx[2] - mn[2]);   // Isaac z(높이) → 콘솔 y
     const LONG = (this._axes && this._axes.LONG) || 'z', CROSS = LONG === 'z' ? 'x' : 'z';
     const out = new THREE.Vector3();
