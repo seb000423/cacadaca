@@ -298,6 +298,26 @@
       <sc-if value="{{ idle }}" hint-placeholder-val="{{ true }}">
       <div sc-camel-on-click="{{ loadPreset }}" tabindex="0" style="padding: 11px 0; border: 1px solid var(--line); font-size: 14px; letter-spacing: 0.06em; color: {{ presetColor }}; text-align: center; cursor: {{ presetCursor }}; transition: border-color 200ms cubic-bezier(0.4,0,0.2,1), color 200ms cubic-bezier(0.4,0,0.2,1)" style-hover="border-color: var(--text-lo)">{{ presetLabel }}</div>
       </sc-if>
+      <sc-if value="{{ hasRuns }}" hint-placeholder-val="{{ false }}">
+      <div style="display: flex; flex-direction: column; gap: 8px; padding: 4px 0 6px">
+        <div style="display: flex; align-items: baseline; gap: 10px">
+          <div style="font-size: 14px; font-weight: 500; letter-spacing: 0.12em; text-transform: uppercase; color: var(--text-lo)">기록 재생</div>
+          <div style="flex: 1"></div>
+          <div style="font-family: var(--f-mono); font-size: 14px; color: var(--text-mid)">{{ replayTime }}</div>
+        </div>
+        <select sc-camel-on-input="{{ pickRun }}" aria-label="재생할 기록" style="width: 100%; padding: 8px 10px; border: 1px solid var(--line); background: var(--bg-void); color: var(--text-mid); font-size: 14px; border-radius: var(--r-sm)">
+          <option value="">기록 선택 — DB 에 저장된 시뮬을 보간 재생</option>
+          <sc-for list="{{ runOpts }}" as="o" hint-placeholder-count="2"><option value="{{ o.id }}">{{ o.label }}</option></sc-for>
+        </select>
+        <input type="range" min="0" max="1000" value="{{ replayPos }}" sc-camel-on-input="{{ replaySeek }}" aria-label="재생 위치" style="width: 100%">
+        <div style="display: flex; gap: 8px">
+          <div sc-camel-on-click="{{ replayToggle }}" tabindex="0" style="flex: 1; padding: 9px 0; border: 1px solid var(--line); text-align: center; font-size: 14px; letter-spacing: 0.06em; color: var(--text-mid); cursor: pointer">{{ replayBtn }}</div>
+          <select sc-camel-on-input="{{ replaySpeed }}" aria-label="재생 속도" style="width: 88px; padding: 8px 10px; border: 1px solid var(--line); background: var(--bg-void); color: var(--text-mid); font-size: 14px; border-radius: var(--r-sm)">
+            <option value="0.5">0.5x</option><option value="1" selected>1x</option><option value="2">2x</option><option value="4">4x</option><option value="8">8x</option><option value="16">16x</option>
+          </select>
+        </div>
+      </div>
+      </sc-if>
       <div sc-camel-on-click="{{ toggleRun }}" style="padding: 17px 0; border: 1px solid {{ runBorder }}; background: {{ runBg }}; font-size: 16px; font-weight: 500; letter-spacing: 0.18em; text-transform: uppercase; color: var(--text-hi); text-align: center; cursor: pointer; transition: background-color 220ms cubic-bezier(0.4,0,0.2,1), border-color 220ms cubic-bezier(0.4,0,0.2,1), color 220ms cubic-bezier(0.4,0,0.2,1)">{{ runLabel }}</div>
       <div style="display: flex; gap: 10px">
         <a href="monitor.html" style="flex: 1; padding: 10px 0; font-size: 14px; letter-spacing: 0.06em; color: var(--text-lo); text-align: center; transition: color var(--t-base) var(--e-out); word-break: keep-all">② 공정 감시 →</a>
@@ -471,10 +491,14 @@ class Component extends DCLogic {
     runMs: 0,            // 이번 공정의 길이. 실행마다 30~60초에서 새로 뽑는다
     runEl: 0,            // 경과 ms
     mon: null,           // 공정 중 계측값. 대기 중에는 null
+    runs: [],            // 서버에 저장된 시뮬 기록 목록 (/api/runs)
+    replayId: '',        // 재생 중인 기록 id
+    replay: null,        // 재생기 상태 {t, duration, playing, speed, follow, status, active}
   };
 
   componentDidMount() {
     this.push();
+    this.fetchRuns();
     /* credentials 를 빼면 세션 쿠키가 안 실려 401 이 온다 */
     fetch(SEED_URL, { credentials: 'same-origin' })
       .then((r) => r.json().catch(() => ({})).then((d) => {
@@ -524,7 +548,43 @@ class Component extends DCLogic {
   /* ══ 실제 시뮬레이션 실행 (백엔드 /api/sim/*) ═══════════════════════
      로컬 서버가 Isaac Sim(원코드 v5 + 잔차 정책)을 띄우고, 모니터는 /api/monitor 피드로 채운다.
      런처가 없는 환경(배포 서버 501, 네트워크 오류)에서는 기존 데모 흐름으로 돌아간다. */
+  /* ══ 기록 재생 (DB 에 저장된 시뮬 프레임을 보간 재생 — 실시간 폴링 렉 없음) ══ */
+  fetchRuns() {
+    fetch('/api/runs', { credentials: 'same-origin', cache: 'no-store' }).then((r) => r.json())
+      .then((d) => this.setState({ runs: d.runs || [] })).catch(() => {});
+  }
+  loadReplay(id, keepTimers) {
+    const v = this.vp(); if (!v || !v.replay) return;
+    const pl = v.replay, t = toolOf(this.state.tool);
+    pl.onState = (st) => this.setState({ replay: { ...st, active: true } });
+    pl.onFrame = (feed) => {
+      const now = performance.now();
+      if (now - (this._rpEmit || 0) < 200) return;     // 표시 갱신은 5 Hz — 3D 는 60 fps 로 따로 돈다
+      this._rpEmit = now;
+      this.setState({ mon: this.liveMon(feed, t) });
+    };
+    if (!keepTimers) this.stopTimers();
+    this.setState({ replayId: String(id), mon: null }, () => {
+      pl.load(id).then(() => { pl.play(); this.push(); }).catch((e) => console.warn('기록 로드 실패', e));
+    });
+  }
+  stopReplay() {
+    const v = this.vp(); if (v && v._replay) v.replay.stop();
+    this.setState({ replay: null, replayId: '', mon: null }, () => this.push());
+  }
+  pickRun(e) { const id = Number(e.target.value); if (!id) this.stopReplay(); else this.loadReplay(id); }
+  replayToggle() {
+    const v = this.vp(); if (!v || !v._replay || !this.state.replay) return;
+    if (this.state.replay.playing) v.replay.pause(); else v.replay.play();
+  }
+  replaySeek(e) {
+    const v = this.vp(); if (!v || !v._replay || !this.state.replay) return;
+    v.replay.seek(Number(e.target.value) / 1000 * this.state.replay.duration);
+  }
+  replaySpeed(e) { const v = this.vp(); if (v && v._replay) v.replay.setSpeed(Number(e.target.value) || 1); }
+
   toggleRun() {
+    if (this.state.replay && this.state.replay.active && !this._liveRun) return this.stopReplay();
     if (this.state.running) {
       if (this._liveRun) {
         fetch('/api/sim/stop', { method: 'POST', credentials: 'same-origin' }).catch(() => {});
@@ -554,10 +614,26 @@ class Component extends DCLogic {
       fetch('/api/sim/status', { credentials: 'same-origin', cache: 'no-store' }).then((r) => r.json()).catch(() => null),
     ]).then(([m, st]) => {
       const feed = m && m.live ? m.feed : null;
-      const v = this.vp(); if (v && v.setLive) v.setLive(feed);   // 3D 팔 = Isaac 관절 그대로
+      const v = this.vp();
+      const viaReplay = !!(this.state.replay && this.state.replay.active);
+      if (!viaReplay && v && v.setLive) v.setLive(feed);   // 3D 팔 = Isaac 관절 그대로 (폴링 경로)
+      /* 워커가 이 작업의 기록(run)을 올리기 시작하면 지연 재생기로 전환 — 청크를 미리 받아 보간하므로 렉이 없다 */
+      if (!viaReplay && st && st.job && st.job.id && !this._liveReplayTried && v && v.replay) {
+        this._liveReplayTried = performance.now();
+        fetch('/api/runs', { credentials: 'same-origin', cache: 'no-store' }).then((r) => r.json()).then((d) => {
+          const run = (d.runs || []).find((r) => r.job_id === st.job.id);
+          if (run) { this.setState({ runs: d.runs || [] }); this.loadReplay(run.id, true); }
+          else this._liveReplayTried = null;                      // 아직 없음 — 다음 폴링에서 다시
+        }).catch(() => { this._liveReplayTried = null; });
+      }
       const el = performance.now() - this._runT0;
-      this.setState({ runEl: el, mon: this.liveMon(feed, t) });
+      if (!viaReplay) this.setState({ runEl: el, mon: this.liveMon(feed, t) }); else this.setState({ runEl: el });
       const done = st && !st.running && (st.exitCode !== null || (feed && feed.state === 'DONE'));
+      if (done) {
+        this._liveReplayTried = null;
+        if (viaReplay && v && v._replay) { v.replay.stop(); this.setState({ replay: null, replayId: '' }); }
+        this.fetchRuns();
+      }
       if (done && st.result) { this.stopTimers(); this._liveRun = false; this.finishLiveRun(st.result); }
       else if (done) { this.stopTimers(); this._liveRun = false; this.finishRun(); }
     });
@@ -688,14 +764,16 @@ class Component extends DCLogic {
   /* 공정 모니터링 패널이 그리는 값. 대기 중에는 설정 패널이 대신 뜬다. */
   monVals() {
     const s = this.state, m = s.mon;
-    const idle = !s.running || !m;
+    const rp = s.replay && s.replay.active ? s.replay : null;
+    const idle = !(s.running || rp) || !m;
     if (idle) {
       return { running: false, idle: true, panelTitle: 'PARAMETERS',
                monBars: [], monRobots: [] };
     }
     const pct = m.prog * 100;
-    const leftSec = Math.max(0, Math.round((s.runMs - s.runEl) / 1000));
-    const elSec = Math.round(s.runEl / 1000);
+    // 재생 중이면 시뮬 시각(기록의 t) 을 그대로 — 공정 시간이 곧 시뮬 시간이다
+    const leftSec = rp ? Math.max(0, Math.round(rp.duration - rp.t)) : Math.max(0, Math.round((s.runMs - s.runEl) / 1000));
+    const elSec = rp ? Math.round(rp.t) : Math.round(s.runEl / 1000);
     // 접촉력이 목표에서 얼마나 벗어났나 — 이 화면에서 관리자가 제일 먼저 볼 값
     const warn = m.dev > 0.55;
     const stateColor = warn ? 'var(--warn)' : 'var(--ok)';
@@ -723,12 +801,12 @@ class Component extends DCLogic {
     }));
 
     return {
-      running: true, idle: false, panelTitle: '공정 모니터링',
+      running: true, idle: false, panelTitle: rp ? (rp.follow ? '공정 모니터링 · 지연 재생' : '기록 재생') : '공정 모니터링',
       monPct: pct.toFixed(1),
       monBarW: pct.toFixed(1) + '%',
       monElapsed: mmss(elSec),
       monLeft: mmss(leftSec),
-      monTotal: mmss(Math.round(s.runMs / 1000)),
+      monTotal: mmss(rp ? Math.round(rp.duration) : Math.round(s.runMs / 1000)),
       monForce: m.force.toFixed(2),
       monTarget: m.target.toFixed(1),
       monDev: (m.force >= m.target ? '+' : '–') + m.dev.toFixed(2),
@@ -953,7 +1031,20 @@ class Component extends DCLogic {
       spacing: String(spacing),
       passes: String(passes),
       eta: mmss(Math.round(passes * 8)),
-      runLabel: s.running ? '공정 중단' : 'RL 공정 시작',
+      runLabel: s.running ? '공정 중단' : (s.replay && s.replay.active ? '재생 중지' : 'RL 공정 시작'),
+      hasRuns: s.runs.length > 0,
+      runOpts: s.runs.map((r) => ({ id: String(r.id),
+        label: (r.name || ('run ' + r.id)) + ' · ' + (r.status === 'recording' ? '기록 중' : r.status === 'done' ? '완료' : r.status)
+               + ' · ' + mmss(Math.round(Number(r.t_sim_end) || 0)) })),
+      replayId: s.replayId,
+      replayPos: s.replay && s.replay.duration > 0 ? String(Math.round(1000 * s.replay.t / s.replay.duration)) : '0',
+      replayTime: s.replay ? (mmss(Math.round(s.replay.t)) + ' / ' + mmss(Math.round(s.replay.duration)) + (s.replay.follow ? ' · LIVE' : '')) : '',
+      replayBtn: s.replay && s.replay.playing ? '일시정지' : '재생',
+      replaySpeedVal: String(s.replay ? s.replay.speed : 1),
+      pickRun: (e) => this.pickRun(e),
+      replayToggle: () => this.replayToggle(),
+      replaySeek: (e) => this.replaySeek(e),
+      replaySpeed: (e) => this.replaySpeed(e),
       runBorder: s.running ? 'var(--warn)' : 'var(--accent)',
       runBg: s.running ? 'rgb(var(--warn-ch) / 0.1)' : 'rgb(var(--accent-ch) / 0.1)',
       ...this.monVals(),
