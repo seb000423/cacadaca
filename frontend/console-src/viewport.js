@@ -718,9 +718,10 @@ function robotCell(parts, mats) {
   padDisc.add(foam, plate);
   padAnchor.add(padDisc);
   // 작업 지점 표시 — 레이저처럼 툴에서 표면으로 내려오는 투명한 빔과 표면 글로우(월드에 두고 매 프레임 옮긴다)
-  const glow = new THREE.MeshBasicMaterial({ color: 0x8FE9FF, transparent: true, opacity: 0.42, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
+  const glow = new THREE.MeshBasicMaterial({ color: 0x8FE9FF, transparent: true, opacity: 0.42, blending: THREE.AdditiveBlending, depthWrite: false, depthTest: false, side: THREE.DoubleSide });
   const spot = new THREE.Mesh(new THREE.CircleGeometry(0.075, 40), glow);
-  const beam = new THREE.Mesh(new THREE.CylinderGeometry(0.005, 0.012, 1, 12, 1, true), new THREE.MeshBasicMaterial({ color: 0x8FE9FF, transparent: true, opacity: 0.22, blending: THREE.AdditiveBlending, depthWrite: false }));
+  const beam = new THREE.Mesh(new THREE.CylinderGeometry(0.005, 0.012, 1, 12, 1, true), new THREE.MeshBasicMaterial({ color: 0x8FE9FF, transparent: true, opacity: 0.22, blending: THREE.AdditiveBlending, depthWrite: false, depthTest: false }));
+  spot.renderOrder = 20; beam.renderOrder = 20;   // 차체 뒤에 가려지지 않게 마지막에 그린다
   spot.visible = false; beam.visible = false;
   g.userData.spot = spot; g.userData.beam = beam;
 
@@ -1368,6 +1369,7 @@ class PolyTwinViewport extends HTMLElement {
   _applyCarLift() {
     const y = Math.max(0, this._params.carLift || 0);
     this._models.forEach((m) => { m.position.y = y; m.updateMatrixWorld(true); });
+    this._waBox = null; this._paintBox = null;   // 차가 움직였다 — 셀 매핑 기준 상자 무효화 (다음 _buildFields 에서 재계산)
   }
 
   /** 위에서 한 장, 옆에서 두 장. 옆면 두 장이 도어와 펜더를 맡는다. */
@@ -1387,6 +1389,7 @@ class PolyTwinViewport extends HTMLElement {
     // 도장 면 bbox(휠·미러·유리 제외) — Isaac 스캔 차(도장 면만 스캔) 와 비례가 맞는 기준 상자
     if (pts.length) { const pb = new THREE.Box3(); for (const q of pts) pb.expandByPoint(w.copy(q).applyMatrix4(this._model.matrixWorld)); this._paintBox = pb; }
     else this._paintBox = null;
+    this._waBox = null;                       // 셀 매핑 기준 상자는 필드와 같이 다시 잡는다
   }
 
   /** 월드 점이 도장 정점에서 r 이내인가 (도장 정점이 수집되지 않은 모델은 항상 true) */
@@ -1441,7 +1444,14 @@ class PolyTwinViewport extends HTMLElement {
   }
   _mapRel(pt) {
     const sc = this._live && this._live.scene; if (!sc || !sc.car_min || !this._model) return null;
-    if (!this._waBox) { this._model.updateMatrixWorld(true); this._waBox = (this._paintBox && !this._paintBox.isEmpty()) ? this._paintBox.clone() : new THREE.Box3().setFromObject(this._model); }
+    if (!this._waBox) {
+      this._model.updateMatrixWorld(true);
+      if (!this._paintBox) {   // 리프트 뒤 등: 도장 정점으로 기준 상자 재계산
+        const pts = (this._model.userData && this._model.userData.paintPts) || []; const w = new THREE.Vector3();
+        if (pts.length) { const pb = new THREE.Box3(); for (const q of pts) pb.expandByPoint(w.copy(q).applyMatrix4(this._model.matrixWorld)); this._paintBox = pb; }
+      }
+      this._waBox = (this._paintBox && !this._paintBox.isEmpty()) ? this._paintBox.clone() : new THREE.Box3().setFromObject(this._model);
+    }
     const b = this._waBox, mn = sc.car_min, mx = sc.car_max;
     const u = (pt[0] - mn[0]) / Math.max(1e-6, mx[0] - mn[0]);   // Isaac x(가로) → 콘솔 x
     const w = 1 - (pt[1] - mn[1]) / Math.max(1e-6, mx[1] - mn[1]);   // Isaac y(길이, 앞 +) → 콘솔 길이축. 콘솔 Z4 는 앞이 −z 라 반전 (좌우는 그대로 맞음)
@@ -1630,7 +1640,7 @@ class PolyTwinViewport extends HTMLElement {
     const had = !!this._live;
     this._live = feed && feed.robots && feed.robots.some((r) => Array.isArray(r.q) || r.tcp) ? feed : null;
     this._liveWorkArea = !!(this._live && typeof this._live.kind === 'string' && this._live.kind.indexOf('result_replay') === 0);
-    if (this._liveWorkArea && !had) { this.resetPolish(); for (const c of this._cells) { c.userData.s = 0; c.userData.cursor = 0; } }
+    if (this._liveWorkArea && !had) { this.resetPolish(); this._waBox = null; for (const c of this._cells) { c.userData.s = 0; c.userData.cursor = 0; } }
     if (this._live && !had && !this._liveWorkArea && this._vehicle !== 'scan') {   // 실제 Isaac 기록: 관절 추종 → Isaac 과 같은 스캔 차체
       this._vehicleBefore = this._vehicle;
       this.setVehicle('scan').then(() => { this._liveXf = null; if (this._live && this._live.scene) this._buildLiveXform(this._live.scene); }).catch(() => {});
@@ -2016,7 +2026,7 @@ class PolyTwinViewport extends HTMLElement {
           if (spot && beam) {
             if (contact) {
               spot.visible = true; beam.visible = true;
-              spot.position.copy(_ikPad).addScaledVector(nrm, 0.006);
+              spot.position.copy(_ikPad).addScaledVector(nrm, 0.012);
               spot.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), nrm);
               spot.material.opacity = 0.3 + 0.18 * (0.5 + 0.5 * Math.sin(t * 6 + ci));
               const wrist = cell.userData.joints[5].getWorldPosition(new THREE.Vector3());
