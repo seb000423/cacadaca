@@ -3,3 +3,7 @@ gloss_test/results/
 __pycache__/
 *.pyc
 learning/ui_bridge/out/
+
+# runtime logs overwritten by every sim run
+scripts/status_log.txt
+scripts/force_log_rail_*.csv

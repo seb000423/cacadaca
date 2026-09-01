@@ -1,0 +1,97 @@
+[rerun] 20:52:16 대상 112셀, 남은 32셀 (force×0.7, pad 0.035 m, tag pad0.035_f0.7)
+[rerun] 20:52:16 배치 시작: 82,86,89,91,92,97,102,107,112,117,122,128,133,134,140,146
+[car_cells] cell 82 side_left tilt 85.1° quad c3=-1.148 c5=-7.162 rms=49.22mm init={'ra': 0.12419057651848339, 'scratch': 0.17119442312728322, 'n_scr': 3, 'clearcoat': 43.688766440692746}
+[car_cells] cell 86 side_left tilt 56.6° quad c3=+0.203 c5=-4.983 rms=3.37mm init={'ra': 0.1068860398795524, 'scratch': 0.18001434551067763, 'n_scr': 1, 'clearcoat': 40.063199647878356}
+[car_cells] cell 89 side_left tilt 82.5° quad c3=-2.106 c5=-2.435 rms=4.12mm init={'ra': 0.0947409178659343, 'scratch': 0.4527803788497782, 'n_scr': 3, 'clearcoat': 44.19641040480325}
+[car_cells] cell 91 side_left tilt 68.6° quad c3=-0.957 c5=-3.997 rms=4.59mm init={'ra': 0.10000558150927535, 'scratch': 0.05133000897387432, 'n_scr': 1, 'clearcoat': 41.37484084826365}
+[car_cells] cell 92 side_left tilt 66.1° quad c3=-0.854 c5=-4.436 rms=4.73mm init={'ra': 0.11764108350311546, 'scratch': 0.07186629545457493, 'n_scr': 1, 'clearcoat': 42.49741688727822}
+[car_cells] cell 97 side_left tilt 63.7° quad c3=+0.141 c5=-7.568 rms=6.48mm init={'ra': 0.10199150260838838, 'scratch': 0.3827696922442428, 'n_scr': 3, 'clearcoat': 46.97506875481287}
+[car_cells] cell 102 side_left tilt 66.0° quad c3=+0.112 c5=-7.373 rms=6.03mm init={'ra': 0.12919399802256784, 'scratch': 0.15182709805851136, 'n_scr': 2, 'clearcoat': 43.419356205341586}
+[car_cells] cell 107 side_left tilt 62.0° quad c3=-0.003 c5=-6.879 rms=5.19mm init={'ra': 0.1387802871432325, 'scratch': 0.4316589580525243, 'n_scr': 2, 'clearcoat': 49.884651773917916}
+[car_cells] cell 112 side_left tilt 63.6° quad c3=-0.144 c5=-7.206 rms=5.04mm init={'ra': 0.1542393605877163, 'scratch': 0.4721360292602651, 'n_scr': 1, 'clearcoat': 48.4710106800278}
+[car_cells] cell 117 side_left tilt 56.2° quad c3=-0.001 c5=-1.735 rms=6.02mm init={'ra': 0.13352787676780745, 'scratch': 0.43587955522949684, 'n_scr': 1, 'clearcoat': 45.606963091751865}
+[car_cells] cell 122 side_left tilt 51.7° quad c3=-0.756 c5=+2.284 rms=8.19mm init={'ra': 0.10896042168079245, 'scratch': 0.27643603120953425, 'n_scr': 2, 'clearcoat': 40.4264357436625}
+[car_cells] cell 128 side_left tilt 51.3° quad c3=-1.425 c5=-3.153 rms=1.72mm init={'ra': 0.12654236921752296, 'scratch': 0.24858846384243993, 'n_scr': 2, 'clearcoat': 41.378127819967204}
+[car_cells] cell 133 side_left tilt 47.5° quad c3=+0.077 c5=-3.481 rms=2.84mm init={'ra': 0.12200102846822235, 'scratch': 0.4184625055766017, 'n_scr': 3, 'clearcoat': 40.18037446019855}
+[car_cells] cell 134 side_left tilt 47.9° quad c3=-1.036 c5=-4.534 rms=1.92mm init={'ra': 0.11865947412413061, 'scratch': 0.3563687080144385, 'n_scr': 1, 'clearcoat': 45.057526708453764}
+[car_cells] cell 140 side_left tilt 48.0° quad c3=-0.243 c5=-5.028 rms=1.38mm init={'ra': 0.12183817012292668, 'scratch': 0.18086284912970518, 'n_scr': 3, 'clearcoat': 43.83953382364806}
+[car_cells] cell 146 side_left tilt 48.3° quad c3=-0.239 c5=-4.800 rms=2.09mm init={'ra': 0.1326721367096046, 'scratch': 0.23544933153195935, 'n_scr': 3, 'clearcoat': 45.82111433409518}
+[car_cells] 감압: 목표 힘 5.78 → 4.04 N (0.7×)
+[car_cells] 소형 패드: 물리 반경 0.035 m (footprint/raster 도 동일; 제거 모델 pad_radius 는 보정 설정값 유지 — 주의)
+[car_cells] step=2000 done=0/16
+[car_cells] step=4000 done=0/16
+[car_cells] cell 134 side_left: fail_force_overload passes=0 GU 72.7→74.2 scr 0.40→0.15 cc_min 43.5 → spot_repaint_review
+[car_cells] cell 140 side_left: fail_force_overload passes=0 GU 63.9→69.8 scr 0.21→0.13 cc_min 40.4 → spot_repaint_review
+[car_cells] step=6000 done=2/16
+[car_cells] cell 107 side_left: fail_force_overload passes=0 GU 68.3→73.8 scr 0.44→0.24 cc_min 46.3 → spot_repaint_review
+[car_cells] cell 112 side_left: fail_force_overload passes=0 GU 71.9→74.1 scr 0.42→0.18 cc_min 44.8 → spot_repaint_review
+[car_cells] cell 82 side_left: fail_force_overload passes=0 GU 65.4→73.0 scr 0.21→0.10 cc_min 42.4 → spot_repaint_review
+[car_cells] cell 97 side_left: fail_force_overload passes=0 GU 63.1→69.1 scr 0.41→0.20 cc_min 42.4 → spot_repaint_review
+[car_cells] cell 102 side_left: fail_force_overload passes=0 GU 66.3→68.6 scr 0.22→0.11 cc_min 39.5 → spot_repaint_review
+[car_cells] cell 86 side_left: fail_force_overload passes=0 GU 72.2→70.9 scr 0.24→0.13 cc_min 37.5 → spot_repaint_review
+[car_cells] cell 92 side_left: fail_force_overload passes=0 GU 69.6→69.1 scr 0.17→0.09 cc_min 37.8 → spot_repaint_review
+[car_cells] cell 89 side_left: fail_force_overload passes=0 GU 68.6→72.4 scr 0.41→0.17 cc_min 39.1 → spot_repaint_review
+[car_cells] cell 128 side_left: fail_force_overload passes=0 GU 60.7→68.7 scr 0.33→0.17 cc_min 39.3 → spot_repaint_review
+[car_cells] cell 117 side_left: fail_force_overload passes=0 GU 65.6→70.9 scr 0.49→0.35 cc_min 40.3 → spot_repaint_review
+[car_cells] step=8000 done=12/16
+[car_cells] step=10000 done=12/16
+[car_cells] step=12000 done=12/16
+[car_cells] step=14000 done=12/16
+[car_cells] cell 146 side_left: success passes=1 GU 60.3→71.6 scr 0.29→0.04 cc_min 41.2 → pass
+[car_cells] cell 91 side_left: fail_clearcoat_budget passes=1 GU 71.6→67.8 scr 0.15→0.05 cc_min 36.6 → rework_candidate
+[car_cells] cell 122 side_left: fail_clearcoat_budget passes=1 GU 66.5→67.2 scr 0.26→0.05 cc_min 36.1 → rework_candidate
+[car_cells] cell 133 side_left: fail_clearcoat_budget passes=1 GU 60.2→65.3 scr 0.46→0.08 cc_min 35.6 → spot_repaint_review
+[car_cells] 배치 완료: 16셀, 합격 1 → learning/rl/robot/results/car_cells_rerun.csv
+[rerun] 21:03:07 배치 종료 (누적 행: 96)
+[rerun] 21:03:07 배치 시작: 361,362,363,379,380,381,397,398,414,415,432,433,434,453,473,479
+[car_cells] cell 361 top tilt 1.9° quad c3=+1.669 c5=-4.895 rms=17.64mm init={'ra': 0.12395956371840842, 'scratch': 0.33940825743129, 'n_scr': 1, 'clearcoat': 44.364899876373386}
+[car_cells] cell 362 top tilt 15.9° quad c3=-0.228 c5=+16.722 rms=9.37mm init={'ra': 0.10064017598618594, 'scratch': 0.49646740644258736, 'n_scr': 1, 'clearcoat': 44.90412693724262}
+[car_cells] cell 363 top tilt 33.5° quad c3=+4.668 c5=-0.279 rms=36.79mm init={'ra': 0.12032712884347554, 'scratch': 0.18130399919251716, 'n_scr': 1, 'clearcoat': 48.35895728247464}
+[car_cells] cell 379 top tilt 2.3° quad c3=+1.695 c5=-4.799 rms=17.72mm init={'ra': 0.12445533529925155, 'scratch': 0.31435628649582453, 'n_scr': 3, 'clearcoat': 41.688962456605}
+[car_cells] cell 380 top tilt 14.6° quad c3=-1.763 c5=-39.797 rms=41.46mm init={'ra': 0.11405871872506991, 'scratch': 0.37324428794218045, 'n_scr': 2, 'clearcoat': 43.67656879810907}
+[car_cells] cell 381 top tilt 33.5° quad c3=+4.797 c5=-0.383 rms=35.61mm init={'ra': 0.10682614969530481, 'scratch': 0.23758553940212118, 'n_scr': 3, 'clearcoat': 48.818253389249406}
+[car_cells] cell 397 top tilt 2.5° quad c3=+1.360 c5=-16.642 rms=13.45mm init={'ra': 0.1338891223818255, 'scratch': 0.19272231565398257, 'n_scr': 1, 'clearcoat': 49.13278836665758}
+[car_cells] cell 398 top tilt 36.3° quad c3=-1.050 c5=+7.619 rms=47.62mm init={'ra': 0.09125834070513959, 'scratch': 0.15677531697438152, 'n_scr': 1, 'clearcoat': 47.50516674227787}
+[car_cells] cell 414 top tilt 2.2° quad c3=+1.463 c5=-4.873 rms=17.21mm init={'ra': 0.09334238423927864, 'scratch': 0.12370152653173898, 'n_scr': 2, 'clearcoat': 42.53307455529544}
+[car_cells] cell 415 top tilt 18.4° quad c3=-2.029 c5=-26.725 rms=20.01mm init={'ra': 0.09998379420248564, 'scratch': 0.430055289411805, 'n_scr': 2, 'clearcoat': 48.03717288252372}
+[car_cells] cell 432 top tilt 12.7° quad c3=-2.957 c5=-4.354 rms=9.33mm init={'ra': 0.11790723885572162, 'scratch': 0.39446585186845406, 'n_scr': 3, 'clearcoat': 43.746823249265674}
+[car_cells] cell 433 top tilt 25.9° quad c3=-0.781 c5=+9.715 rms=10.47mm init={'ra': 0.10209033755134471, 'scratch': 0.05090791599372552, 'n_scr': 3, 'clearcoat': 45.138648065591156}
+[car_cells] cell 434 top tilt 30.8° quad c3=+3.354 c5=-0.167 rms=9.54mm init={'ra': 0.12069384192662878, 'scratch': 0.4790351100752506, 'n_scr': 2, 'clearcoat': 40.23942019844796}
+[car_cells] cell 453 top tilt 28.8° quad c3=+3.624 c5=-3.433 rms=16.14mm init={'ra': 0.11408299670352119, 'scratch': 0.0771418232223993, 'n_scr': 1, 'clearcoat': 42.11920758220226}
+[car_cells] cell 473 top tilt 30.6° quad c3=-4.111 c5=-3.523 rms=21.13mm init={'ra': 0.10911354103213139, 'scratch': 0.1549192674731395, 'n_scr': 2, 'clearcoat': 45.827369196629405}
+[car_cells] cell 479 top tilt 30.2° quad c3=-6.586 c5=+0.141 rms=5.93mm init={'ra': 0.10721838721080132, 'scratch': 0.1258366385430636, 'n_scr': 3, 'clearcoat': 41.182079016548364}
+[car_cells] 감압: 목표 힘 5.78 → 4.04 N (0.7×)
+[car_cells] 소형 패드: 물리 반경 0.035 m (footprint/raster 도 동일; 제거 모델 pad_radius 는 보정 설정값 유지 — 주의)
+[car_cells] cell 362 top: fail_force_overload passes=0 GU 71.4→71.4 scr 0.48→0.48 cc_min 43.0 → spot_repaint_review
+[car_cells] cell 433 top: fail_force_overload passes=0 GU 65.9→65.9 scr 0.09→0.09 cc_min 41.9 → spot_repaint_review
+[car_cells] cell 397 top: fail_force_overload passes=0 GU 73.1→73.1 scr 0.19→0.19 cc_min 46.4 → spot_repaint_review
+[car_cells] cell 398 top: fail_force_overload passes=0 GU 68.4→68.9 scr 0.24→0.23 cc_min 44.6 → spot_repaint_review
+[car_cells] step=2000 done=4/16
+[car_cells] cell 415 top: fail_force_overload passes=0 GU 72.1→73.4 scr 0.44→0.39 cc_min 45.1 → spot_repaint_review
+[car_cells] cell 380 top: fail_force_overload passes=0 GU 65.7→70.7 scr 0.40→0.29 cc_min 42.7 → spot_repaint_review
+[car_cells] step=4000 done=6/16
+[car_cells] cell 432 top: fail_force_overload passes=0 GU 53.7→63.5 scr 0.46→0.46 cc_min 40.1 → spot_repaint_review
+[car_cells] step=6000 done=7/16
+[car_cells] cell 361 top: fail_force_overload passes=0 GU 70.3→72.7 scr 0.39→0.19 cc_min 40.9 → spot_repaint_review
+[car_cells] cell 414 top: fail_force_overload passes=0 GU 60.3→70.0 scr 0.18→0.08 cc_min 37.2 → spot_repaint_review
+[car_cells] step=8000 done=9/16
+[car_cells] step=10000 done=9/16
+[car_cells] step=12000 done=9/16
+[car_cells] step=14000 done=9/16
+[car_cells] cell 381 top: success passes=1 GU 54.6→72.1 scr 0.30→0.05 cc_min 43.5 → pass
+[car_cells] cell 363 top: success passes=1 GU 73.4→73.2 scr 0.23→0.02 cc_min 44.0 → pass
+[car_cells] cell 379 top: fail_clearcoat_budget passes=1 GU 68.0→68.6 scr 0.34→0.06 cc_min 36.3 → rework_candidate
+[car_cells] cell 434 top: fail_clearcoat_budget passes=1 GU 64.0→64.9 scr 0.48→0.09 cc_min 35.1 → spot_repaint_review
+[car_cells] cell 473 top: success passes=1 GU 65.6→72.4 scr 0.20→0.03 cc_min 42.9 → pass
+[car_cells] cell 479 top: fail_clearcoat_budget passes=1 GU 65.4→67.3 scr 0.17→0.03 cc_min 36.5 → rework_candidate
+[car_cells] step=16000 done=15/16
+[car_cells] step=18000 done=15/16
+[car_cells] step=20000 done=15/16
+[car_cells] step=22000 done=15/16
+[car_cells] step=24000 done=15/16
+[car_cells] step=26000 done=15/16
+[car_cells] step=28000 done=15/16
+[car_cells] cell 453 top: fail_quality_regression passes=2 GU 66.0→59.9 scr 0.21→0.03 cc_min 35.1 → spot_repaint_review
+[car_cells] 배치 완료: 16셀, 합격 3 → learning/rl/robot/results/car_cells_rerun.csv
+[rerun] 21:27:50 배치 종료 (누적 행: 112)
+[rerun] 완료 → learning/rl/robot/results/car_cells_rerun.csv

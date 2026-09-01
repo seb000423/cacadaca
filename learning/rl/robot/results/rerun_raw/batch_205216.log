@@ -1,0 +1,95 @@
+Warning: running in conda env, please deactivate before executing this script
+The '--headless' CLI argument is deprecated. Omit '--viz' for default headless. If config visualizers are enabled and you want to force headless, use '--viz none'.
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+E0000 00:00:1788263536.533968    5740 descriptor_database.cc:633] File already exists in database: grpc/health/v1/health.proto
+W0000 00:00:1788263536.534287    5740 message.cc:301] Protobuf GeneratedMessageFactory: File is already registered: grpc/health/v1/health.proto
+[ISAACLAB] AppLauncher initialization complete
+[rl_bridge] 셀 격자: 483셀 (12cm) — front:48, rear:32, side_left:99, side_right:99, top:205
+[car_cells] cell 82 side_left tilt 85.1° quad c3=-1.148 c5=-7.162 rms=49.22mm init={'ra': 0.12419057651848339, 'scratch': 0.17119442312728322, 'n_scr': 3, 'clearcoat': 43.688766440692746}
+[car_cells] cell 86 side_left tilt 56.6° quad c3=+0.203 c5=-4.983 rms=3.37mm init={'ra': 0.1068860398795524, 'scratch': 0.18001434551067763, 'n_scr': 1, 'clearcoat': 40.063199647878356}
+[car_cells] cell 89 side_left tilt 82.5° quad c3=-2.106 c5=-2.435 rms=4.12mm init={'ra': 0.0947409178659343, 'scratch': 0.4527803788497782, 'n_scr': 3, 'clearcoat': 44.19641040480325}
+[car_cells] cell 91 side_left tilt 68.6° quad c3=-0.957 c5=-3.997 rms=4.59mm init={'ra': 0.10000558150927535, 'scratch': 0.05133000897387432, 'n_scr': 1, 'clearcoat': 41.37484084826365}
+[car_cells] cell 92 side_left tilt 66.1° quad c3=-0.854 c5=-4.436 rms=4.73mm init={'ra': 0.11764108350311546, 'scratch': 0.07186629545457493, 'n_scr': 1, 'clearcoat': 42.49741688727822}
+[car_cells] cell 97 side_left tilt 63.7° quad c3=+0.141 c5=-7.568 rms=6.48mm init={'ra': 0.10199150260838838, 'scratch': 0.3827696922442428, 'n_scr': 3, 'clearcoat': 46.97506875481287}
+[car_cells] cell 102 side_left tilt 66.0° quad c3=+0.112 c5=-7.373 rms=6.03mm init={'ra': 0.12919399802256784, 'scratch': 0.15182709805851136, 'n_scr': 2, 'clearcoat': 43.419356205341586}
+[car_cells] cell 107 side_left tilt 62.0° quad c3=-0.003 c5=-6.879 rms=5.19mm init={'ra': 0.1387802871432325, 'scratch': 0.4316589580525243, 'n_scr': 2, 'clearcoat': 49.884651773917916}
+[car_cells] cell 112 side_left tilt 63.6° quad c3=-0.144 c5=-7.206 rms=5.04mm init={'ra': 0.1542393605877163, 'scratch': 0.4721360292602651, 'n_scr': 1, 'clearcoat': 48.4710106800278}
+[car_cells] cell 117 side_left tilt 56.2° quad c3=-0.001 c5=-1.735 rms=6.02mm init={'ra': 0.13352787676780745, 'scratch': 0.43587955522949684, 'n_scr': 1, 'clearcoat': 45.606963091751865}
+[car_cells] cell 122 side_left tilt 51.7° quad c3=-0.756 c5=+2.284 rms=8.19mm init={'ra': 0.10896042168079245, 'scratch': 0.27643603120953425, 'n_scr': 2, 'clearcoat': 40.4264357436625}
+[car_cells] cell 128 side_left tilt 51.3° quad c3=-1.425 c5=-3.153 rms=1.72mm init={'ra': 0.12654236921752296, 'scratch': 0.24858846384243993, 'n_scr': 2, 'clearcoat': 41.378127819967204}
+[car_cells] cell 133 side_left tilt 47.5° quad c3=+0.077 c5=-3.481 rms=2.84mm init={'ra': 0.12200102846822235, 'scratch': 0.4184625055766017, 'n_scr': 3, 'clearcoat': 40.18037446019855}
+[car_cells] cell 134 side_left tilt 47.9° quad c3=-1.036 c5=-4.534 rms=1.92mm init={'ra': 0.11865947412413061, 'scratch': 0.3563687080144385, 'n_scr': 1, 'clearcoat': 45.057526708453764}
+[car_cells] cell 140 side_left tilt 48.0° quad c3=-0.243 c5=-5.028 rms=1.38mm init={'ra': 0.12183817012292668, 'scratch': 0.18086284912970518, 'n_scr': 3, 'clearcoat': 43.83953382364806}
+[car_cells] cell 146 side_left tilt 48.3° quad c3=-0.239 c5=-4.800 rms=2.09mm init={'ra': 0.1326721367096046, 'scratch': 0.23544933153195935, 'n_scr': 3, 'clearcoat': 45.82111433409518}
+[car_cells] 감압: 목표 힘 5.78 → 4.04 N (0.7×)
+[car_cells] 소형 패드: 물리 반경 0.035 m (footprint/raster 도 동일; 제거 모델 pad_radius 는 보정 설정값 유지 — 주의)
+[INFO]: Base environment:
+	Environment device    : cuda:0
+	Environment seed      : None
+	Physics step-size     : 0.008333333333333333
+	Rendering step-size   : 0.05
+	Environment step-size : 0.05
+[INFO]: Registered backend 'physx' for factory Articulation.
+[INFO] Robot /World/envs/env_0/Robot/m0609/m0609: 폴리싱 디스크 생성 완료 → /World/envs/env_0/Robot/m0609/m0609/polishing_contact_pad
+[RobotPolishEnv] 곡면 작업면 스폰: quad R=0.6 (41x41 격자)
+[INFO]: Registered backend 'physx' for factory ContactSensor.
+[INFO]: Time taken for scene creation Last: 1.807940 s, Mean: 1.807940 s, Std: 0.000000 s, N: 1
+[INFO]: Scene manager:  <class InteractiveScene>
+	Number of environments: 16
+	Environment spacing   : 1.6
+	Source prim name      : /World/envs/env_0
+	Global prim paths     : []
+	Replicate physics     : True
+[INFO]: Starting the simulation. This may take a few seconds. Please wait...
+[INFO]: Simulation parameters for joints in /World/envs/env_.*/Robot:
++--------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+|                                                 Simulation Joint Information (Prim path: /World/envs/env_.*/Robot)                                                 |
++-------+-----------+-----------+---------+----------+-----------------+------------------+------------------+---------------------+-----------------+---------------+
+| Index | Name      | Stiffness | Damping | Armature | Static Friction | Dynamic Friction | Viscous Friction |   Position Limits   | Velocity Limits | Effort Limits |
++-------+-----------+-----------+---------+----------+-----------------+------------------+------------------+---------------------+-----------------+---------------+
+|   0   | joint_1   |  1.0e+04  | 500.000 |  0.000   |      0.000      |      0.000       |      0.000       |   [-6.283, 6.283]   |      2.618      |    9.6e+03    |
+|   1   | joint_2   |  1.0e+04  | 500.000 |  0.000   |      0.000      |      0.000       |      0.000       |   [-6.283, 6.283]   |      2.618      |    9.6e+03    |
+|   2   | joint_3   |  1.0e+04  | 500.000 |  0.000   |      0.000      |      0.000       |      0.000       |   [-2.618, 2.618]   |      3.142      |    5.4e+03    |
+|   3   | joint_4   |  1.0e+04  | 500.000 |  0.000   |      0.000      |      0.000       |      0.000       |   [-6.283, 6.283]   |      3.927      |    2.7e+03    |
+|   4   | joint_5   |  1.0e+04  | 500.000 |  0.000   |      0.000      |      0.000       |      0.000       |   [-6.283, 6.283]   |      3.927      |    2.7e+03    |
+|   5   | joint_6   |  1.0e+04  | 500.000 |  0.000   |      0.000      |      0.000       |      0.000       |   [-6.283, 6.283]   |      3.927      |    2.7e+03    |
+|   6   | pad_joint |  2.0e+03  | 100.000 |  0.000   |      0.000      |      0.000       |      0.000       | [-3.4e+38, 3.4e+38] |     104.720     |    100.000    |
++-------+-----------+-----------+---------+----------+-----------------+------------------+------------------+---------------------+-----------------+---------------+
+[INFO]: Time taken for simulation start Last: 0.932264 s, Mean: 0.932264 s, Std: 0.000000 s, N: 1
+[INFO]: Completed setting up the environment...
+[PolishEnv] 차 셀 모드 side env 16/16
+[PolishEnv] side 접촉 env 0/16 (side_env_ratio=0.0)
+[RobotPolishEnv] v5 M0609+pad coupled | link_6 contact offset=[-0.0025 -0.02    0.0448] m
+[repolish] loaded learning/rl/robot/champion/model_ppo_curved.pt (obs_dim=14)
+[car_cells] step=2000 done=0/16
+[car_cells] step=4000 done=0/16
+[car_cells] cell 134 side_left: fail_force_overload passes=0 GU 72.7→74.2 scr 0.40→0.15 cc_min 43.5 → spot_repaint_review
+[car_cells] cell 140 side_left: fail_force_overload passes=0 GU 63.9→69.8 scr 0.21→0.13 cc_min 40.4 → spot_repaint_review
+[car_cells] step=6000 done=2/16
+[car_cells] cell 107 side_left: fail_force_overload passes=0 GU 68.3→73.8 scr 0.44→0.24 cc_min 46.3 → spot_repaint_review
+[car_cells] cell 112 side_left: fail_force_overload passes=0 GU 71.9→74.1 scr 0.42→0.18 cc_min 44.8 → spot_repaint_review
+[car_cells] cell 82 side_left: fail_force_overload passes=0 GU 65.4→73.0 scr 0.21→0.10 cc_min 42.4 → spot_repaint_review
+[car_cells] cell 97 side_left: fail_force_overload passes=0 GU 63.1→69.1 scr 0.41→0.20 cc_min 42.4 → spot_repaint_review
+[car_cells] cell 102 side_left: fail_force_overload passes=0 GU 66.3→68.6 scr 0.22→0.11 cc_min 39.5 → spot_repaint_review
+[car_cells] cell 86 side_left: fail_force_overload passes=0 GU 72.2→70.9 scr 0.24→0.13 cc_min 37.5 → spot_repaint_review
+[car_cells] cell 92 side_left: fail_force_overload passes=0 GU 69.6→69.1 scr 0.17→0.09 cc_min 37.8 → spot_repaint_review
+[car_cells] cell 89 side_left: fail_force_overload passes=0 GU 68.6→72.4 scr 0.41→0.17 cc_min 39.1 → spot_repaint_review
+[car_cells] cell 128 side_left: fail_force_overload passes=0 GU 60.7→68.7 scr 0.33→0.17 cc_min 39.3 → spot_repaint_review
+[car_cells] cell 117 side_left: fail_force_overload passes=0 GU 65.6→70.9 scr 0.49→0.35 cc_min 40.3 → spot_repaint_review
+[car_cells] step=8000 done=12/16
+[car_cells] step=10000 done=12/16
+[car_cells] step=12000 done=12/16
+[car_cells] step=14000 done=12/16
+[car_cells] cell 146 side_left: success passes=1 GU 60.3→71.6 scr 0.29→0.04 cc_min 41.2 → pass
+[car_cells] cell 91 side_left: fail_clearcoat_budget passes=1 GU 71.6→67.8 scr 0.15→0.05 cc_min 36.6 → rework_candidate
+[car_cells] cell 122 side_left: fail_clearcoat_budget passes=1 GU 66.5→67.2 scr 0.26→0.05 cc_min 36.1 → rework_candidate
+[car_cells] cell 133 side_left: fail_clearcoat_budget passes=1 GU 60.2→65.3 scr 0.46→0.08 cc_min 35.6 → spot_repaint_review
+[car_cells] 배치 완료: 16셀, 합격 1 → learning/rl/robot/results/car_cells_rerun.csv
+[INFO]: SimulationContext cleared
+Loading user config located at: '/home/rokey/isaacsim/kit/data/Kit/IsaacLab/3.0/user.config.json'
+2026-09-01T11:52:16Z [0ms] [Warning] [omni.ext.plugin] [ext: isaaclab_visualizers] Extensions config 'extension.toml' doesn't exist '/home/rokey/IsaacLab/source/isaaclab_visualizers' or '/home/rokey/IsaacLab/source/isaaclab_visualizers/config'
+2026-09-01T11:52:16Z [508ms] [Warning] [omni.usd_config.extension] Enable omni.materialx.libs extension to use MaterialX
+2026-09-01T11:52:28Z [12,235ms] [Warning] [isaaclab.envs.direct_rl_env] Seed not set for the environment. The environment creation may not be deterministic.
+2026-09-01T11:52:28Z [12,290ms] [Warning] [isaaclab_physx.physics.physx_manager] TGS solver with enable_external_forces_every_iteration=False may cause noisy velocities.
+2026-09-01T11:52:28Z [12,422ms] [Warning] [omni.usd] Encountered USD Warnings but USD Diagnostics are currently muted. To view USD Warnings, please set the '/persistent/app/usd/muteUsdDiagnostics' setting to false in Preferences page.
+2026-09-01T11:52:31Z [14,842ms] [Warning] [usdrt.population.plugin] Last global time was not created. Did you call setEnableUsdNoticeHandling?
