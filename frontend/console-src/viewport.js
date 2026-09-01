@@ -1285,7 +1285,7 @@ class PolyTwinViewport extends HTMLElement {
       else m.visible = false;
     });
     this._model = this._models.get(id);
-    this._cellBox = null;
+    this._cellBox = null; this._waBox = null;
     this._applyCarLift();
     // 차종마다 다시 굽는다. 예전에는 처음 한 번만 구워서 차를 바꾸면
     // 앞차의 표면 위에 경로가 그려졌다.
@@ -1340,19 +1340,78 @@ class PolyTwinViewport extends HTMLElement {
     if (!on) this.clearCells();
     else if (this._live && this._live.cells) this.setCells(this._live.cells, this._live.scene);
   }
+  /* ── 작업영역 추종 모드 ────────────────────────────────────────────
+     기록에서는 "지금 어느 셀을 작업 중인지(tcp)·진행률·시간·완료 셀" 만 쓰고, 로봇의 실제 움직임·배치는 콘솔 자체
+     애니메이션(레인 훑기·레일 슬라이딩·접근/후퇴)이 맡는다. 셀 위치는 Isaac 차 bbox 상대좌표 → 콘솔 차 bbox 로 옮겨
+     그 근처 레인(콘솔 차 표면 위)을 훑으므로 차체를 뚫지 않는다. */
+  _mapRel(pt) {
+    const sc = this._live && this._live.scene; if (!sc || !sc.car_min || !this._model) return null;
+    if (!this._waBox) { this._model.updateMatrixWorld(true); this._waBox = new THREE.Box3().setFromObject(this._model); }
+    const b = this._waBox, mn = sc.car_min, mx = sc.car_max;
+    const u = (pt[0] - mn[0]) / Math.max(1e-6, mx[0] - mn[0]);   // Isaac x(가로) → 콘솔 x
+    const w = (pt[1] - mn[1]) / Math.max(1e-6, mx[1] - mn[1]);   // Isaac y(길이, 앞 +) → 콘솔 z(앞 +)
+    const v = (pt[2] - mn[2]) / Math.max(1e-6, mx[2] - mn[2]);   // Isaac z(높이) → 콘솔 y
+    const LONG = (this._axes && this._axes.LONG) || 'z', CROSS = LONG === 'z' ? 'x' : 'z';
+    const out = new THREE.Vector3();
+    out[CROSS] = b.min[CROSS] + u * (b.max[CROSS] - b.min[CROSS]);
+    out[LONG] = b.min[LONG] + w * (b.max[LONG] - b.min[LONG]);
+    out.y = b.min.y + v * (b.max.y - b.min.y);
+    return out;
+  }
+  /** 콘솔 차 표면 레인 중 pt 에 가장 가까운 점 주변 ±0.16 m 를 셀의 작업 구간으로 준다 */
+  _setWorkWindow(cell, pt) {
+    if (!this._lanes || !this._lanes.length) return false;
+    let best = null, bd = Infinity;
+    for (let li = 0; li < this._lanes.length; li++) {
+      const lane = this._lanes[li];
+      for (let k = 0; k < lane.length; k += 2) { const d = lane[k].distanceToSquared(pt); if (d < bd) { bd = d; best = [li, k]; } }
+    }
+    if (!best) return false;
+    const lane = this._lanes[best[0]], ns = this._normals[best[0]];
+    let k0 = best[1], k1 = best[1], acc0 = 0, acc1 = 0;
+    while (k0 > 0 && acc0 < 0.16) { acc0 += lane[k0].distanceTo(lane[k0 - 1]); k0--; }
+    while (k1 < lane.length - 1 && acc1 < 0.16) { acc1 += lane[k1].distanceTo(lane[k1 + 1]); k1++; }
+    if (k1 - k0 < 2) return false;
+    const pts = [], nrm = [];
+    for (let k = k0; k <= k1; k++) { pts.push(lane[k]); nrm.push(ns[k]); }
+    const cum = new Float32Array(pts.length); let acc = 0;
+    for (let i = 1; i < pts.length; i++) { acc += pts[i].distanceTo(pts[i - 1]); cum[i] = acc; }
+    cell.userData.work = pts; cell.userData.workN = nrm; cell.userData.cum = cum;
+    cell.userData.pathLen = Math.max(0.01, acc); cell.userData.s = 0; cell.userData.cursor = 0;
+    return true;
+  }
+  _driveWorkArea(dt, t, p) {
+    const feed = this._live; if (!feed) return;
+    this._waActive = true;
+    for (const cell of this._cells) {
+      const rid = cell.userData.robotId;
+      const r = (rid && feed.robots.find((x) => x.id === rid)) || null;
+      if (!r || !r.tcp) continue;                                  // 이동 중(SLIDE)이면 직전 구간을 계속 훑는다
+      const pt = this._mapRel(r.tcp); if (!pt) continue;
+      const last = cell.userData.waPt;
+      if (!last || last.distanceTo(pt) > 0.06) {                    // 셀이 바뀌었다 → 새 작업 구간
+        if (this._setWorkWindow(cell, pt)) cell.userData.waPt = pt.clone();
+      }
+    }
+    this._animateLanes(dt, t, p);                                   // 콘솔 자체 동작: 레일 슬라이딩·접근·훑기·광택
+  }
+
   /** 완료된 셀 전체를 광택 마스크에 찍는다(셀 12 cm → 반경 9 cm 원). 팔 동작과 무관하게 판정 완료 = 닦임. */
   stampCells(snapshot, scene) {
     const items = snapshot && Array.isArray(snapshot.items) ? snapshot.items : [];
-    if (!this._liveXf && scene) this._buildLiveXform(scene);
-    const xf = this._liveXf; if (!xf || !this._polish) return;
+    if (!this._liveWorkArea && !this._liveXf && scene) this._buildLiveXform(scene);
+    const xf = this._liveXf; if ((!xf && !this._liveWorkArea) || !this._polish) return;
     const key = 'stamp:' + items.length;
     if (key === this._stampKey) return;
     this._stampKey = key;
     const p = new THREE.Vector3();
+    // 작업영역 모드: 콘솔 차가 Isaac 차보다 크므로(약 1.35배) 스탬프 반경도 비례
+    const rad = this._liveWorkArea && this._waBox && scene ? 0.09 * ((this._waBox.max.z - this._waBox.min.z) / Math.max(1e-6, scene.car_max[1] - scene.car_min[1])) : 0.09;
     for (let i = this._stampedN || 0; i < items.length; i++) {
       const it = items[i]; if (!it || it[3] === 'not_reached') continue;
-      p.set(Number(it[0]), Number(it[1]), Number(it[2])).multiplyScalar(xf.s).applyMatrix4(xf.rot).add(xf.t);
-      this.stampPolish(p, 0.09);
+      if (this._liveWorkArea) { const m = this._mapRel([Number(it[0]), Number(it[1]), Number(it[2])]); if (!m) continue; p.copy(m); }
+      else p.set(Number(it[0]), Number(it[1]), Number(it[2])).multiplyScalar(xf.s).applyMatrix4(xf.rot).add(xf.t);
+      this.stampPolish(p, rad);
     }
     this._stampedN = items.length;
   }
@@ -1365,6 +1424,15 @@ class PolyTwinViewport extends HTMLElement {
     if (!xf || !items.length) { this.clearCells(); return; }
     const key = items.length + ':' + items.reduce((a, it) => a + (it[3] === 'pass' ? 1 : it[3] === 'rework_candidate' ? 3 : 2), 0);
     if (key === this._cellsKey) return;                       // 바뀐 게 없으면 그대로
+    if (this._liveWorkArea) {
+      this._cellsKey = key; this.clearCells();
+      const geo = new THREE.SphereGeometry(0.036, 10, 8), mat = new THREE.MeshStandardMaterial({ roughness: 0.55, metalness: 0.05 });
+      const mesh = new THREE.InstancedMesh(geo, mat, items.length), m4 = new THREE.Matrix4(), col = new THREE.Color();
+      const C = { pass: 0x2e8b57, spot_repaint_review: 0xe69f00, rework_candidate: 0xd55e00 };
+      for (let i = 0; i < items.length; i++) { const it = items[i]; const m = this._mapRel([Number(it[0]), Number(it[1]), Number(it[2])]); if (!m) continue; m4.makeTranslation(m.x, m.y, m.z); mesh.setMatrixAt(i, m4); mesh.setColorAt(i, col.setHex(C[it[3]] || 0x888888)); }
+      mesh.instanceMatrix.needsUpdate = true; if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
+      this.cellsLayer.add(mesh); this._cellsMesh = mesh; return;
+    }
     this._cellsKey = key;
     this.clearCells();
     const geo = new THREE.SphereGeometry(0.032, 10, 8);
@@ -1396,17 +1464,19 @@ class PolyTwinViewport extends HTMLElement {
   setLive(feed, snap = false) {
     const had = !!this._live;
     this._live = feed && feed.robots && feed.robots.some((r) => Array.isArray(r.q) || r.tcp) ? feed : null;
-    if (this._live && !had && this._vehicle !== 'scan') {          // 시뮬을 따르는 동안은 Isaac 과 같은 스캔 차체
+    this._liveWorkArea = !!(this._live && typeof this._live.kind === 'string' && this._live.kind.indexOf('result_replay') === 0);
+    if (this._live && !had && !this._liveWorkArea && this._vehicle !== 'scan') {   // 실제 Isaac 기록: 관절 추종 → Isaac 과 같은 스캔 차체
       this._vehicleBefore = this._vehicle;
       this.setVehicle('scan').then(() => { this._liveXf = null; if (this._live && this._live.scene) this._buildLiveXform(this._live.scene); }).catch(() => {});
     }
     this._liveSnap = !!snap;
-    if (this._live && this._live.scene && !this._liveXf) this._buildLiveXform(this._live.scene);
+    if (this._live && !this._liveWorkArea && this._live.scene && !this._liveXf) this._buildLiveXform(this._live.scene);
     if (this._live && this._live.cells && Array.isArray(this._live.cells.items)) this.setCells(this._live.cells, this._live.scene);   // 셀 스냅샷: 광택 스탬프(항상) + 구슬 표시(옵션)
     if (this._live) { this.raster.visible = false; this.head.visible = false; }   // 시뮬을 따를 땐 데모 경로선은 의미가 없다
     if (had && !this._live) {
       this.raster.visible = true;
       this.clearCells();
+      if (this._waActive) { this._waActive = false; for (const c of this._cells) { c.userData.waPt = null; } this.assignWork(); this.resetPolish(); }
       this._liveScene = null;
       if (this._vehicleBefore && this._vehicleBefore !== 'scan') { const vb = this._vehicleBefore; this._vehicleBefore = null; this.setVehicle(vb).catch(() => {}); }
       if (this._liveLift0 !== undefined) { this._params.carLift = this._liveLift0; this._liveLift0 = undefined; this._applyCarLift(); }
@@ -1669,61 +1739,9 @@ class PolyTwinViewport extends HTMLElement {
     }
   }
 
-  _frame(now) {
-    const t = (now - this._t0) / 1000;
-    const p = this._params;
-
-    const dt = Math.min(0.05, (now - (this._last || now)) / 1000);
-    this._last = now;
-
-    if (this._camGoal) {
-      const g = this._camGoal;
-      // 프레임 수와 무관하게 같은 속도로 붙는다 — 고정 계수는 120 Hz 에서 두 배 빠르다
-      const a = 1 - Math.pow(0.91, dt * 60);
-      this.camera.position.lerp(g.pos, a);
-      if (this._controls) {
-        this._controls.target.lerp(g.look, a);
-        if (this.camera.position.distanceTo(g.pos) < 0.02) this._camGoal = null;
-      }
-    }
-    if (this._controls) this._controls.update();
-
-    /* 팔마다 자기 레인을 맡아 이송속도로 훑는다. 패드는 표면점에 닿고
-       법선 반대로 눌린다 — 위치와 자세를 IK 로 동시에 푼다. */
-    /* 공정 시작 전에는 로봇이 멈춰 있어야 한다. 이 화면은 환경을 구성하는
-       화면이고, 팔이 도는 것은 'RL 공정 시작' 이후의 일이다.
-       대수를 바꾸면 팔이 늘고 줄되, 늘어난 팔도 대기 자세로 서 있는다. */
-    /* 시뮬 피드/기록을 따르는 중이면 공정 실행 여부와 무관하게 팔·베이스를 피드대로 구동한다
-       (기록 재생은 running=false 상태로 돈다 — 여기서 먼저 잡지 않으면 아래 대기 자세 복귀가 삼킨다) */
-    if (this._live) {
-      this._driveLive(dt);
-      this.head.visible = false;
-      this.renderer.render(this.scene, this.camera);
-      return;
-    }
-
-    if (!p.running) {
-      const rate = JOINT_RATE * dt * 0.5;      // 대기 복귀는 공정보다 느리게
-      for (const cell of this._cells) {
-        const home = cell.userData.qHome;
-        if (!home) continue;
-        const q = cell.userData.q;
-        let moved = false;
-        for (let jj = 0; jj < 6; jj++) {
-          const d = home[jj] - q[jj];
-          if (Math.abs(d) < 1e-4) continue;
-          q[jj] += THREE.MathUtils.clamp(d, -rate, rate);
-          moved = true;
-        }
-        if (moved) setCellQ(cell, q);
-        if (cell.userData.padDisc) cell.userData.padDisc.rotation.y = 0;
-        cell.userData.qPrev = null;
-      }
-      this.head.visible = false;              // 작업점 표시도 공정 중에만
-      this.renderer.render(this.scene, this.camera);
-      return;
-    }
-
+  /** 콘솔 자체 공정 애니메이션 — 셀마다 배정된 레인(work)을 이송속도로 훑는다: 레일 슬라이딩·접근/후퇴·IK·패드 회전·광택 스탬프.
+      데모 모드와 '작업영역 추종' 재생 모드가 함께 쓴다. */
+  _animateLanes(dt, t, p) {
     if (this._lanes && this._lanes.length && this._cells.length) {
       // 실제 이송속도(m/s)에 데모 배속을 곱한다. 0.03 m/s 그대로면
       // 한 패스에 2분이 넘어 심사에서 아무 일도 안 일어나 보인다.
@@ -1814,6 +1832,64 @@ class PolyTwinViewport extends HTMLElement {
       this.head.material.opacity = pulse;
     }
 
+  }
+
+  _frame(now) {
+    const t = (now - this._t0) / 1000;
+    const p = this._params;
+
+    const dt = Math.min(0.05, (now - (this._last || now)) / 1000);
+    this._last = now;
+
+    if (this._camGoal) {
+      const g = this._camGoal;
+      // 프레임 수와 무관하게 같은 속도로 붙는다 — 고정 계수는 120 Hz 에서 두 배 빠르다
+      const a = 1 - Math.pow(0.91, dt * 60);
+      this.camera.position.lerp(g.pos, a);
+      if (this._controls) {
+        this._controls.target.lerp(g.look, a);
+        if (this.camera.position.distanceTo(g.pos) < 0.02) this._camGoal = null;
+      }
+    }
+    if (this._controls) this._controls.update();
+
+    /* 팔마다 자기 레인을 맡아 이송속도로 훑는다. 패드는 표면점에 닿고
+       법선 반대로 눌린다 — 위치와 자세를 IK 로 동시에 푼다. */
+    /* 공정 시작 전에는 로봇이 멈춰 있어야 한다. 이 화면은 환경을 구성하는
+       화면이고, 팔이 도는 것은 'RL 공정 시작' 이후의 일이다.
+       대수를 바꾸면 팔이 늘고 줄되, 늘어난 팔도 대기 자세로 서 있는다. */
+    /* 시뮬 피드/기록을 따르는 중이면 공정 실행 여부와 무관하게 팔·베이스를 피드대로 구동한다
+       (기록 재생은 running=false 상태로 돈다 — 여기서 먼저 잡지 않으면 아래 대기 자세 복귀가 삼킨다) */
+    if (this._live) {
+      if (this._liveWorkArea) this._driveWorkArea(dt, t, p);
+      else { this._driveLive(dt); this.head.visible = false; }
+      this.renderer.render(this.scene, this.camera);
+      return;
+    }
+
+    if (!p.running) {
+      const rate = JOINT_RATE * dt * 0.5;      // 대기 복귀는 공정보다 느리게
+      for (const cell of this._cells) {
+        const home = cell.userData.qHome;
+        if (!home) continue;
+        const q = cell.userData.q;
+        let moved = false;
+        for (let jj = 0; jj < 6; jj++) {
+          const d = home[jj] - q[jj];
+          if (Math.abs(d) < 1e-4) continue;
+          q[jj] += THREE.MathUtils.clamp(d, -rate, rate);
+          moved = true;
+        }
+        if (moved) setCellQ(cell, q);
+        if (cell.userData.padDisc) cell.userData.padDisc.rotation.y = 0;
+        cell.userData.qPrev = null;
+      }
+      this.head.visible = false;              // 작업점 표시도 공정 중에만
+      this.renderer.render(this.scene, this.camera);
+      return;
+    }
+
+    this._animateLanes(dt, t, p);
     this.renderer.render(this.scene, this.camera);
   }
 }
