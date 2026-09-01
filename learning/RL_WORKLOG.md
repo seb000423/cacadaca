@@ -853,3 +853,7 @@ v5 의 접촉 상태기계(스파이크 소프트 리트랙트·암 가드·크�
 (300 은 품질 GU 72.1 로 합격 수준) → 하드리밋 **디바운스**(6 substep=50 ms 연속) 추가 후
 전체 순회 시작: `overnight.sh` = 클로즈업 재녹화 → `run_car_cells.sh 0 490 16` (31배치, ~8 h).
 결과: `learning/rl/robot/results/car_cells.csv` (판정 5종·보증·처분, 셀별 quad 계수·rms 포함).
+
+**2026-09-01 11:42** 야간 체인(`overnight.sh`)이 세션 종료로 중단된 것을 확인(클로즈업 252프레임에서
+정지, 순회 미시작) → `setsid nohup` 으로 독립 재시작. 클로즈업 재녹화 정상 속도(분당 ~120프레임),
+이후 `run_car_cells.sh 0 490 16` 자동 진행. 집계: `python3 learning/rl/robot/results/summarize_car_cells.py`.
