@@ -357,6 +357,7 @@ async function handleApi(req, res, pathname) {
     if (pathname === '/api/sim/jobs/next' && method === 'GET') {
       const u = new URL(req.url, 'http://localhost');
       const worker = String(u.searchParams.get('worker') || 'gpu');
+      await store.putState('worker', { name: worker, ts: Date.now() });     // 하트비트 — 콘솔의 '워커 온라인' 표시
       const j = await store.claimNextJob(worker);
       return json(res, 200, { job: jobPublic(j) });
     }
@@ -368,7 +369,7 @@ async function handleApi(req, res, pathname) {
       if (kind === 'state' && method === 'GET') return json(res, 200, { job: jobPublic(j) });
       if (method !== 'POST') return json(res, 405, { error: '지원하지 않는 요청입니다.' });
       const body = await readBody(req, 512 * 1024);
-      if (kind === 'feed') { await store.putState('feed', body.feed || body); return json(res, 200, { ok: true, stopRequested: !!j.stop_requested }); }
+      if (kind === 'feed') { await store.putState('feed', body.feed || body); const cr = await store.getState('control'); let control = null; try { control = cr ? JSON.parse(cr.payload) : null; } catch { control = null; } return json(res, 200, { ok: true, control, stopRequested: !!j.stop_requested }); }
       if (kind === 'result') { await store.setJobResult(id, body.result || body); return json(res, 200, { ok: true }); }
       if (kind === 'exit') {
         const code = Number(body.exitCode);
@@ -384,6 +385,26 @@ async function handleApi(req, res, pathname) {
     const sess = await sessionOf(req);
     if (!sess) return json(res, 401, { error: '로그인이 필요합니다.' });
     if (sess.status !== 'active') return json(res, 403, { error: '승인 대기 중인 계정입니다.' });
+    if (pathname === '/api/sim/control' && method === 'POST') {
+      /* 실행 중 컨트롤: {pause, force_scale, feed_scale} — 워커는 피드 응답으로 받아 제어 파일에 쓰고, 로컬 모드는 서버가 직접 쓴다 */
+      const body = await readBody(req);
+      const prevRow = await store.getState('control'); let prev = {}; try { prev = prevRow ? JSON.parse(prevRow.payload) : {}; } catch { prev = {}; }
+      const control = { pause: body.pause !== undefined ? !!body.pause : !!prev.pause,
+                        force_scale: Math.max(0.3, Math.min(2.0, Number(body.force_scale !== undefined ? body.force_scale : (prev.force_scale ?? 1)))),
+                        feed_scale: Math.max(0.2, Math.min(3.0, Number(body.feed_scale !== undefined ? body.feed_scale : (prev.feed_scale ?? 1)))),
+                        ts: Date.now() };
+      await store.putState('control', control);
+      if (simMode() !== 'queue') {
+        try {
+          const fsx = require('node:fs');
+          const REPO = process.env.PT_SIM_REPO || path.join(__dirname, '..', '..', 'cacadaca');
+          const OUT = path.join(REPO, 'learning', 'ui_bridge', 'out');
+          fsx.writeFileSync(path.join(OUT, 'control.json.tmp'), JSON.stringify(control)); fsx.renameSync(path.join(OUT, 'control.json.tmp'), path.join(OUT, 'control.json'));
+        } catch (e) { /* 시뮬이 없으면 무시 */ }
+      }
+      await store.log(sess.login_id, 'sim.control', '', JSON.stringify(control));
+      return json(res, 200, { ok: true, control });
+    }
     if (pathname === '/api/sim/status' && method === 'GET') {
       const active = await store.activeJob();
       const j = active || await store.latestJob();
@@ -394,6 +415,9 @@ async function handleApi(req, res, pathname) {
         exitCode: jp ? jp.exitCode : null, log: null, job: jp,
         elapsed_s: jp && jp.startedAt ? Math.round((Date.now() - jp.startedAt) / 1000) : 0,
         result: jp && (jp.status === 'done' || jp.status === 'stopped' || jp.status === 'failed') ? jp.result : null,
+        control: await (async () => { const r = await store.getState('control'); try { return r ? JSON.parse(r.payload) : null; } catch { return null; } })(),
+        worker_online: await (async () => { const r = await store.getState('worker'); return !!(r && Date.now() - Number(r.updated_at) < 10000); })(),
+        worker: await (async () => { const r = await store.getState('worker'); try { return r ? JSON.parse(r.payload).name : null; } catch { return null; } })(),
       });
     }
     if (pathname === '/api/sim/stop' && method === 'POST') {
@@ -414,6 +438,7 @@ async function handleApi(req, res, pathname) {
         robotCount: num(body.robotCount, 3), physical: !!body.physical, max_steps: num(body.max_steps, 6000),
         hasRail: body.hasRail === undefined ? true : !!body.hasRail, hasLift: body.hasLift === undefined ? true : !!body.hasLift,
         pad: num(body.pad, 110), carLift: num(body.carLift, 0),
+        recipe: ['base', 'fast', 'quality'].includes(String(body.recipe)) ? String(body.recipe) : 'base',
       };
       if (params.force < 3 || params.force > 8) return json(res, 400, { error: '접촉력은 3~8 N 대역 안이어야 합니다.' });
       if (body.dry_run) return json(res, 200, { ok: true, dry_run: true, mode: 'queue', params });
@@ -465,12 +490,13 @@ async function handleApi(req, res, pathname) {
         robotCount: num(body.robotCount, 3), physical: !!body.physical, max_steps: num(body.max_steps, 6000),
         hasRail: body.hasRail === undefined ? true : !!body.hasRail, hasLift: body.hasLift === undefined ? true : !!body.hasLift,
         pad: num(body.pad, 110), carLift: num(body.carLift, 0),
+        recipe: ['base', 'fast', 'quality'].includes(String(body.recipe)) ? String(body.recipe) : 'base',
       };
       if (params.force < 3 || params.force > 8) return json(res, 400, { error: '접촉력은 3~8 N 대역 안이어야 합니다.' });
       /* 레시피 JSON — 시뮬 저장소의 윗면 레시피를 바탕으로 콘솔 값을 덮어쓴다.
          경로 간격 = 패드 지름 × (1 − 오버랩) → step_over_spacing_ratio */
       let recipe = {};
-      try { recipe = JSON.parse(fs.readFileSync(path.join(REPO, 'learning', 'polytwin', 'outputs', 'bo_best_recipe_top.json'), 'utf8')); } catch (e) { recipe = {}; }
+      try { recipe = JSON.parse(fs.readFileSync(path.join(REPO, 'learning', 'polytwin', 'outputs', ({ fast: 'recipes/feed1.5_f1.15_top.json', quality: 'recipes/feed1.3_f1.0_top.json' })[params.recipe] || 'bo_best_recipe_top.json'), 'utf8')); } catch (e) { recipe = {}; }
       recipe = Object.assign({}, recipe, {
         recipe_id: 'ui_console', source: 'PolyTwin console (' + sess.login_id + ')',
         target_contact_force_n: params.force, rpm: params.rpm, feed_speed_mm_s: params.feed_mm_s,
@@ -493,6 +519,7 @@ async function handleApi(req, res, pathname) {
         POLISH_PAD_RADIUS: (Number(params.pad || 110) / 2000).toFixed(4),
         POLISH_CAR_LIFT_Z: (0.90 + Number(params.carLift || 0) / 1000).toFixed(3),
         POLISH_RECORD: (S.recordPath = path.join(OUT, 'run_local_' + Date.now() + '.sqlite')),
+        POLISH_CONTROL: path.join(OUT, 'control.json'),
       });
       const args = [ 'polishing_v5.py', '--obj_name', 'car', '--headless' ];
       if (body.dry_run) return json(res, 200, { ok: true, dry_run: true, cmd: ISAAC + ' ' + args.join(' '), cwd: path.join(REPO, 'scripts'), recipe, feed });
@@ -524,6 +551,8 @@ async function handleApi(req, res, pathname) {
       /* 로컬 전용: GUI 로 직접 띄운 v5(run_v5_rl_view.sh, POLISH_RECORD)의 기록 파일을 따라간다 → 콘솔 목록에 '기록 중' 으로 뜸 */
       if (process.env.VERCEL) return json(res, 501, { error: '배포 서버에서는 워커 업로드만 지원합니다.' });
       const body = await readBody(req);
+      await store.putState('control', { pause: false, force_scale: 1, feed_scale: 1, ts: Date.now() });
+      await store.putState('control', { pause: false, force_scale: 1, feed_scale: 1, ts: Date.now() });
       const file = String(body.path || '');
       if (!file) return json(res, 400, { error: 'path 가 필요합니다.' });
       global.__ptTailers = global.__ptTailers || [];

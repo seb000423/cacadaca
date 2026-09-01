@@ -200,6 +200,15 @@
           </div>
         </div>
       </section>
+      <section style="border: 1px solid var(--bg-panel); padding: 15px 16px 13px">
+        <div style="font-size: 14px; font-weight: 500; letter-spacing: 0.12em; text-transform: uppercase; color: var(--text-lo); margin-bottom: 10px">레시피 프리셋</div>
+        <select sc-camel-on-input="{{ setRecipe }}" aria-label="레시피 프리셋" style="width: 100%; padding: 8px 10px; border: 1px solid var(--line); background: var(--bg-void); color: var(--text-mid); font-size: 14px; border-radius: var(--r-sm)">
+          <option value="base">기준 (BO 최적)</option>
+          <option value="fast">시간 단축 (이송 ×1.5 · 힘 ×1.15)</option>
+          <option value="quality">품질 우선 (이송 ×1.3)</option>
+        </select>
+        <div style="margin-top: 8px; font-size: 14px; color: var(--text-lo); line-height: 1.5; word-break: keep-all">{{ recipeNote }}</div>
+      </section>
       <div style="padding: 16px; background: rgb(var(--accent-ch) / 0.06); border: 1px solid var(--line)">
         <div style="font-size: 15px; color: var(--accent); margin-bottom: 8px">RL 최적화 안내</div>
         <div style="font-size: 16px; color: var(--text-mid); line-height: 1.5">
@@ -228,6 +237,31 @@
           <div>남음 <span style="color: var(--text-mid)">{{ monLeft }}</span> / {{ monTotal }}</div>
         </div>
       </section>
+
+      <sc-if value="{{ showCtl }}" hint-placeholder-val="{{ false }}">
+      <section style="border: 1px solid var(--bg-panel); padding: 13px 16px 12px">
+        <div style="display: flex; align-items: baseline; gap: 10px; margin-bottom: 10px">
+          <div style="font-size: 14px; font-weight: 500; letter-spacing: 0.12em; text-transform: uppercase; color: var(--text-lo)">실행 컨트롤</div>
+          <div style="flex: 1"></div>
+          <div style="font-size: 13px; color: {{ workerColor }}">{{ workerLine }}</div>
+        </div>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px">
+          <div sc-camel-on-click="{{ ctlPause }}" tabindex="0" style="padding: 9px 0; border: 1px solid {{ ctlPauseBorder }}; text-align: center; font-size: 14px; letter-spacing: 0.06em; color: var(--text-mid); cursor: pointer">{{ ctlPauseLabel }}</div>
+          <div sc-camel-on-click="{{ ctlReset }}" tabindex="0" style="padding: 9px 0; border: 1px solid var(--line); text-align: center; font-size: 14px; letter-spacing: 0.06em; color: var(--text-lo); cursor: pointer">배율 초기화</div>
+        </div>
+        <div style="margin-top: 8px; display: grid; grid-template-columns: 1fr auto auto auto; gap: 6px; align-items: center; font-size: 14px; color: var(--text-mid)">
+          <div>힘 배율</div>
+          <div sc-camel-on-click="{{ ctlForceDown }}" tabindex="0" style="padding: 4px 10px; border: 1px solid var(--line); cursor: pointer">−</div>
+          <div style="font-family: var(--f-mono); min-width: 58px; text-align: center; color: var(--text-hi)">{{ ctlForce }}</div>
+          <div sc-camel-on-click="{{ ctlForceUp }}" tabindex="0" style="padding: 4px 10px; border: 1px solid var(--line); cursor: pointer">+</div>
+          <div>이송 배율</div>
+          <div sc-camel-on-click="{{ ctlFeedDown }}" tabindex="0" style="padding: 4px 10px; border: 1px solid var(--line); cursor: pointer">−</div>
+          <div style="font-family: var(--f-mono); min-width: 58px; text-align: center; color: var(--text-hi)">{{ ctlFeed }}</div>
+          <div sc-camel-on-click="{{ ctlFeedUp }}" tabindex="0" style="padding: 4px 10px; border: 1px solid var(--line); cursor: pointer">+</div>
+        </div>
+        <div style="margin-top: 8px; font-size: 13px; color: var(--text-lo); line-height: 1.5; word-break: keep-all">잔차 정책의 보정 위에 곱해지는 사람 배율. 힘 0.3~2.0, 이송 0.2~3.0. 안전 하드리밋(14 N)은 그대로.</div>
+      </section>
+      </sc-if>
 
       <section style="border: 1px solid var(--bg-panel); padding: 15px 16px 13px">
         <div style="display: flex; align-items: baseline; gap: 8px">
@@ -491,6 +525,9 @@ class Component extends DCLogic {
     runMs: 0,            // 이번 공정의 길이. 실행마다 30~60초에서 새로 뽑는다
     runEl: 0,            // 경과 ms
     mon: null,           // 공정 중 계측값. 대기 중에는 null
+    recipe: 'base',      // 레시피 프리셋: base(기준) | fast(이송×1.5·힘×1.15, −43%) | quality(이송×1.3, 148/150)
+    ctl: { pause: false, force_scale: 1, feed_scale: 1 },   // 실행 중 컨트롤 (서버 /api/sim/control 과 동기)
+    workerOnline: null,  // 큐 모드 워커 하트비트 (null = 로컬 모드/미상)
     runs: [],            // 서버에 저장된 시뮬 기록 목록 (/api/runs)
     replayId: '',        // 재생 중인 기록 id
     replay: null,        // 재생기 상태 {t, duration, playing, speed, follow, status, active}
@@ -589,6 +626,18 @@ class Component extends DCLogic {
   }
   replaySpeed(e) { const v = this.vp(); if (v && v._replay) v.replay.setSpeed(Number(e.target.value) || 1); }
 
+  /* ══ 실행 중 컨트롤 — 일시정지/재개, 힘·이송 배율(정책 배율 위에 곱함). 서버가 워커/로컬 시뮬에 전달 ══ */
+  sendControl(patch) {
+    const next = { ...this.state.ctl, ...patch };
+    this.setState({ ctl: next });
+    fetch('/api/sim/control', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(patch) })
+      .then((r) => r.json()).then((d) => { if (d && d.control) this.setState({ ctl: d.control }); }).catch(() => {});
+  }
+  ctlStep(key, delta, lo, hi) {
+    const v = Math.round(Math.max(lo, Math.min(hi, (Number(this.state.ctl[key]) || 1) + delta)) * 100) / 100;
+    this.sendControl({ [key]: v });
+  }
+
   toggleRun() {
     if (this.state.replay && this.state.replay.active && !this._liveRun) return this.stopReplay();
     if (this.state.running) {
@@ -601,7 +650,7 @@ class Component extends DCLogic {
     const s = this.state, t = toolOf(s.tool);
     const body = { tool: s.tool, force: t.force, rpm: t.rpm, feed_mm_s: t.feed * 1000, overlap: t.overlap,
                    robotCount: s.robotCount, hasRail: s.hasRail, hasLift: s.hasLift, pad: t.pad, carLift: s.carLift,
-                   physical: false, max_steps: 9000 };
+                   recipe: s.recipe, physical: false, max_steps: 9000 };
     fetch('/api/sim/start', { method: 'POST', credentials: 'same-origin',
                               headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
       .then((r) => r.json().catch(() => ({})).then((d) => ({ ok: r.ok, status: r.status, d })))
@@ -635,7 +684,10 @@ class Component extends DCLogic {
         }).catch(() => { this._liveReplayTried = null; });
       }
       const el = performance.now() - this._runT0;
-      if (!viaReplay) this.setState({ runEl: el, mon: this.liveMon(feed, t) }); else this.setState({ runEl: el });
+      const extra = {};
+      if (st && st.control) extra.ctl = { pause: !!st.control.pause, force_scale: Number(st.control.force_scale) || 1, feed_scale: Number(st.control.feed_scale) || 1 };
+      if (st && st.worker_online !== undefined) extra.workerOnline = st.mode === 'queue' ? !!st.worker_online : null;
+      if (!viaReplay) this.setState({ runEl: el, mon: this.liveMon(feed, t), ...extra }); else this.setState({ runEl: el, ...extra });
       const done = st && !st.running && (st.exitCode !== null || (feed && feed.state === 'DONE'));
       if (done) {
         this._liveRunId = (st && st.run_id) || (this.state.replayId ? Number(this.state.replayId) : null) || this._liveRunId || null;
@@ -1070,6 +1122,24 @@ class Component extends DCLogic {
       runBg: s.running ? 'rgb(var(--warn-ch) / 0.1)' : 'rgb(var(--accent-ch) / 0.1)',
       ...this.monVals(),
       toggleRun: () => this.toggleRun(),
+      recipe: s.recipe,
+      setRecipe: (e) => this.setState({ recipe: String(e.target.value || 'base') }),
+      recipeNote: ({ base: '기준 레시피 — BO 최적(이송 5.65 mm/s · 6.69 N), 셀당 309 s',
+                     fast: '시간 단축 — 이송 ×1.5 · 힘 ×1.15, 150셀 147 유지, 셀당 177 s (−43 %)',
+                     quality: '품질 우선 — 이송 ×1.3, 150셀 148 합격, 셀당 232 s (−25 %)' })[s.recipe] || '',
+      showCtl: !!(s.running && this._liveRun),
+      ctlPauseLabel: s.ctl.pause ? '재개' : '일시정지',
+      ctlPauseBorder: s.ctl.pause ? 'var(--accent)' : 'var(--line)',
+      ctlForce: '×' + Number(s.ctl.force_scale || 1).toFixed(2),
+      ctlFeed: '×' + Number(s.ctl.feed_scale || 1).toFixed(2),
+      ctlPause: () => this.sendControl({ pause: !s.ctl.pause }),
+      ctlForceDown: () => this.ctlStep('force_scale', -0.1, 0.3, 2.0),
+      ctlForceUp: () => this.ctlStep('force_scale', 0.1, 0.3, 2.0),
+      ctlFeedDown: () => this.ctlStep('feed_scale', -0.1, 0.2, 3.0),
+      ctlFeedUp: () => this.ctlStep('feed_scale', 0.1, 0.2, 3.0),
+      ctlReset: () => this.sendControl({ pause: false, force_scale: 1, feed_scale: 1 }),
+      workerLine: s.workerOnline === null ? '' : (s.workerOnline ? 'GPU 워커 온라인' : 'GPU 워커 오프라인 — 작업 대기 중'),
+      workerColor: s.workerOnline ? 'var(--ok)' : 'var(--warn)',
       loadPreset: () => this.loadPreset(),
       presetLabel: s.hasPreset ? '저장된 최적 프리셋 불러오기' : '저장된 프리셋 없음',
       presetColor: s.hasPreset ? 'var(--text-mid)' : 'var(--line)',
