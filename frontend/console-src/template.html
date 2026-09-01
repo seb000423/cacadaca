@@ -610,7 +610,21 @@ class Component extends DCLogic {
     };
     if (!keepTimers) this.stopTimers();
     this.setState({ replayId: String(id), mon: null }, () => {
-      pl.load(id).then(() => { pl.play(); this.push(); }).catch((e) => console.warn('기록 로드 실패', e));
+      pl.load(id).then((run) => {
+        /* 기록에 저장된 환경 설정(대수·레일·리프트·툴·차 리프트·레시피)을 그대로 복원 — 화면 배치가 그 기록의 조건과 같아진다 */
+        const pr = run && run.meta && run.meta.params;
+        if (pr && !keepTimers) {
+          const env = {};
+          if (pr.robotCount) env.robotCount = Math.max(1, Math.min(3, Number(pr.robotCount)));
+          if (pr.hasRail !== undefined) env.hasRail = !!pr.hasRail;
+          if (pr.hasLift !== undefined) env.hasLift = !!pr.hasLift;
+          if (pr.tool && TOOLS && TOOLS[pr.tool]) env.tool = pr.tool;
+          if (pr.carLift !== undefined) env.carLift = Number(pr.carLift) || 0;
+          if (pr.recipe) env.recipe = String(pr.recipe);
+          this.setState(env, () => this.push());
+        }
+        pl.play(); this.push();
+      }).catch((e) => console.warn('기록 로드 실패', e));
     });
   }
   stopReplay() {

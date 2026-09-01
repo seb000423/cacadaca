@@ -156,7 +156,7 @@ function validateSignup(loginId, password, name) {
 /* ── 로컬 기록 테일러 ──────────────────────────────────────────────
    로컬 spawn(또는 GUI 로 직접 띄운 v5)이 쓰는 SimRecorder sqlite 를 2 s 마다 읽어 서버 DB(sim_runs/sim_chunks)에
    그대로 넣는다 → 워커 없이도 콘솔이 지연 재생으로 따라간다. 기록 파일이 생기기 전엔 기다린다. */
-function startRunTailer(store, filePath, { jobId = null, name = '' } = {}) {
+function startRunTailer(store, filePath, { jobId = null, name = '', params = null } = {}) {
   const fs = require('node:fs');
   const st = { runId: null, seq: 0, ev: 0, cell: 0, db: null, timer: null, done: false, filePath };
   const open = () => {
@@ -166,6 +166,7 @@ function startRunTailer(store, filePath, { jobId = null, name = '' } = {}) {
       const db = new DatabaseSync(filePath, { readOnly: true });
       const meta = {}; for (const r of db.prepare('SELECT key, value FROM meta').all()) { try { meta[r.key] = JSON.parse(r.value); } catch { meta[r.key] = r.value; } }
       if (!meta.scene && !meta.hz) { db.close(); return false; }     // 아직 스키마/메타 전
+      if (params) meta.params = params;                      // 콘솔 환경 설정 — 재생 시 자동 복원
       st.db = db; st.meta = meta;
       return true;
     } catch { return false; }
@@ -181,6 +182,7 @@ function startRunTailer(store, filePath, { jobId = null, name = '' } = {}) {
       const cells = st.db.prepare('SELECT id, t, data FROM cells WHERE id > ? ORDER BY id').all(st.cell);
       if (cells.length) { await store.addRunCells(st.runId, cells.map((c) => ({ ...c, data: Buffer.from(c.data) }))); st.cell = cells[cells.length - 1].id; }
       const metaNow = {}; for (const r of st.db.prepare('SELECT key, value FROM meta').all()) { try { metaNow[r.key] = JSON.parse(r.value); } catch { metaNow[r.key] = r.value; } }
+      if (params) metaNow.params = params;
       const ended = metaNow.t_end !== undefined;
       if (final || ended) {
         await store.updateRunMeta(st.runId, metaNow);
@@ -533,7 +535,7 @@ async function handleApi(req, res, pathname) {
       }
       S.proc = proc; S.pid = proc.pid; S.startedAt = Date.now(); S.params = params; S.exitCode = null; S.log = logPath;
       if (S.tailer) { try { S.tailer.stop(true); } catch { /* */ } }
-      S.tailer = startRunTailer(store, S.recordPath, { name: 'local ' + new Date().toISOString().slice(0, 16).replace('T', ' ') });
+      S.tailer = startRunTailer(store, S.recordPath, { name: 'local ' + new Date().toISOString().slice(0, 16).replace('T', ' '), params });
       proc.on('exit', (code) => { S.exitCode = code === null ? -1 : code; if (S.tailer) S.tailer.stop(S.exitCode !== 0).catch(() => {}); });
       proc.unref();
       await store.log(sess.login_id, 'sim.start', String(proc.pid), JSON.stringify(params));

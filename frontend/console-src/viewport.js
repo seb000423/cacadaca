@@ -524,7 +524,7 @@ const RAIL_SPEED = 1.8;
    (피벗 오차 ≤ 41 mm). Isaac 실측으로 확정 전까지는 근사. */
 const LIVE_Q_SIGN = [-1, -1, -1, -1, -1, -1];
 const LIVE_Q_OFFSET = [-0.0034, 1.1651, -1.5641, -0.0116, -0.6794, 0.0];
-const LIVE_LONG_FLIP = false;   // 차 앞뒤가 반대로 보이면 true (길이축 180° 회전)
+const LIVE_LONG_FLIP = true;    // 콘솔 차체 앞(+z) = Isaac 앞(+y). false 면 앞뒤가 뒤집힌다
 const LIVE_JOINT_RATE = 6.0;    // 피드는 수 Hz 라 따라붙는 속도를 공정보다 높인다 (rad/s)
 // Isaac(Z-up, x 가로·y 길이·z 높이) → three(Y-up): 거울상 map (−x, z, −y)
 const _LIVE_M = new THREE.Matrix3().set(-1, 0, 0, 0, 0, 1, 0, -1, 0);
