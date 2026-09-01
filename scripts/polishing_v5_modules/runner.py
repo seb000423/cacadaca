@@ -469,6 +469,12 @@ def main(simulation_app, obj_name="car"):
     _NAMES = {"C": "천장", "SL": "좌측", "SR": "우측"}
     # 콘솔이 Isaac 월드(Z-up, 차 길이축 Y)를 자기 좌표계로 옮길 때 쓰는 기준: 차 점군 bbox
     _feed_scene = {"up": "z", "long": "y",
+                   # 설비 수치(콘솔 소품 배치 동기화): 갠트리 보 높이·반폭·반길이, 천장 베이스 z 범위, 측면 레일 x, 텔레리프트 접힘/펼침
+                   "gantry_beam_z": float(common.GANTRY_BEAM_Z), "gantry_half_x": float(common.GANTRY_HALF_X), "gantry_half_y": float(common.GANTRY_HALF_Y),
+                   "overhead_z": [float(common.OVERHEAD_Z_MIN), float(common.OVERHEAD_Z_MAX)],
+                   "rail_x": [float(c["rail_x"]) for c in RAIL_CONFIGS if c.get("mount_mode") == "side"],
+                   "lift_h": [float(common.TELE_LIFT_RETRACTED_H), float(common.TELE_LIFT_EXTENDED_H)],
+                   "car_lift_z": float(common.CAR_LIFT_Z),
                    "car_min": [float(v) for v in np.min(raw_points, axis=0)] if len(raw_points) else [0, 0, 0],
                    "car_max": [float(v) for v in np.max(raw_points, axis=0)] if len(raw_points) else [0, 0, 0]}
     _FEED_EVERY = max(1, int(os.environ.get("POLISH_MONITOR_FEED_EVERY", "6")))   # 6 스텝 ≈ 10 Hz (팔 동기화용)
