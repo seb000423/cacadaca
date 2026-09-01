@@ -154,6 +154,70 @@
     '속도 배율': 'Speed factor',
     'in-band 비율': 'In-band ratio',
 
+    /* ══ ① 콘솔 — 시뮬 실행·기록 재생 (2026-09-02, polytwin_UI2 병합) ══
+       실제 Isaac 실행(큐 워커)·레시피 프리셋·실행 컨트롤·기록 재생·조건 검사·패드 접촉 정합.
+       run 목록 라벨 「run 8 · 완료」 같은 이어 붙는 자리는 아래 토막에 같이 있다. */
+    '1대 · 천장': '1 · ceiling',
+    '2대 · 좌·우': '2 · left+right',
+    '3대 · 천장+좌·우': '3 · ceiling+left+right',
+    'BMW Z4 · 스캔(Isaac)': 'BMW Z4 · scan (Isaac)',
+    '레시피 프리셋': 'Recipe preset',
+    '기준 (BO 최적)': 'Base (BO optimum)',
+    '기준 레시피 — BO 최적(이송 5.65 mm/s · 6.69 N), 셀당 309 s':
+      'Base recipe — BO optimum (feed 5.65 mm/s · 6.69 N), 309 s per cell',
+    '시간 단축 (이송 ×1.5 · 힘 ×1.15)': 'Faster (feed ×1.5 · force ×1.15)',
+    '시간 단축 — 이송 ×1.5 · 힘 ×1.15, 150셀 147 유지, 셀당 177 s (−43%)':
+      'Faster — feed ×1.5 · force ×1.15, 147 of 150 cells kept, 177 s per cell (−43%)',
+    '품질 우선 (이송 ×1.3)': 'Quality first (feed ×1.3)',
+    '품질 우선 — 이송 ×1.3, 150셀 148 합격, 셀당 232 s (−25%)':
+      'Quality first — feed ×1.3, 148 of 150 cells pass, 232 s per cell (−25%)',
+    '실행 컨트롤': 'Run controls',
+    '힘 배율': 'Force scale',
+    '이송 배율': 'Feed scale',
+    '배율 초기화': 'Reset scales',
+    '잔차 정책의 보정 위에 곱해지는 사람 배율. 힘 0.3~2.0, 이송 0.2~3.0. 안전 하드리밋(14 N)은 그대로.':
+      'Operator scales multiplied onto the residual policy’s correction. Force 0.3–2.0, feed 0.2–3.0. The 14 N safety hard limit stays.',
+    'GPU 워커 온라인': 'GPU worker online',
+    'GPU 워커 오프라인 — 작업 대기 중': 'GPU worker offline — job waiting',
+    'Isaac 기동 중 — 잠시 기다려 주세요': 'Isaac is starting — please wait',
+    '공정 모니터링 · Isaac 기동 중 (약 1분)': 'Process monitor · Isaac starting (about 1 min)',
+    '공정 모니터링 · 지연 재생': 'Process monitor · delayed replay',
+    '총': 'Total',
+    '기록 재생': 'Recording replay',
+    '재생할 기록': 'Recording to play',
+    '기록 선택 — DB 에 저장된 시뮬을 보간 재생': 'Select a recording — interpolated replay of a sim stored in the DB',
+    '기록 중': 'recording',
+    '완료': 'done',
+    '시간': 'Time',
+    '재생 위치(시간)': 'Playback position (time)',
+    '재생': 'Play',
+    '재생 중지': 'Stop replay',
+    '삭제': 'Delete',
+    '선택한 기록 삭제': 'Delete the selected recording',
+    '기록 로드 실패': 'Could not load the recording',
+    '셀 판정 표시: 켬': 'Cell verdicts: on',
+    '셀 판정 표시: 끔': 'Cell verdicts: off',
+    '패드 접촉 정합': 'Pad contact match',
+    '거리 12 mm·각도 12° 이내면 접촉. 이탈 구간은 도달 한계(곡면·가장자리)로 실제 공정에서도 재작업 후보가 된다.':
+      'Within 12 mm and 12° counts as contact. Off-contact stretches are reach limits (curvature, edges) and are rework candidates in the real process too.',
+    '접촉': 'Contact',
+    '이동': 'Moving',
+    '거리 이탈': 'Distance off',
+    '각도 이탈': 'Angle off',
+    '공정 실행 조건 오류': 'Process condition mismatch',
+    '시뮬레이션(Isaac Sim)이 보고한 공정 조건과 이 화면의 설정이 다릅니다. 화면의 3D·수치는 시뮬 조건 기준으로만 맞습니다.':
+      'The process conditions reported by the simulation (Isaac Sim) differ from this screen’s settings. The 3D view and figures here are only right under the sim conditions.',
+    '시뮬레이션': 'Simulation',
+    '화면 설정': 'Screen setting',
+    '시뮬 조건으로 맞추기': 'Match the sim conditions',
+    '로봇 구성': 'Robot set',
+    '이동 레일': 'Travel rail',
+    '작업 리프트': 'Work lift',
+    '툴': 'Tool',
+    '패드 지름': 'Pad diameter',
+    '있음': 'yes',
+    '없음': 'no',
+
     /* ══ ② 공정 모니터링 ══ */
     '공정 모니터링 · PolyTwin': 'Process monitor · PolyTwin',
     '잔여': 'Remaining',
@@ -205,6 +269,16 @@
     '정지 — 원점 복귀': 'Stopped — homing',
     '셀 A-02 로드 완료 · 로봇 3대 연결': 'Cell A-02 loaded · 3 robots connected',
 
+    /* ── 모니터 · 시뮬 피드·기록 재생·섹션 뷰 (2026-09-02, polytwin_UI2 병합) ──
+       주석 줄은 「차종 X · 셀 A-02 · 로봇 <b>3</b>대 · 섹션 뷰 (팔 + 차체)」 — 숫자 뒤 토막이
+       한 노드다. 원문에 앞 공백이 없어 영어에 공백을 붙여 「3 · section view」 로 읽히게 한다. */
+    '대 · 섹션 뷰 (팔 + 차체)': ' · section view (arm + body)',
+    '대 · 전체 뷰': ' · full view',
+    '기록 재생 실패': 'Replay failed',
+    '재생 청크 로드 실패': 'Could not load a replay chunk',
+    '시뮬레이션 피드 연결 — LIVE': 'Simulation feed connected — LIVE',
+    '피드 끊김 — 데모 데이터로 전환': 'Feed lost — switching to demo data',
+
     /* ══ ④ 라이브러리 ══ */
     '숙련공 정답 데이터': 'Veteran reference data',
     '세그먼트 검색': 'Search segments',
@@ -250,6 +324,9 @@
     '비교에서 빼기': 'Remove from comparison',
     '비교에 추가': 'Add to comparison',
     '#과압_없음': '#no_overpressure',
+    /* 실제 시뮬 실행 결과가 자동 등록된 카드 (2026-09-02, polytwin_UI2 병합) */
+    '3D 재생': '3D replay',
+    'RL 실행': 'RL run',
 
     /* ── 라이브러리 · 레이더 축 ── */
     '목표대역 체류': 'Time in band',
@@ -320,12 +397,40 @@
      ' The verdict stands — press it again to save.'],
     [' · RL 검증', ' · RL validated'],
 
+    /* ── 콘솔 · 시뮬 실행·기록 재생 (2026-09-02, polytwin_UI2 병합) ── */
+    /* 기록 삭제 확인창: '기록 "' + 이름 + '" 을(를) 삭제할까요? …' */
+    ['기록 "', 'Recording "'],
+    ['" 을(를) 삭제할까요? 되돌릴 수 없습니다.', '" — delete it? This cannot be undone.'],
+    /* 재생 시각 줄: '00:34 / 17:41 · 4x → 남은 실제 12:30' */
+    ['x → 남은 실제 ', 'x → wall-clock left '],
+    /* 조건 검사 표의 로봇 구성: '3대 (C/SL/SR)' — 세는 말은 숫자만 남긴다 */
+    ['대 (', ' ('],
+    /* run 목록 라벨: 'run 8 · 완료' / 'job 19 · 기록 중' */
+    [' · 기록 중', ' · recording'],
+    [' · 완료', ' · done'],
+    /* 자동 등록 이름: 'RL 실행 · 2026-09-01 21:50 · 셀 12/20' */
+    ['RL 실행 · ', 'RL run · '],
+    ['. 시드가 됐는지 확인하세요 — npm run seed:data 로 데이터셋/seg_best_kpi.json 을 DB 에 넣습니다.',
+     '. Check that the seed ran — npm run seed:data loads 데이터셋/seg_best_kpi.json into the DB.'],
+
     /* ── ② 공정 모니터링 ── */
     ['과압 임계 초과 ', 'Over-pressure threshold exceeded '],
     ['접촉 끊김 감지 ', 'Contact loss detected '],
     ['셀을 불러오지 못했다 — ', 'Could not load the cell — '],
     ['로는 fetch 가 막힌다. 이 폴더에서 서버를 띄워라:',
      'blocks fetch. Serve this folder over HTTP:'],
+    /* 설비 조건 동기화 이벤트: '설비 조건 동기화 — 로봇 3대 · 레일 있음 · 리프트 없음 · 차 리프트 0 mm'
+       — 있음/없음 이 붙은 긴 토막을 먼저 두고, 값이 숫자일 때를 위해 짧은 토막도 둔다 */
+    ['설비 조건 동기화 — 로봇 ', 'Equipment synced — robots '],
+    [' · 레일 있음', ' · rail yes'],
+    [' · 레일 없음', ' · rail no'],
+    [' · 리프트 있음', ' · lift yes'],
+    [' · 리프트 없음', ' · lift no'],
+    [' · 차 리프트 ', ' · car lift '],
+    [' · 레일 ', ' · rail '],
+    [' · 리프트 ', ' · lift '],
+    /* 기록 재생 이벤트: '기록 재생 — <이름> · 8x' */
+    ['기록 재생 — ', 'Recording replay — '],
 
     /* ── ④ 라이브러리 ── */
     ['허용 힘 밴드 ', 'Allowed force band '],
@@ -342,6 +447,9 @@
     ['과압 ', 'Over '],
     ['힘σ ', 'Force σ '],
     ['접촉력 ', 'Contact force '],
+    /* 자동 등록 카드 (2026-09-02, polytwin_UI2 병합): '#셀_12/20', '<owner> · RL 실행' */
+    ['#셀_', '#cells_'],
+    [' · RL 실행', ' · RL run'],
 
     /* 한 글자짜리 토막은 다른 낱말 속을 파고든다 — '행' 은 '진행'·'실행'
        안에도 있다. 그래서 숫자 뒤에 붙은 것만 바꾸도록 정규식으로 둔다.

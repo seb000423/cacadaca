@@ -240,6 +240,15 @@
           </div>
         </div>
       </section>
+      <section style="border: 1px solid var(--bg-panel); padding: 15px 16px 13px">
+        <div style="font-size: 14px; font-weight: 500; letter-spacing: 0.12em; text-transform: uppercase; color: var(--text-lo); margin-bottom: 10px">레시피 프리셋</div>
+        <select sc-camel-on-input="{{ setRecipe }}" aria-label="레시피 프리셋" style="width: 100%; padding: 8px 10px; border: 1px solid var(--line); background: var(--bg-void); color: var(--text-mid); font-size: 14px; border-radius: var(--r-sm)">
+          <option value="base">기준 (BO 최적)</option>
+          <option value="fast">시간 단축 (이송 ×1.5 · 힘 ×1.15)</option>
+          <option value="quality">품질 우선 (이송 ×1.3)</option>
+        </select>
+        <div style="margin-top: 8px; font-size: 14px; color: var(--text-lo); line-height: 1.5; word-break: keep-all">{{ recipeNote }}</div>
+      </section>
       <div style="padding: 16px; background: rgb(var(--accent-ch) / 0.06); border: 1px solid var(--line)">
         <div style="font-size: 15px; color: var(--accent); margin-bottom: 8px">RL 최적화 안내</div>
         <div style="font-size: 16px; color: var(--text-mid); line-height: 1.5">
@@ -262,14 +271,58 @@
         <div style="margin-top: 12px; height: 4px; background: var(--bg-panel); border-radius: var(--r-sm); overflow: hidden">
           <div style="width: {{ monBarW }}; height: 100%; background: var(--accent)"></div>
         </div>
-        <div style="margin-top: 9px; display: flex; font-family: var(--f-mono); font-size: 16px; color: var(--text-lo)">
-          <div>경과 <span style="color: var(--text-mid)">{{ monElapsed }}</span></div>
-          <div style="flex: 1"></div>
-          <div>남음 <span style="color: var(--text-mid)">{{ monLeft }}</span> / {{ monTotal }}</div>
+        <div style="margin-top: 9px; display: grid; grid-template-columns: auto 1fr; column-gap: 12px; row-gap: 4px; font-family: var(--f-mono); font-size: 15px; color: var(--text-lo); font-variant-numeric: tabular-nums; white-space: nowrap">
+          <div>경과</div><div style="color: var(--text-mid); text-align: right">{{ monElapsed }}</div>
+          <div>남음</div><div style="color: var(--text-mid); text-align: right">{{ monLeft }}</div>
+          <div>총</div><div style="text-align: right">{{ monTotal }}</div>
         </div>
       </section>
 
-      <section style="border: 1px solid var(--bg-panel); padding: 15px 16px 13px">
+      <sc-if value="{{ showContact }}" hint-placeholder-val="{{ false }}">
+      <section style="border: 1px solid var(--bg-panel); padding: 13px 16px 12px">
+        <div style="display: flex; align-items: baseline; gap: 10px; margin-bottom: 8px">
+          <div style="font-size: 14px; font-weight: 500; letter-spacing: 0.12em; text-transform: uppercase; color: var(--text-lo)">패드 접촉 정합</div>
+          <div style="flex: 1"></div>
+          <div style="font-family: var(--f-mono); font-size: 16px; color: {{ contactRateColor }}">{{ contactRate }}</div>
+        </div>
+        <sc-for list="{{ contactRows }}" as="c" hint-placeholder-count="3">
+          <div style="display: grid; grid-template-columns: 34px 1fr auto; gap: 8px; padding: 4px 0; font-size: 14px; color: var(--text-mid); font-variant-numeric: tabular-nums">
+            <div style="font-family: var(--f-mono); color: var(--text-lo)">{{ c.id }}</div>
+            <div style="color: {{ c.color }}">{{ c.state }}</div>
+            <div style="font-family: var(--f-mono); color: var(--text-lo)">{{ c.detail }}</div>
+          </div>
+        </sc-for>
+        <div style="margin-top: 6px; font-size: 13px; color: var(--text-lo); line-height: 1.5; word-break: keep-all">거리 12 mm·각도 12° 이내면 접촉. 이탈 구간은 도달 한계(곡면·가장자리)로 실제 공정에서도 재작업 후보가 된다.</div>
+      </section>
+      </sc-if>
+
+      <sc-if value="{{ showCtl }}" hint-placeholder-val="{{ false }}">
+      <section style="border: 1px solid var(--bg-panel); padding: 13px 16px 12px">
+        <div style="display: flex; align-items: baseline; gap: 10px; margin-bottom: 10px">
+          <div style="font-size: 14px; font-weight: 500; letter-spacing: 0.12em; text-transform: uppercase; color: var(--text-lo)">실행 컨트롤</div>
+          <div style="flex: 1"></div>
+          <div style="font-size: 13px; color: {{ workerColor }}">{{ workerLine }}</div>
+        </div>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px">
+          <div sc-camel-on-click="{{ ctlPause }}" tabindex="0" style="padding: 9px 0; border: 1px solid {{ ctlPauseBorder }}; text-align: center; font-size: 14px; letter-spacing: 0.06em; color: var(--text-mid); cursor: pointer">{{ ctlPauseLabel }}</div>
+          <div sc-camel-on-click="{{ ctlReset }}" tabindex="0" style="padding: 9px 0; border: 1px solid var(--line); text-align: center; font-size: 14px; letter-spacing: 0.06em; color: var(--text-lo); cursor: pointer">배율 초기화</div>
+        </div>
+        <div style="margin-top: 8px; display: grid; grid-template-columns: 1fr auto auto auto; gap: 6px; align-items: center; font-size: 14px; color: var(--text-mid)">
+          <div>힘 배율</div>
+          <div sc-camel-on-click="{{ ctlForceDown }}" tabindex="0" style="padding: 4px 10px; border: 1px solid var(--line); cursor: pointer">−</div>
+          <div style="font-family: var(--f-mono); min-width: 58px; text-align: center; color: var(--text-hi)">{{ ctlForce }}</div>
+          <div sc-camel-on-click="{{ ctlForceUp }}" tabindex="0" style="padding: 4px 10px; border: 1px solid var(--line); cursor: pointer">+</div>
+          <div>이송 배율</div>
+          <div sc-camel-on-click="{{ ctlFeedDown }}" tabindex="0" style="padding: 4px 10px; border: 1px solid var(--line); cursor: pointer">−</div>
+          <div style="font-family: var(--f-mono); min-width: 58px; text-align: center; color: var(--text-hi)">{{ ctlFeed }}</div>
+          <div sc-camel-on-click="{{ ctlFeedUp }}" tabindex="0" style="padding: 4px 10px; border: 1px solid var(--line); cursor: pointer">+</div>
+        </div>
+        <div style="margin-top: 8px; font-size: 13px; color: var(--text-lo); line-height: 1.5; word-break: keep-all">잔차 정책의 보정 위에 곱해지는 사람 배율. 힘 0.3~2.0, 이송 0.2~3.0. 안전 하드리밋(14 N)은 그대로.</div>
+      </section>
+      </sc-if>
+
+      <sc-if value="{{ showDetail }}" hint-placeholder-val="{{ true }}">
+<section style="border: 1px solid var(--bg-panel); padding: 15px 16px 13px">
         <div style="display: flex; align-items: baseline; gap: 8px">
           <div style="font-size: 15px; font-weight: 500; letter-spacing: 0.12em; text-transform: uppercase; color: var(--text-lo)">접촉력</div>
           <div style="flex: 1"></div>
@@ -290,16 +343,17 @@
           <div>편차 <span style="color: {{ monStateColor }}">{{ monDev }}</span> N</div>
         </div>
       </section>
+      </sc-if>
 
       <section style="display: grid; grid-template-columns: 1fr 1fr; gap: 1px; background: var(--bg-panel); border: 1px solid var(--bg-panel)">
-        <div style="background: var(--bg-base); padding: 13px 14px">
+        <sc-if value="{{ showDetail }}" hint-placeholder-val="{{ true }}"><div style="background: var(--bg-base); padding: 13px 14px">
           <div style="font-size: 15px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-lo)">패드 회전</div>
           <div style="margin-top: 6px"><span style="font-family: var(--f-mono); font-size: 19px; color: var(--text-hi); font-variant-numeric: tabular-nums">{{ monRpm }}</span> <span style="font-size: 15px; color: var(--text-lo)">rpm</span></div>
-        </div>
-        <div style="background: var(--bg-base); padding: 13px 14px">
+        </div></sc-if>
+        <sc-if value="{{ showDetail }}" hint-placeholder-val="{{ true }}"><div style="background: var(--bg-base); padding: 13px 14px">
           <div style="font-size: 15px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-lo)">이송 속도</div>
           <div style="margin-top: 6px"><span style="font-family: var(--f-mono); font-size: 19px; color: var(--text-hi); font-variant-numeric: tabular-nums">{{ monFeed }}</span> <span style="font-size: 15px; color: var(--text-lo)">mm/s</span></div>
-        </div>
+        </div></sc-if>
         <div style="background: var(--bg-base); padding: 13px 14px">
           <div style="font-size: 15px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-lo)">커버리지</div>
           <div style="margin-top: 6px"><span style="font-family: var(--f-mono); font-size: 19px; color: var(--accent); font-variant-numeric: tabular-nums">{{ monCov }}</span> <span style="font-size: 15px; color: var(--text-lo)">%</span></div>
@@ -311,6 +365,7 @@
       </section>
       <div style="margin-top: -12px; font-size: 16px; color: var(--text-lo); line-height: 1.5; word-break: keep-all; font-variant-numeric: tabular-nums">{{ monReachNote }}</div>
 
+      <sc-if value="{{ showDetail }}" hint-placeholder-val="{{ true }}">
       <section>
         <div style="font-size: 15px; font-weight: 500; letter-spacing: 0.12em; text-transform: uppercase; color: var(--text-lo); margin-bottom: 11px">로봇별 진행</div>
         <div style="display: flex; flex-direction: column; gap: 10px">
@@ -330,6 +385,7 @@
           </sc-for>
         </div>
       </section>
+      </sc-if>
 
     </div>
     </sc-if>
@@ -338,14 +394,64 @@
       <sc-if value="{{ idle }}" hint-placeholder-val="{{ true }}">
       <div sc-camel-on-click="{{ loadPreset }}" tabindex="0" style="padding: 11px 0; border: 1px solid var(--line); font-size: 15px; letter-spacing: 0.06em; color: {{ presetColor }}; text-align: center; cursor: {{ presetCursor }}; transition: border-color 200ms cubic-bezier(0.4,0,0.2,1), color 200ms cubic-bezier(0.4,0,0.2,1)" style-hover="border-color: var(--text-lo)">{{ presetLabel }}</div>
       </sc-if>
+      <sc-if value="{{ hasRuns }}" hint-placeholder-val="{{ false }}">
+      <div style="display: flex; flex-direction: column; gap: 8px; padding: 4px 0 6px">
+        <div style="display: flex; align-items: baseline; gap: 10px">
+          <div style="font-size: 15px; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase; color: var(--text-hi)">기록 재생</div>
+          <div style="flex: 1"></div>
+          <div style="font-family: var(--f-mono); font-size: 15px; color: var(--text-hi); font-variant-numeric: tabular-nums">{{ replayTime }}</div>
+        </div>
+        <select sc-camel-on-input="{{ pickRun }}" aria-label="재생할 기록" style="width: 100%; padding: 10px 12px; border: 1px solid var(--line-hi); background: var(--bg-void); color: var(--text-hi); font-size: 15px; border-radius: var(--r-sm)">
+          <option value="">기록 선택 — DB 에 저장된 시뮬을 보간 재생</option>
+          <sc-for list="{{ runOpts }}" as="o" hint-placeholder-count="2"><option value="{{ o.id }}">{{ o.label }}</option></sc-for>
+        </select>
+        <div style="display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text-lo)">
+          <div style="white-space: nowrap">시간</div>
+          <input type="range" min="0" max="1000" value="{{ replayPos }}" sc-camel-on-input="{{ replaySeek }}" aria-label="재생 위치(시간)" style="flex: 1">
+        </div>
+        <div style="display: flex; gap: 8px">
+          <div sc-camel-on-click="{{ replayToggle }}" tabindex="0" style="flex: 1; padding: 11px 0; border: 1px solid var(--accent); background: rgb(var(--accent-ch) / 0.08); text-align: center; font-size: 15px; font-weight: 500; letter-spacing: 0.06em; color: var(--text-hi); cursor: pointer">{{ replayBtn }}</div>
+          <div sc-camel-on-click="{{ toggleCells }}" tabindex="0" style="padding: 9px 10px; border: 1px solid var(--line); text-align: center; font-size: 13px; color: var(--text-lo); cursor: pointer; white-space: nowrap">{{ cellsLabel }}</div>
+          <div sc-camel-on-click="{{ deleteRun }}" tabindex="0" title="선택한 기록 삭제" style="padding: 9px 10px; border: 1px solid var(--line); text-align: center; font-size: 13px; color: var(--warn); cursor: pointer; white-space: nowrap">삭제</div>
+        </div>
+        <div style="display: flex; gap: 4px">
+          <sc-for list="{{ speedOpts }}" as="sp" hint-placeholder-count="6">
+            <div sc-camel-on-click="{{ sp.pick }}" tabindex="0" style="flex: 1; padding: 7px 0; border: 1px solid {{ sp.border }}; background: {{ sp.bg }}; color: {{ sp.color }}; text-align: center; font-family: var(--f-mono); font-size: 13px; cursor: pointer">{{ sp.label }}</div>
+          </sc-for>
+        </div>
+      </div>
+      </sc-if>
       <div sc-camel-on-click="{{ toggleRun }}" style="padding: 17px 0; border: 1px solid {{ runBorder }}; background: {{ runBg }}; font-size: 16px; font-weight: 500; letter-spacing: 0.18em; text-transform: uppercase; color: var(--text-hi); text-align: center; cursor: pointer; transition: background-color 220ms cubic-bezier(0.4,0,0.2,1), border-color 220ms cubic-bezier(0.4,0,0.2,1), color 220ms cubic-bezier(0.4,0,0.2,1)">{{ runLabel }}</div>
       <div style="display: flex; gap: 10px">
-        <a href="monitor.html" style="flex: 1; padding: 10px 0; font-size: 15px; letter-spacing: 0.06em; color: var(--text-lo); text-align: center; transition: color var(--t-base) var(--e-out); word-break: keep-all">② 공정 감시 →</a>
+        <a href="{{ monitorHref }}" style="flex: 1; padding: 10px 0; font-size: 15px; letter-spacing: 0.06em; color: var(--text-lo); text-align: center; transition: color var(--t-base) var(--e-out); word-break: keep-all">② 공정 감시 →</a>
         <a href="PolyTwin%20Save.html" style="flex: 1; padding: 10px 0; font-size: 15px; letter-spacing: 0.06em; text-align: center; color: var(--text-lo); transition: color var(--t-base) var(--e-out); word-break: keep-all" style-hover="color: var(--text-mid)">③ 결과 저장 →</a>
         <div sc-camel-on-click="{{ goLibrary }}" tabindex="0" style="flex: 1; padding: 10px 0; font-size: 15px; letter-spacing: 0.06em; color: var(--text-lo); text-align: center; cursor: pointer; transition: color var(--t-base) var(--e-out); word-break: keep-all" style-hover="color: var(--text-mid)">④ 라이브러리 →</div>
       </div>
     </div>
   </aside>
+
+  <sc-if value="{{ showCondModal }}" hint-placeholder-val="{{ false }}">
+    <div style="position: absolute; inset: 0; z-index: 60; background: rgb(var(--bg-void-ch) / 0.7); backdrop-filter: blur(6px); display: flex; align-items: center; justify-content: center; padding: 24px">
+      <div style="width: min(560px, 100%); background: var(--bg-base); border: 1px solid var(--warn); padding: 26px 30px; display: flex; flex-direction: column; gap: 16px">
+        <div style="font-size: 16px; font-weight: 500; letter-spacing: 0.14em; text-transform: uppercase; color: var(--warn)">공정 실행 조건 오류</div>
+        <div style="font-size: 17px; color: var(--text-mid); line-height: 1.6; word-break: keep-all">시뮬레이션(Isaac Sim)이 보고한 공정 조건과 이 화면의 설정이 다릅니다. 화면의 3D·수치는 시뮬 조건 기준으로만 맞습니다.</div>
+        <div style="border: 1px solid var(--bg-panel); background: var(--bg-void)">
+          <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; padding: 11px 18px; border-bottom: 1px solid var(--bg-panel); font-size: 13px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-lo)">
+            <div>항목</div><div>시뮬레이션</div><div>화면 설정</div>
+          </div>
+          <sc-for list="{{ condRows }}" as="r" hint-placeholder-count="2">
+            <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; padding: 10px 18px; font-size: 15px; color: var(--text-mid); border-bottom: 1px solid var(--bg-base)">
+              <div>{{ r.name }}</div><div style="color: var(--text-hi); font-family: var(--f-mono)">{{ r.sim }}</div><div style="color: var(--warn); font-family: var(--f-mono)">{{ r.ui }}</div>
+            </div>
+          </sc-for>
+        </div>
+        <div style="display: flex; gap: 10px; justify-content: flex-end">
+          <div sc-camel-on-click="{{ condClose }}" tabindex="0" style="padding: 10px 18px; border: 1px solid var(--line); font-size: 14px; color: var(--text-lo); cursor: pointer">닫기</div>
+          <div sc-camel-on-click="{{ condApply }}" tabindex="0" style="padding: 10px 18px; border: 1px solid var(--accent); background: rgb(var(--accent-ch) / 0.12); font-size: 14px; color: var(--text-hi); cursor: pointer">시뮬 조건으로 맞추기</div>
+        </div>
+      </div>
+    </div>
+  </sc-if>
 
   <sc-if value="{{ showEvalModal }}" hint-placeholder-val="{{ false }}">
     <div style="position: absolute; inset: 0; z-index: 50; background: rgb(var(--bg-void-ch) / 0.88); backdrop-filter: blur(8px); display: flex; align-items: center; justify-content: center; padding: 24px">
@@ -460,6 +566,7 @@ const readVehicle = () => {
 const CARS = [
   { id: 'sonata', name: '현대 쏘나타', mark: 'assets/icons/hyundai.png' },
   { id: 'z4', name: 'BMW Z4', mark: 'assets/icons/bmw.png' },
+  { id: 'scan', name: 'BMW Z4 · 스캔(Isaac)', mark: 'assets/icons/bmw.png' },   // 시뮬레이션이 쓰는 스캔 차체 — 실제 Isaac 기록을 따를 때 자동 선택
   { id: 'coupe', name: '벤츠 쿠페', mark: 'assets/icons/benz.png' },
   { id: 'sf90', name: '페라리 SF90', mark: 'assets/icons/ferrari.png' },
 ];
@@ -503,6 +610,9 @@ function lcg(seed) {
   return () => (x = (Math.imul(x, 1664525) + 1013904223) >>> 0) / 4294967296;
 }
 const mmss = (sec) => `${String(Math.floor(sec / 60)).padStart(2, '0')}:${String(sec % 60).padStart(2, '0')}`;
+// 시뮬 시각(수 시간)용: h:mm:ss
+const hhmm = (sec) => { sec = Math.max(0, Math.round(sec)); const h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60), x = sec % 60;
+  return (h ? h + ':' : '') + String(m).padStart(2, '0') + ':' + String(x).padStart(2, '0'); };
 
 class Component extends DCLogic {
   state = {
@@ -527,10 +637,27 @@ class Component extends DCLogic {
     runMs: 0,            // 이번 공정의 길이. 실행마다 30~60초에서 새로 뽑는다
     runEl: 0,            // 경과 ms
     mon: null,           // 공정 중 계측값. 대기 중에는 null
+    recipe: 'base',      // 레시피 프리셋: base(기준) | fast(이송×1.5·힘×1.15, −43%) | quality(이송×1.3, 148/150)
+    ctl: { pause: false, force_scale: 1, feed_scale: 1 },   // 실행 중 컨트롤 (서버 /api/sim/control 과 동기)
+    workerOnline: null,  // 큐 모드 워커 하트비트 (null = 로컬 모드/미상)
+    runs: [],            // 서버에 저장된 시뮬 기록 목록 (/api/runs)
+    replayId: '',        // 재생 중인 기록 id
+    cellsOn: false,      // 3D 셀 판정 지도 표시 (기본 끔)
+    simCond: null,       // 시뮬(피드/기록)이 보고한 공정 조건 {recipe, robots, params} — 상태줄·조건 대조
+    contact: null,       // 콘솔 애니메이션 실측 접촉 품질 {rows:[{id,working,dist,angle,ok}], rate}
+    showCondModal: false, condRows: [],   // 공정 실행 조건 오류 팝업
+    replay: null,        // 재생기 상태 {t, duration, playing, speed, follow, status, active}
   };
 
   componentDidMount() {
     this.push();
+    this.fetchRuns();
+    /* PolyTwin Console.html?run=<id> — 라이브러리/모니터에서 온 재생 링크 */
+    try {
+      const rid = Number(new URLSearchParams(location.search).get('run'));
+      if (rid) setTimeout(() => this.loadReplay(rid), 800);
+    } catch (e) { /* 무시 */ }
+    this._runsTimer = setInterval(() => { if (!this.state.running && !(this.state.replay && this.state.replay.active)) this.fetchRuns(); }, 10000);
     /* credentials 를 빼면 세션 쿠키가 안 실려 401 이 온다 */
     fetch(SEED_URL, { credentials: 'same-origin' })
       .then((r) => r.json().catch(() => ({})).then((d) => {
@@ -560,7 +687,9 @@ class Component extends DCLogic {
     /* 뷰포트는 attribute 가 없으면 z4 로 뜬다. 저장된 차종으로 열 때는 패널만
        그 차를 가리키고 3D 는 Z4 인 상태가 된다 — 여기서 맞춘다.
        setVehicle 은 같은 id 면 즉시 돌아오므로 매 push 마다 불러도 된다. */
-    if (v.setVehicle) v.setVehicle(s.vehicle);
+    /* 단, 시뮬 피드/기록을 따르는 동안(v._live)은 뷰포트가 스스로 Isaac 스캔 차체('scan')로
+       바꿔 두므로 여기서 되돌리면 안 된다 — 추종이 풀리면 뷰포트가 원래 차종을 복원한다. */
+    if (v.setVehicle && !v._live) v.setVehicle(s.vehicle);
   }
 
   pickVehicle(id) {
@@ -578,9 +707,231 @@ class Component extends DCLogic {
     if (v && v.setView) v.setView(id);
   }
 
-  stopTimers() { clearTimeout(this._simTimer); clearInterval(this._monTimer); }
+  stopTimers() {
+    clearTimeout(this._simTimer); clearInterval(this._monTimer); clearInterval(this._liveTimer);
+    const v = this.vp(); if (v && v.setLive) v.setLive(null);
+  }
+
+  /* ══ 실제 시뮬레이션 실행 (백엔드 /api/sim/*) ═══════════════════════
+     로컬 서버가 Isaac Sim(원코드 v5 + 잔차 정책)을 띄우고, 모니터는 /api/monitor 피드로 채운다.
+     런처가 없는 환경(배포 서버 501, 네트워크 오류)에서는 기존 데모 흐름으로 돌아간다. */
+  /* ══ 기록 재생 (DB 에 저장된 시뮬 프레임을 보간 재생 — 실시간 폴링 렉 없음) ══ */
+  fetchRuns() {
+    fetch('/api/runs', { credentials: 'same-origin', cache: 'no-store' }).then((r) => r.json())
+      .then((d) => this.setState({ runs: d.runs || [] })).catch(() => {});
+  }
+  loadReplay(id, keepTimers) {
+    const v = this.vp(); if (!v || !v.replay) return;
+    const pl = v.replay, t = toolOf(this.state.tool);
+    pl.onState = (st) => this.setState({ replay: { ...st, active: true } });
+    pl.onFrame = (feed) => {
+      const now = performance.now();
+      if (now - (this._rpEmit || 0) < 200) return;     // 표시 갱신은 5 Hz — 3D 는 60 fps 로 따로 돈다
+      this._rpEmit = now;
+      /* 접촉 품질(콘솔 애니메이션 실측): 로봇별 패드-표면 거리·각도. 정합률은 최근 100 표본의 ok 비율 */
+      const cq = (v.getContact ? v.getContact() : []);
+      const hist = this._cqHist || (this._cqHist = []);
+      for (const c of cq) if (c.working) { hist.push(c.ok ? 1 : 0); if (hist.length > 100) hist.shift(); }
+      const rate = hist.length ? Math.round(100 * hist.reduce((a, b) => a + b, 0) / hist.length) : null;
+      const mon = this.liveMon(feed, t);
+      /* 커버리지·도달률은 콘솔 3D 실측: 실제로 닦인 면적 비율(광택 마스크), 팔이 맡은 작업점/전체 작업점 */
+      const st = v.getStats ? v.getStats() : null;
+      if (st) { mon.points = st.points || 0; mon.assigned = st.assigned || 0; if (st.polished !== null && st.polished !== undefined) mon.cov = st.polished * 100; }
+      this.setState({ mon, contact: { rows: cq, rate } });
+    };
+    if (!keepTimers) this.stopTimers();
+    this.setState({ replayId: String(id), mon: null }, () => {
+      pl.load(id).then((run) => {
+        /* 기록에 저장된 환경 설정(대수·레일·리프트·툴·차 리프트·레시피)을 그대로 복원 — 화면 배치가 그 기록의 조건과 같아진다 */
+        const pr = run && run.meta && run.meta.params;
+        if (pr && !keepTimers) {
+          const env = {};
+          if (pr.robotCount) env.robotCount = Math.max(1, Math.min(3, Number(pr.robotCount)));
+          if (pr.hasRail !== undefined) env.hasRail = !!pr.hasRail;
+          if (pr.hasLift !== undefined) env.hasLift = !!pr.hasLift;
+          if (pr.tool && TOOLS && TOOLS[pr.tool]) env.tool = pr.tool;
+          if (pr.carLift !== undefined) env.carLift = Number(pr.carLift) || 0;
+          if (pr.recipe) env.recipe = String(pr.recipe);
+          const meta0 = (run && run.meta) || {};
+          this.setState(env, () => { this.push(); this._noteSimCond({ recipe: meta0.recipe_values || null, robots: (meta0.robots || []).map((r) => r.id), params: meta0.params || null }); });
+        } else {
+          const meta = (run && run.meta) || {};
+          this._noteSimCond({ recipe: meta.recipe_values || null, robots: (meta.robots || []).map((r) => r.id), params: meta.params || null });
+        }
+        pl.play(); this.push();
+      }).catch((e) => console.warn('기록 로드 실패', e));
+    });
+  }
+  stopReplay() {
+    const v = this.vp(); if (v && v._replay) v.replay.stop();
+    this.setState({ replay: null, replayId: '', mon: null }, () => this.push());
+  }
+  pickRun(e) { const id = Number(e.target.value); if (!id) this.stopReplay(); else this.loadReplay(id); }
+  deleteRun() {
+    const id = Number(this.state.replayId); if (!id) return;
+    const run = this.state.runs.find((r) => r.id === id);
+    if (!window.confirm('기록 "' + ((run && run.name) || id) + '" 을(를) 삭제할까요? 되돌릴 수 없습니다.')) return;
+    this.stopReplay();
+    fetch('/api/runs/' + id, { method: 'DELETE', credentials: 'same-origin' }).then((r) => r.json())
+      .then((d) => { if (d && d.error) window.alert(d.error); this.fetchRuns(); }).catch(() => this.fetchRuns());
+  }
+  replayToggle() {
+    const v = this.vp(); if (!v || !v._replay || !this.state.replay) return;
+    if (this.state.replay.playing) v.replay.pause(); else v.replay.play();
+  }
+  replaySeek(e) {
+    const v = this.vp(); if (!v || !v._replay || !this.state.replay) return;
+    v.replay.seek(Number(e.target.value) / 1000 * this.state.replay.duration);
+  }
+  replaySpeed(e) { const v = this.vp(); if (v && v._replay) v.replay.setSpeed(Number(e.target.value) || 1); }
+
+  /* ══ 공정 실행 조건 대조 — 시뮬(피드/기록)이 보고한 조건과 콘솔 설정이 다르면 "공정 실행 조건 오류" 팝업 ══ */
+  _noteSimCond(cond) {
+    const sig = JSON.stringify(cond);
+    if (sig === this._condSig) return;
+    this._condSig = sig;
+    this.setState({ simCond: cond }, () => this.checkSimCond());
+  }
+  checkSimCond() {
+    const s = this.state, c = s.simCond; if (!c) return;
+    const t = toolOf(s.tool), rows = [];
+    const add = (name, sim, ui) => { if (sim !== undefined && sim !== null && String(sim) !== String(ui)) rows.push({ name, sim: String(sim), ui: String(ui) }); };
+    const uiSet = ({ 1: ['C'], 2: ['SL', 'SR'], 3: ['C', 'SL', 'SR'] })[s.robotCount] || [];
+    if (c.robots && c.robots.length) {
+      const simSet = c.robots.slice().sort().join('/'), mine = uiSet.slice().sort().join('/');
+      if (simSet !== mine) rows.push({ name: '로봇 구성', sim: c.robots.length + '대 (' + c.robots.join('/') + ')', ui: s.robotCount + '대 (' + uiSet.join('/') + ')' });
+    }
+    if (c.recipe && c.recipe.pad_radius_m) add('패드 지름', Math.round(c.recipe.pad_radius_m * 2000) + ' mm', t.pad + ' mm');
+    if (c.params) {
+      if (c.params.hasRail !== undefined) add('이동 레일', c.params.hasRail ? '있음' : '없음', s.hasRail ? '있음' : '없음');
+      if (c.params.hasLift !== undefined) add('작업 리프트', c.params.hasLift ? '있음' : '없음', s.hasLift ? '있음' : '없음');
+      if (c.params.tool) add('툴', c.params.tool, s.tool);
+    }
+    const sig = JSON.stringify(rows);
+    if (rows.length && sig !== this._condShown) { this._condShown = sig; this.setState({ showCondModal: true, condRows: rows }); }
+    if (!rows.length) this.setState({ showCondModal: false, condRows: [] });
+  }
+  condApply() {
+    const c = this.state.simCond || {}, env = {};
+    if (c.params) {
+      if (c.params.robotCount) env.robotCount = Math.max(1, Math.min(3, Number(c.params.robotCount)));
+      if (c.params.hasRail !== undefined) env.hasRail = !!c.params.hasRail;
+      if (c.params.hasLift !== undefined) env.hasLift = !!c.params.hasLift;
+      if (c.params.tool) env.tool = c.params.tool;
+    } else if (c.robots && c.robots.length) {
+      const set = c.robots.slice().sort().join('/');
+      env.robotCount = set === 'C' ? 1 : set === 'SL/SR' ? 2 : 3;
+    }
+    this._condShown = null;
+    this.setState({ ...env, showCondModal: false, condRows: [] }, () => { this.push(); this.checkSimCond(); });
+  }
+
+  /* ══ 실행 중 컨트롤 — 일시정지/재개, 힘·이송 배율(정책 배율 위에 곱함). 서버가 워커/로컬 시뮬에 전달 ══ */
+  sendControl(patch) {
+    const next = { ...this.state.ctl, ...patch };
+    this.setState({ ctl: next });
+    fetch('/api/sim/control', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(patch) })
+      .then((r) => r.json()).then((d) => { if (d && d.control) this.setState({ ctl: d.control }); }).catch(() => {});
+  }
+  ctlStep(key, delta, lo, hi) {
+    const v = Math.round(Math.max(lo, Math.min(hi, (Number(this.state.ctl[key]) || 1) + delta)) * 100) / 100;
+    this.sendControl({ [key]: v });
+  }
 
   toggleRun() {
+    if (this.state.replay && this.state.replay.active && !this._liveRun) return this.stopReplay();
+    /* 실행 직후 6 s 안의 클릭은 무시 — Isaac 기동(~60 s) 동안 반응이 없어 보여 다시 누르면 정지 요청이 나가 버린다 */
+    if (this.state.running && this._liveRun && this._runT0 && performance.now() - this._runT0 < 6000) return;
+    if (this.state.running) {
+      if (this._liveRun) {
+        fetch('/api/sim/stop', { method: 'POST', credentials: 'same-origin' }).catch(() => {});
+        this._liveRun = false;
+      }
+      return this.toggleRunDemo();
+    }
+    const s = this.state, t = toolOf(s.tool);
+    const body = { tool: s.tool, force: t.force, rpm: t.rpm, feed_mm_s: t.feed * 1000, overlap: t.overlap,
+                   robotCount: s.robotCount, hasRail: s.hasRail, hasLift: s.hasLift, pad: t.pad, carLift: s.carLift,
+                   recipe: s.recipe, physical: false, max_steps: 9000 };
+    fetch('/api/sim/start', { method: 'POST', credentials: 'same-origin',
+                              headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+      .then((r) => r.json().catch(() => ({})).then((d) => ({ ok: r.ok, status: r.status, d })))
+      .then(({ ok, status, d }) => {
+        if (!ok) throw new Error(d.error || ('launcher ' + status));
+        this._liveRun = true; this._hist = []; this._runT0 = performance.now(); this._liveRunId = null; this._simResult = null;
+        this.setState({ running: true, runMs: 0, runEl: 0, mon: this.liveMon(null, t) }, () => {
+          this.push(); this.stopTimers();
+          this._liveTimer = setInterval(() => this.pollLiveRun(t), 500);
+        });
+      })
+      .catch(() => { this._liveRun = false; this.toggleRunDemo(); });
+  }
+  pollLiveRun(t) {
+    Promise.all([
+      fetch('/api/monitor', { credentials: 'same-origin', cache: 'no-store' }).then((r) => r.json()).catch(() => null),
+      fetch('/api/sim/status', { credentials: 'same-origin', cache: 'no-store' }).then((r) => r.json()).catch(() => null),
+    ]).then(([m, st]) => {
+      const feed = m && m.live ? m.feed : null;
+      const v = this.vp();
+      const viaReplay = !!(this.state.replay && this.state.replay.active);
+      if (!viaReplay && v && v.setLive) v.setLive(feed);   // 3D 팔 = Isaac 관절 그대로 (폴링 경로)
+      /* 워커가 이 작업의 기록(run)을 올리기 시작하면 지연 재생기로 전환 — 청크를 미리 받아 보간하므로 렉이 없다 */
+      if (!viaReplay && st && (st.run_id || (st.job && st.job.id)) && !this._liveReplayTried && v && v.replay) {
+        this._liveReplayTried = performance.now();
+        if (st.run_id) { this.loadReplay(st.run_id, true); this.fetchRuns(); }      // 로컬 모드: 서버 테일러가 만든 기록
+        else fetch('/api/runs', { credentials: 'same-origin', cache: 'no-store' }).then((r) => r.json()).then((d) => {
+          const run = (d.runs || []).find((r) => r.job_id === st.job.id);          // 큐 모드: 워커가 올리는 기록
+          if (run) { this.setState({ runs: d.runs || [] }); this.loadReplay(run.id, true); }
+          else this._liveReplayTried = null;                      // 아직 없음 — 다음 폴링에서 다시
+        }).catch(() => { this._liveReplayTried = null; });
+      }
+      const el = performance.now() - this._runT0;
+      const extra = {};
+      if (st && st.control) extra.ctl = { pause: !!st.control.pause, force_scale: Number(st.control.force_scale) || 1, feed_scale: Number(st.control.feed_scale) || 1 };
+      if (st && st.worker_online !== undefined) extra.workerOnline = st.mode === 'queue' ? !!st.worker_online : null;
+      if (!viaReplay) this.setState({ runEl: el, mon: this.liveMon(feed, t), ...extra }); else this.setState({ runEl: el, ...extra });
+      const done = st && !st.running && (st.exitCode !== null || (feed && feed.state === 'DONE'));
+      if (done) {
+        this._liveRunId = (st && st.run_id) || (this.state.replayId ? Number(this.state.replayId) : null) || this._liveRunId || null;
+        this._liveReplayTried = null;
+        if (viaReplay && v && v._replay) { v.replay.stop(); this.setState({ replay: null, replayId: '' }); }
+        this.fetchRuns();
+      }
+      if (done && st.result) { this.stopTimers(); this._liveRun = false; this.finishLiveRun(st.result); }
+      else if (done) { this.stopTimers(); this._liveRun = false; this.finishRun(); }
+    });
+  }
+  liveMon(feed, t) {
+    const r0 = feed && feed.robots && feed.robots[0];
+    const force = r0 ? Number(r0.force) || 0 : 0;
+    const target = r0 ? Number(r0.target) || t.force : t.force;
+    const hist = this._hist || (this._hist = []);
+    hist.push(force); if (hist.length > 44) hist.shift();
+    const prog = feed ? Math.max(0, Math.min(1, Number(feed.progress) || 0)) : 0;
+    if (feed && (feed.recipe || (feed.robots && feed.robots.length))) this._noteSimCond({ recipe: feed.recipe || null, robots: (feed.robots || []).map((r) => r.id) });
+    return { prog, force, dev: force - target, target, rpm: t.rpm, feed: t.feed * 1000,
+             cov: prog * 100, hist: hist.slice(), cells: [], points: 0, assigned: 0, live: !!feed,
+             starting: !feed };   // 피드가 아직 없음 = 작업 대기 또는 Isaac 기동 중
+  }
+  finishLiveRun(result) {
+    const seed = this.state.seed;
+    const seq = this.state.runSeq + 1;
+    const ref = seed && seed.length ? seed[(seq - 1) % seed.length] : null;
+    const q = result.quality || {}, rl0 = result.rl || {};
+    const qualEp = Object.assign({ episode: seq, recipe: 'rl_live', seed: 0, cells: q.cells || 0 }, q);
+    /* 숙련공 정답(ref)이 없어도 실제 결과는 남긴다 — 자동 등록(evalSave(true)) 에 필요 */
+    const rl = {
+      force: Number(rl0.force) || (ref ? ref.p.force : 0),
+      stiffness: Number(rl0.stiffness) || (ref ? ref.p.stiffness : 0),
+      damping: Number(rl0.damping) || (ref ? ref.p.damping : 0),
+      speed: Number(rl0.feed_scale_mean) || 1.0,
+      inband: (result.cells && result.cells.polished) ? Math.min(1, (result.cells.pass || 0) / Math.max(1, result.cells.polished)) : 0,
+    };
+    this._simResult = result;
+    this.setState({ running: false, mon: null, showEvalModal: true, runSeq: seq, refSeg: ref, rl, qualEp,
+                    evalSaved: false, evalErr: '' }, () => { this.push(); this.evalSave(true); });   // 실제 실행 결과는 자동 등록
+  }
+  toggleRunDemo() {
     if (this.state.running) {                 // 진행 중 누르면 중단
       this.stopTimers();
       this.setState({ running: false, mon: null, runEl: 0 }, () => this.push());
@@ -680,14 +1031,16 @@ class Component extends DCLogic {
   /* 공정 모니터링 패널이 그리는 값. 대기 중에는 설정 패널이 대신 뜬다. */
   monVals() {
     const s = this.state, m = s.mon;
-    const idle = !s.running || !m;
+    const rp = s.replay && s.replay.active ? s.replay : null;
+    const idle = !(s.running || rp) || !m;
     if (idle) {
       return { running: false, idle: true, panelTitle: 'PARAMETERS',
                monBars: [], monRobots: [] };
     }
     const pct = m.prog * 100;
-    const leftSec = Math.max(0, Math.round((s.runMs - s.runEl) / 1000));
-    const elSec = Math.round(s.runEl / 1000);
+    // 재생 중이면 시뮬 시각(기록의 t) 을 그대로 — 공정 시간이 곧 시뮬 시간이다
+    const leftSec = rp ? Math.max(0, Math.round(rp.duration - rp.t)) : Math.max(0, Math.round((s.runMs - s.runEl) / 1000));
+    const elSec = rp ? Math.round(rp.t) : Math.round(s.runEl / 1000);
     // 접촉력이 목표에서 얼마나 벗어났나 — 이 화면에서 관리자가 제일 먼저 볼 값
     const warn = m.dev > 0.55;
     const stateColor = warn ? 'var(--warn)' : 'var(--ok)';
@@ -715,12 +1068,12 @@ class Component extends DCLogic {
     }));
 
     return {
-      running: true, idle: false, panelTitle: '공정 모니터링',
+      running: true, idle: false, panelTitle: rp ? (rp.follow ? '공정 모니터링 · 지연 재생' : '기록 재생') : (m.starting ? '공정 모니터링 · Isaac 기동 중 (약 1분)' : '공정 모니터링'),
       monPct: pct.toFixed(1),
       monBarW: pct.toFixed(1) + '%',
-      monElapsed: mmss(elSec),
-      monLeft: mmss(leftSec),
-      monTotal: mmss(Math.round(s.runMs / 1000)),
+      monElapsed: rp ? hhmm(elSec) : mmss(elSec),
+      monLeft: rp ? hhmm(leftSec) : mmss(leftSec),
+      monTotal: rp ? hhmm(rp.duration) : mmss(Math.round(s.runMs / 1000)),
       monForce: m.force.toFixed(2),
       monTarget: m.target.toFixed(1),
       monDev: (m.force >= m.target ? '+' : '–') + m.dev.toFixed(2),
@@ -824,18 +1177,27 @@ class Component extends DCLogic {
   // 일치할 때만 저장한다. 저장은 서버 DB(library_entries)로 간다 —
   // 예전 localStorage 'polytwin_saved' 는 이 브라우저에만 남아서 다른
   // PC 에서는 보이지 않았고 누가 저장했는지도 알 수 없었다.
-  evalSave() {
+  evalSave(auto) {
     const ref = this.state.refSeg, rl = this.state.rl, s = this.state;
-    if (!ref || !rl || this.evalRows().some((r) => !r.ok)) return;
+    const sim = this._simResult || null;                 // 실제 시뮬 결과 요약 (finishLiveRun)
+    if (!rl) return;
+    if (!auto && (!ref || this.evalRows().some((r) => !r.ok))) return;
+    if (auto && !sim) return;
     if (s.evalSaving || s.evalSaved) return;
 
+    const when = new Date();
+    const stamp = when.getFullYear() + '-' + String(when.getMonth() + 1).padStart(2, '0') + '-' + String(when.getDate()).padStart(2, '0')
+                + ' ' + String(when.getHours()).padStart(2, '0') + ':' + String(when.getMinutes()).padStart(2, '0');
     const rec = {
       id: 'rl-' + Date.now(),
-      seg: ref.seg,
-      name: ref.seg + ' · ' + ref.robot + ' 로봇 · RL 검증',
-      env: { robotCount: s.robotCount, tool: s.tool, hasRail: s.hasRail, hasLift: s.hasLift },
+      seg: ref ? ref.seg : 'sim',
+      name: ref ? (ref.seg + ' · ' + ref.robot + ' 로봇 · RL 검증') : ('RL 실행 · ' + stamp + (sim && sim.cells ? ' · 셀 ' + (sim.cells.pass || 0) + '/' + (sim.cells.cells || 0) : '')),
+      env: { robotCount: s.robotCount, tool: s.tool, hasRail: s.hasRail, hasLift: s.hasLift, carLift: s.carLift },
       rl: { force: rl.force, stiffness: rl.stiffness, damping: rl.damping, speed: rl.speed, inband: rl.inband },
-      ref: ref,
+      ref: ref || null,
+      sim: sim ? { quality: sim.quality || null, rl: sim.rl || null, cells: sim.cells || null, recipe: sim.recipe || null,
+                   elapsed_s: sim.elapsed_s || null, tag: sim.tag || null } : null,
+      run_id: this._liveRunId || null,
     };
     // 시각은 서버가 찍는다 — 클라이언트 시계를 믿고 정렬하지 않는다
 
@@ -844,7 +1206,7 @@ class Component extends DCLogic {
     try {
       localStorage.setItem('polytwin_preset', JSON.stringify({
         robotCount: s.robotCount, tool: s.tool, hasRail: s.hasRail, hasLift: s.hasLift,
-        seg: ref.seg, force: rl.force, stiffness: rl.stiffness, damping: rl.damping, speed: rl.speed,
+        seg: ref ? ref.seg : 'sim', force: rl.force, stiffness: rl.stiffness, damping: rl.damping, speed: rl.speed,
       }));
     } catch (err) { /* 무시 */ }
 
@@ -896,9 +1258,13 @@ class Component extends DCLogic {
     const evOk = ev.length > 0 && failed === 0 && qFailed === 0;
     const ref = s.refSeg;
     const noSeed = !ref;
-    const spacing = Math.round(tool.pad * (1 - tool.overlap / 100));
+    const rc = (s.simCond && s.simCond.recipe) || null;   // 시뮬이 보고한 유효 레시피가 있으면 상태줄은 그 값
+    const spacing = rc && rc.step_over_ratio && rc.pad_radius_m ? Math.round(rc.step_over_ratio * rc.pad_radius_m * 2000) : Math.round(tool.pad * (1 - tool.overlap / 100));
     // 작업 폭 약 1850mm 기준. 공구를 바꾸면 패스 수와 예상 시간이 따라 움직인다
-    const passes = Math.round(1850 / spacing);
+    const passes = rc && rc.n_passes ? rc.n_passes : Math.round(1850 / spacing);
+    const m0 = s.mon;
+    const simEta = m0 && m0.live && m0.prog > 0.02 && this.state.runEl ? Math.max(0, Math.round((this.state.runEl / 1000) * (1 - m0.prog) / m0.prog)) : null;
+    const rpEta = s.replay && s.replay.active ? Math.max(0, Math.round((s.replay.duration - s.replay.t) / Math.max(0.01, s.replay.speed))) : null;   // 배속 반영 실제 남은 시간
     return {
       vehicles: CARS.map((c) => ({
         name: c.name, mark: c.mark,
@@ -918,7 +1284,7 @@ class Component extends DCLogic {
         pick: () => this.pickView(id),
       })),
       robotCounts: [1, 2, 3].map(n => ({
-        label: `${n}대`,
+        label: ({ 1: '1대 · 천장', 2: '2대 · 좌·우', 3: '3대 · 천장+좌·우' })[n],   // Isaac 배치와 같은 의미
         border: s.robotCount === n ? 'var(--accent)' : 'var(--line)',
         bg: s.robotCount === n ? 'rgb(var(--accent-ch) / 0.06)' : 'transparent',
         color: s.robotCount === n ? 'var(--text-hi)' : 'var(--text-mid)',
@@ -950,12 +1316,66 @@ class Component extends DCLogic {
       liftDotLeft: s.hasLift ? '20px' : '2px',
       spacing: String(spacing),
       passes: String(passes),
-      eta: mmss(Math.round(passes * 8)),
-      runLabel: s.running ? '공정 중단' : 'RL 공정 시작',
+      eta: rpEta !== null ? hhmm(rpEta) : simEta !== null ? hhmm(simEta) : mmss(Math.round(passes * 8)),
+      showCondModal: s.showCondModal,
+      condRows: s.condRows,
+      condApply: () => this.condApply(),
+      condClose: () => { this.setState({ showCondModal: false }); },
+      runLabel: s.running ? (s.mon && s.mon.starting && this._liveRun ? 'Isaac 기동 중 — 잠시 기다려 주세요' : '공정 중단') : (s.replay && s.replay.active ? '재생 중지' : 'RL 공정 시작'),
+      hasRuns: s.runs.length > 0,
+      runOpts: s.runs.map((r) => ({ id: String(r.id),
+        label: (r.name || ('run ' + r.id)) + ' · ' + (r.status === 'recording' ? '기록 중' : r.status === 'done' ? '완료' : r.status)
+               + ' · ' + mmss(Math.round(Number(r.t_sim_end) || 0)) })),
+      replayId: s.replayId,
+      monitorHref: s.replayId ? ('monitor.html?run=' + s.replayId + '&speed=' + (s.replay ? s.replay.speed : 1)) : 'monitor.html',
+      replayPos: s.replay && s.replay.duration > 0 ? String(Math.round(1000 * s.replay.t / s.replay.duration)) : '0',
+      replayTime: s.replay ? (hhmm(s.replay.t) + ' / ' + hhmm(s.replay.duration) + (s.replay.follow ? ' · LIVE' : (' · ' + s.replay.speed + 'x → 남은 실제 ' + mmss(Math.max(0, Math.round((s.replay.duration - s.replay.t) / Math.max(0.01, s.replay.speed))))))) : '',
+      replayBtn: s.replay && s.replay.playing ? '일시정지' : '재생',
+      cellsOn: !!s.cellsOn,
+      cellsLabel: s.cellsOn ? '셀 판정 표시: 켬' : '셀 판정 표시: 끔',
+      toggleCells: () => this.setState({ cellsOn: !s.cellsOn }, () => { const v = this.vp(); if (v && v.setCellsVisible) v.setCellsVisible(this.state.cellsOn); }),
+      deleteRun: () => this.deleteRun(),
+      replaySpeedVal: String(s.replay ? s.replay.speed : 1),
+      speedOpts: [1, 4, 16, 32, 64, 128].map((x) => ({ label: x + 'x',
+        border: s.replay && s.replay.speed === x ? 'var(--accent)' : 'var(--line)',
+        bg: s.replay && s.replay.speed === x ? 'rgb(var(--accent-ch) / 0.08)' : 'transparent',
+        color: s.replay && s.replay.speed === x ? 'var(--text-hi)' : 'var(--text-mid)',
+        pick: () => { const v = this.vp(); if (v && v._replay) v.replay.setSpeed(x); } })),
+      pickRun: (e) => this.pickRun(e),
+      replayToggle: () => this.replayToggle(),
+      replaySeek: (e) => this.replaySeek(e),
+      replaySpeed: (e) => this.replaySpeed(e),
       runBorder: s.running ? 'var(--warn)' : 'var(--accent)',
       runBg: s.running ? 'rgb(var(--warn-ch) / 0.1)' : 'rgb(var(--accent-ch) / 0.1)',
       ...this.monVals(),
       toggleRun: () => this.toggleRun(),
+      recipe: s.recipe,
+      setRecipe: (e) => this.setState({ recipe: String(e.target.value || 'base') }),
+      recipeNote: ({ base: '기준 레시피 — BO 최적(이송 5.65 mm/s · 6.69 N), 셀당 309 s',
+                     fast: '시간 단축 — 이송 ×1.5 · 힘 ×1.15, 150셀 147 유지, 셀당 177 s (−43%)',
+                     quality: '품질 우선 — 이송 ×1.3, 150셀 148 합격, 셀당 232 s (−25%)' })[s.recipe] || '',
+      showCtl: !!(s.running && this._liveRun),
+      hasContact: !!(s.contact && s.contact.rows && s.contact.rows.length),
+      showDetail: !(s.replay && s.replay.active),                 // 기록 재생 중엔 콘솔은 진행·시간·컨트롤만 — 세부 계측은 ② 공정 감시
+      showContact: false,                                          // 접촉 정합은 ② 공정 감시로 옮김 (콘솔에서는 숨김)
+      contactRate: s.contact && s.contact.rate !== null && s.contact.rate !== undefined ? s.contact.rate + ' %' : '—',
+      contactRateColor: s.contact && s.contact.rate !== null && s.contact.rate < 85 ? 'var(--warn)' : 'var(--ok)',
+      contactRows: ((s.contact && s.contact.rows) || []).map((c) => ({
+        id: c.id, state: !c.working ? '이동' : c.ok ? '접촉' : (c.angle >= 12 ? '각도 이탈' : '거리 이탈'),
+        detail: c.working ? (Math.round(c.dist * 1000) + ' mm · ' + Math.round(c.angle) + '°') : '',
+        color: !c.working ? 'var(--text-lo)' : c.ok ? 'var(--ok)' : 'var(--warn)' })),
+      ctlPauseLabel: s.ctl.pause ? '재개' : '일시정지',
+      ctlPauseBorder: s.ctl.pause ? 'var(--accent)' : 'var(--line)',
+      ctlForce: '×' + Number(s.ctl.force_scale || 1).toFixed(2),
+      ctlFeed: '×' + Number(s.ctl.feed_scale || 1).toFixed(2),
+      ctlPause: () => this.sendControl({ pause: !s.ctl.pause }),
+      ctlForceDown: () => this.ctlStep('force_scale', -0.1, 0.3, 2.0),
+      ctlForceUp: () => this.ctlStep('force_scale', 0.1, 0.3, 2.0),
+      ctlFeedDown: () => this.ctlStep('feed_scale', -0.1, 0.2, 3.0),
+      ctlFeedUp: () => this.ctlStep('feed_scale', 0.1, 0.2, 3.0),
+      ctlReset: () => this.sendControl({ pause: false, force_scale: 1, feed_scale: 1 }),
+      workerLine: s.workerOnline === null ? '' : (s.workerOnline ? 'GPU 워커 온라인' : 'GPU 워커 오프라인 — 작업 대기 중'),
+      workerColor: s.workerOnline ? 'var(--ok)' : 'var(--warn)',
       loadPreset: () => this.loadPreset(),
       presetLabel: s.hasPreset ? '저장된 최적 프리셋 불러오기' : '저장된 프리셋 없음',
       presetColor: s.hasPreset ? 'var(--text-mid)' : 'var(--line)',

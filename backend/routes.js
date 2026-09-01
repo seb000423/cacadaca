@@ -95,6 +95,8 @@ function publicEntry(row) {
     owner: row.owner_name || row.owner_login || '',
     env: body.env || null,
     rl: body.rl || null,
+    sim: body.sim || null,                                   // 실제 시뮬 결과 요약(자동 등록)
+    run_id: body.run_id != null ? Number(body.run_id) : null, // 기록(sim_runs) → 콘솔/모니터 재생 링크
     ref: body.ref || null,
   };
 }
@@ -147,6 +149,77 @@ function validateSignup(loginId, password, name) {
 /* ══════════════════════════════════════════════════════════════
    API
    ══════════════════════════════════════════════════════════════ */
+/* ── 시뮬레이션 실행 모드 ─────────────────────────────────
+   local : 이 서버가 Isaac 을 직접 띄운다 (UI 서버와 GPU 가 같은 PC)
+   queue : 작업 큐에 넣고 GPU PC 의 워커(sim_worker.py)가 가져간다 (Vercel 배포 기본)
+   PT_SIM_MODE 로 강제, 없으면 Vercel 이면 queue, 아니면 local. ── */
+/* ── 로컬 기록 테일러 ──────────────────────────────────────────────
+   로컬 spawn(또는 GUI 로 직접 띄운 v5)이 쓰는 SimRecorder sqlite 를 2 s 마다 읽어 서버 DB(sim_runs/sim_chunks)에
+   그대로 넣는다 → 워커 없이도 콘솔이 지연 재생으로 따라간다. 기록 파일이 생기기 전엔 기다린다. */
+function startRunTailer(store, filePath, { jobId = null, name = '', params = null } = {}) {
+  const fs = require('node:fs');
+  const st = { runId: null, seq: 0, ev: 0, cell: 0, db: null, timer: null, done: false, filePath };
+  const open = () => {
+    if (st.db || !fs.existsSync(filePath)) return false;
+    try {
+      const { DatabaseSync } = require('node:sqlite');
+      const db = new DatabaseSync(filePath, { readOnly: true });
+      const meta = {}; for (const r of db.prepare('SELECT key, value FROM meta').all()) { try { meta[r.key] = JSON.parse(r.value); } catch { meta[r.key] = r.value; } }
+      if (!meta.scene && !meta.hz) { db.close(); return false; }     // 아직 스키마/메타 전
+      if (params) meta.params = params;                      // 콘솔 환경 설정 — 재생 시 자동 복원
+      st.db = db; st.meta = meta;
+      return true;
+    } catch { return false; }
+  };
+  const pull = async (final) => {
+    if (!st.db && !open()) return;
+    if (!st.runId) st.runId = await store.createRun({ jobId, name: name || require('node:path').basename(filePath), meta: st.meta });
+    try {
+      const chunks = st.db.prepare('SELECT seq, t0, t1, n, data FROM chunks WHERE seq > ? ORDER BY seq LIMIT 400').all(st.seq);
+      if (chunks.length) { await store.appendChunks(st.runId, chunks.map((c) => ({ ...c, data: Buffer.from(c.data) }))); st.seq = chunks[chunks.length - 1].seq; }
+      const ev = st.db.prepare('SELECT id, t, robot, level, msg FROM events WHERE id > ? ORDER BY id').all(st.ev);
+      if (ev.length) { await store.addRunEvents(st.runId, ev); st.ev = ev[ev.length - 1].id; }
+      const cells = st.db.prepare('SELECT id, t, data FROM cells WHERE id > ? ORDER BY id').all(st.cell);
+      if (cells.length) { await store.addRunCells(st.runId, cells.map((c) => ({ ...c, data: Buffer.from(c.data) }))); st.cell = cells[cells.length - 1].id; }
+      const metaNow = {}; for (const r of st.db.prepare('SELECT key, value FROM meta').all()) { try { metaNow[r.key] = JSON.parse(r.value); } catch { metaNow[r.key] = r.value; } }
+      if (params) metaNow.params = params;
+      const ended = metaNow.t_end !== undefined;
+      if (final || ended) {
+        await store.updateRunMeta(st.runId, metaNow);
+        const rr = st.db.prepare('SELECT data FROM result WHERE id = 1').get();
+        let result = null; try { result = rr ? JSON.parse(rr.data) : null; } catch { result = null; }
+        await store.finishRun(st.runId, final && final.failed ? 'failed' : 'done', result);
+        stop();
+      }
+    } catch (e) { console.warn('[tailer] 읽기 실패(계속):', e.message); }
+  };
+  const stop = () => { if (st.timer) clearInterval(st.timer); st.timer = null; st.done = true; try { if (st.db) st.db.close(); } catch { /* */ } st.db = null; };
+  st.timer = setInterval(() => { pull().catch(() => {}); }, 2000);
+  st.stop = async (failed) => { if (st.done) return; if (st.timer) clearInterval(st.timer); st.timer = null; await pull({ failed: !!failed }); if (!st.done) stop(); };
+  st.id = () => st.runId;
+  return st;
+}
+
+function simMode() {
+  const m = String(process.env.PT_SIM_MODE || '').toLowerCase();
+  if (m === 'local' || m === 'queue') return m;
+  return process.env.VERCEL ? 'queue' : 'local';
+}
+function workerAuthed(req) {
+  const want = process.env.PT_WORKER_TOKEN || '';
+  if (!want) return false;
+  const got = String(req.headers['x-pt-worker'] || '');
+  return got.length === want.length && require('crypto').timingSafeEqual(Buffer.from(got), Buffer.from(want));
+}
+function jobPublic(j) {
+  if (!j) return null;
+  let params = null, result = null;
+  try { params = JSON.parse(j.params); } catch { params = null; }
+  try { result = j.result ? JSON.parse(j.result) : null; } catch { result = null; }
+  return { id: j.id, status: j.status, stopRequested: !!j.stop_requested, params, worker: j.worker,
+           createdAt: j.created_at, startedAt: j.started_at, finishedAt: j.finished_at, exitCode: j.exit_code, result };
+}
+
 async function handleApi(req, res, pathname) {
   const method = req.method;
 
@@ -226,6 +299,344 @@ async function handleApi(req, res, pathname) {
      바뀌고 파싱 코드는 그대로 쓴다.
      원본 CSV(183MB)는 DB 에 넣지 않는다. 세그먼트가 들고 있는
      byteStart/byteEnd 로 여전히 정적 파일에 Range 요청을 건다. ══ */
+  /* ══ 시뮬레이션 실시간 피드 (② 모니터) ═══════════════════════
+     Isaac Sim 쪽(learning/ui_bridge/monitor_feed.py)이 JSON 파일을 20 스텝마다 갱신하고
+     여기서는 그 파일을 읽어 돌려준다. 파일이 없거나 5 s 이상 오래되면 live:false —
+     monitor.html 은 그때 데모 데이터로 돌아간다. 경로는 PT_MONITOR_FEED 로 바꾼다. ══ */
+  /* ══ 시뮬레이션 런처 (① 콘솔 → Isaac Sim) ═══════════════════════
+     콘솔의 실행/정지 버튼이 실제 폴리싱 시뮬(원코드 v5 + 잔차 정책)을 띄우고 내린다.
+     로컬 서버 전용 — Vercel 함수에서는 프로세스를 띄울 수 없어 501 을 돌려준다.
+       POST /api/sim/start {tool, force, rpm, feed_mm_s, overlap, robotCount, physical, max_steps, dry_run}
+       POST /api/sim/stop
+       GET  /api/sim/status → {running, pid, startedAt, elapsed_s, params, exitCode, result}
+     경로: PT_SIM_REPO(시뮬 저장소, 기본 ../cacadaca), PT_ISAAC_PY(기본 ~/isaacsim/python.sh) ══ */
+  /* ── 워커 전용 (X-PT-Worker 토큰) — 큐 모드의 GPU PC 가 부른다 ── */
+  /* ── 워커 → 시뮬 기록 업로드 (리플레이/지연 재생용) ── */
+  if (pathname.indexOf('/api/sim/runs') === 0) {
+    if (!workerAuthed(req)) return json(res, 401, { error: '워커 토큰이 필요합니다.' });
+    const mm = pathname.match(/^\/api\/sim\/runs(?:\/(\d+)(?:\/(chunks|events|cells|finish|meta))?)?$/);
+    if (!mm) return json(res, 404, { error: 'not found' });
+    const b64 = (v) => Buffer.from(String(v || ''), 'base64');
+    if (!mm[1] && method === 'POST') {
+      const body = await readBody(req);
+      const id = await store.createRun({ jobId: body.job_id != null ? Number(body.job_id) : null, name: String(body.name || ''), meta: body.meta || {} });
+      return json(res, 200, { ok: true, run_id: id });
+    }
+    const run = mm[1] ? await store.getRun(Number(mm[1])) : null;
+    if (!run) return json(res, 404, { error: 'run not found' });
+    if (mm[2] === 'chunks' && method === 'POST') {
+      const body = await readBody(req, 8 * 1024 * 1024);
+      const chunks = (body.chunks || []).map((c) => ({ seq: Number(c.seq), t0: Number(c.t0), t1: Number(c.t1), n: Number(c.n), data: b64(c.data) }));
+      await store.appendChunks(run.id, chunks);
+      return json(res, 200, { ok: true, last_seq: await store.lastChunkSeq(run.id) });
+    }
+    if (mm[2] === 'events' && method === 'POST') {
+      const body = await readBody(req);
+      await store.addRunEvents(run.id, body.events || []);
+      return json(res, 200, { ok: true });
+    }
+    if (mm[2] === 'cells' && method === 'POST') {
+      const body = await readBody(req, 8 * 1024 * 1024);
+      await store.addRunCells(run.id, (body.cells || []).map((c) => ({ id: Number(c.id), t: Number(c.t), data: b64(c.data) })));
+      return json(res, 200, { ok: true });
+    }
+    if (mm[2] === 'meta' && method === 'POST') {
+      const body = await readBody(req);
+      await store.updateRunMeta(run.id, body.meta || {});
+      return json(res, 200, { ok: true });
+    }
+    if (mm[2] === 'finish' && method === 'POST') {
+      const body = await readBody(req);
+      await store.finishRun(run.id, body.status === 'failed' ? 'failed' : 'done', body.result || null);
+      return json(res, 200, { ok: true });
+    }
+    if (!mm[2] && method === 'GET') return json(res, 200, { ok: true, run: { ...run, last_seq: await store.lastChunkSeq(run.id) } });
+    return json(res, 405, { error: 'method' });
+  }
+
+  if (pathname.indexOf('/api/sim/jobs') === 0) {
+    if (!workerAuthed(req)) return json(res, 401, { error: '워커 토큰이 필요합니다.' });
+    if (pathname === '/api/sim/jobs/next' && method === 'GET') {
+      const u = new URL(req.url, 'http://localhost');
+      const worker = String(u.searchParams.get('worker') || 'gpu');
+      await store.putState('worker', { name: worker, ts: Date.now() });     // 하트비트 — 콘솔의 '워커 온라인' 표시
+      const j = await store.claimNextJob(worker);
+      return json(res, 200, { job: jobPublic(j) });
+    }
+    const m = pathname.match(/^\/api\/sim\/jobs\/(\d+)\/(feed|result|exit|state)$/);
+    if (m) {
+      const id = Number(m[1]); const kind = m[2];
+      const j = await store.getJob(id);
+      if (!j) return json(res, 404, { error: '없는 작업입니다.' });
+      if (kind === 'state' && method === 'GET') return json(res, 200, { job: jobPublic(j) });
+      if (method !== 'POST') return json(res, 405, { error: '지원하지 않는 요청입니다.' });
+      const body = await readBody(req, 512 * 1024);
+      if (kind === 'feed') { await store.putState('feed', body.feed || body); await store.putState('worker', { name: j.worker || 'gpu', ts: Date.now() }); const cr = await store.getState('control'); let control = null; try { control = cr ? JSON.parse(cr.payload) : null; } catch { control = null; } return json(res, 200, { ok: true, control, stopRequested: !!j.stop_requested }); }
+      if (kind === 'result') { await store.setJobResult(id, body.result || body); return json(res, 200, { ok: true }); }
+      if (kind === 'exit') {
+        const code = Number(body.exitCode);
+        const status = body.status || (j.stop_requested ? 'stopped' : (code === 0 ? 'done' : 'failed'));
+        const jj = await store.finishJob(id, { status, exitCode: Number.isFinite(code) ? code : -1, result: body.result || null });
+        return json(res, 200, { ok: true, job: jobPublic(jj) });
+      }
+    }
+    return json(res, 404, { error: '없는 요청입니다.' });
+  }
+  if (pathname.indexOf('/api/sim/') === 0 && simMode() === 'queue') {
+    /* ── 큐 모드: 콘솔 → 작업 행, 워커가 실행 ── */
+    const sess = await sessionOf(req);
+    if (!sess) return json(res, 401, { error: '로그인이 필요합니다.' });
+    if (sess.status !== 'active') return json(res, 403, { error: '승인 대기 중인 계정입니다.' });
+    if (pathname === '/api/sim/control' && method === 'POST') {
+      /* 실행 중 컨트롤: {pause, force_scale, feed_scale} — 워커는 피드 응답으로 받아 제어 파일에 쓰고, 로컬 모드는 서버가 직접 쓴다 */
+      const body = await readBody(req);
+      const prevRow = await store.getState('control'); let prev = {}; try { prev = prevRow ? JSON.parse(prevRow.payload) : {}; } catch { prev = {}; }
+      const control = { pause: body.pause !== undefined ? !!body.pause : !!prev.pause,
+                        force_scale: Math.max(0.3, Math.min(2.0, Number(body.force_scale !== undefined ? body.force_scale : (prev.force_scale ?? 1)))),
+                        feed_scale: Math.max(0.2, Math.min(3.0, Number(body.feed_scale !== undefined ? body.feed_scale : (prev.feed_scale ?? 1)))),
+                        ts: Date.now() };
+      await store.putState('control', control);
+      if (simMode() !== 'queue') {
+        try {
+          const fsx = require('node:fs');
+          const REPO = process.env.PT_SIM_REPO || path.join(__dirname, '..', '..', 'cacadaca');
+          const OUT = path.join(REPO, 'learning', 'ui_bridge', 'out');
+          fsx.writeFileSync(path.join(OUT, 'control.json.tmp'), JSON.stringify(control)); fsx.renameSync(path.join(OUT, 'control.json.tmp'), path.join(OUT, 'control.json'));
+        } catch (e) { /* 시뮬이 없으면 무시 */ }
+      }
+      await store.log(sess.login_id, 'sim.control', '', JSON.stringify(control));
+      return json(res, 200, { ok: true, control });
+    }
+    if (pathname === '/api/sim/status' && method === 'GET') {
+      const active = await store.activeJob();
+      const j = active || await store.latestJob();
+      const jp = jobPublic(j);
+      return json(res, 200, {
+        mode: 'queue', running: !!(active), queued: !!(active && active.status === 'queued'),
+        pid: null, startedAt: jp ? jp.startedAt : null, params: jp ? jp.params : null,
+        exitCode: jp ? jp.exitCode : null, log: null, job: jp,
+        elapsed_s: jp && jp.startedAt ? Math.round((Date.now() - jp.startedAt) / 1000) : 0,
+        result: jp && (jp.status === 'done' || jp.status === 'stopped' || jp.status === 'failed') ? jp.result : null,
+        control: await (async () => { const r = await store.getState('control'); try { return r ? JSON.parse(r.payload) : null; } catch { return null; } })(),
+        worker_online: await (async () => { const r = await store.getState('worker'); return !!(r && Date.now() - Number(r.updated_at) < 10000); })(),
+        worker: await (async () => { const r = await store.getState('worker'); try { return r ? JSON.parse(r.payload).name : null; } catch { return null; } })(),
+      });
+    }
+    if (pathname === '/api/sim/stop' && method === 'POST') {
+      const active = await store.activeJob();
+      if (!active) return json(res, 200, { ok: true, running: false });
+      await store.requestStop(active.id);
+      await store.log(sess.login_id, 'sim.stop', String(active.id), 'queue');
+      return json(res, 200, { ok: true, running: true, stopping: true, job: jobPublic(await store.getJob(active.id)) });
+    }
+    if (pathname === '/api/sim/start' && method === 'POST') {
+      const active = await store.activeJob();
+      if (active) return json(res, 409, { error: '이미 대기/실행 중인 작업이 있습니다.', job: jobPublic(active) });
+      const body = await readBody(req, 64 * 1024);
+      await store.putState('control', { pause: false, force_scale: 1, feed_scale: 1, ts: Date.now() });   // 새 작업은 컨트롤 초기화
+      const num = (v, d) => (Number.isFinite(Number(v)) ? Number(v) : d);
+      const params = {
+        tool: String(body.tool || 'dual'), force: num(body.force, 5.6), rpm: num(body.rpm, 3000),
+        feed_mm_s: num(body.feed_mm_s, 5.65), overlap: num(body.overlap, 40),
+        robotCount: num(body.robotCount, 3), physical: !!body.physical, max_steps: num(body.max_steps, 6000),
+        hasRail: body.hasRail === undefined ? true : !!body.hasRail, hasLift: body.hasLift === undefined ? true : !!body.hasLift,
+        pad: num(body.pad, 110), carLift: num(body.carLift, 0),
+        recipe: ['base', 'fast', 'quality'].includes(String(body.recipe)) ? String(body.recipe) : 'base',
+      };
+      if (params.force < 3 || params.force > 8) return json(res, 400, { error: '접촉력은 3~8 N 대역 안이어야 합니다.' });
+      if (body.dry_run) return json(res, 200, { ok: true, dry_run: true, mode: 'queue', params });
+      const j = await store.createJob({ userId: Number(sess.id), params });
+      await store.log(sess.login_id, 'sim.start', String(j.id), JSON.stringify(params));
+      return json(res, 201, { ok: true, mode: 'queue', job: jobPublic(j) });
+    }
+    return json(res, 404, { error: '없는 요청입니다.' });
+  }
+  if (pathname.indexOf('/api/sim/') === 0) {
+    const sess = await sessionOf(req);
+    if (!sess) return json(res, 401, { error: '로그인이 필요합니다.' });
+    if (process.env.VERCEL) return json(res, 501, { error: '배포 서버에서는 시뮬레이션을 실행할 수 없습니다.' });
+    const fs = require('fs'), path = require('path'), os = require('os');
+    const { spawn } = require('child_process');
+    const REPO = process.env.PT_SIM_REPO || path.join(__dirname, '..', '..', 'cacadaca');
+    const ISAAC = process.env.PT_ISAAC_PY || path.join(os.homedir(), 'isaacsim', 'python.sh');
+    const OUT = path.join(REPO, 'learning', 'ui_bridge', 'out');
+    const feed = process.env.PT_MONITOR_FEED || path.join(OUT, 'monitor_feed.json');
+    global.__ptSim = global.__ptSim || { proc: null, pid: null, startedAt: null, params: null, exitCode: null, log: null };
+    const S = global.__ptSim;
+    const running = !!(S.proc && S.exitCode === null);
+    if (pathname === '/api/sim/status' && method === 'GET') {
+      let result = null;
+      try {
+        const rp = path.join(OUT, 'last_run.json');
+        const st = fs.statSync(rp);
+        if (!S.startedAt || st.mtimeMs >= S.startedAt - 1000) result = JSON.parse(fs.readFileSync(rp, 'utf8'));
+      } catch (e) { result = null; }
+      return json(res, 200, {
+        running, pid: S.pid, startedAt: S.startedAt, params: S.params, exitCode: S.exitCode, log: S.log,
+        run_id: S.tailer ? S.tailer.id() : null,
+        elapsed_s: S.startedAt ? Math.round((Date.now() - S.startedAt) / 1000) : 0, result,
+      });
+    }
+    if (pathname === '/api/sim/stop' && method === 'POST') {
+      if (!running) return json(res, 200, { ok: true, running: false });
+      try { process.kill(-S.proc.pid, 'SIGTERM'); } catch (e) { try { S.proc.kill('SIGTERM'); } catch (e2) { /* ignore */ } }
+      await store.log(sess.login_id, 'sim.stop', String(S.pid), '');
+      return json(res, 200, { ok: true, running: true, stopping: true });
+    }
+    if (pathname === '/api/sim/start' && method === 'POST') {
+      if (running) return json(res, 409, { error: '이미 실행 중입니다.', pid: S.pid });
+      const body = await readBody(req, 64 * 1024);
+      await store.putState('control', { pause: false, force_scale: 1, feed_scale: 1, ts: Date.now() });   // 새 작업은 컨트롤 초기화
+      const num = (v, d) => (Number.isFinite(Number(v)) ? Number(v) : d);
+      const params = {
+        tool: String(body.tool || 'dual'), force: num(body.force, 5.6), rpm: num(body.rpm, 3000),
+        feed_mm_s: num(body.feed_mm_s, 5.65), overlap: num(body.overlap, 40),
+        robotCount: num(body.robotCount, 3), physical: !!body.physical, max_steps: num(body.max_steps, 6000),
+        hasRail: body.hasRail === undefined ? true : !!body.hasRail, hasLift: body.hasLift === undefined ? true : !!body.hasLift,
+        pad: num(body.pad, 110), carLift: num(body.carLift, 0),
+        recipe: ['base', 'fast', 'quality'].includes(String(body.recipe)) ? String(body.recipe) : 'base',
+      };
+      if (params.force < 3 || params.force > 8) return json(res, 400, { error: '접촉력은 3~8 N 대역 안이어야 합니다.' });
+      /* 레시피 JSON — 시뮬 저장소의 윗면 레시피를 바탕으로 콘솔 값을 덮어쓴다.
+         경로 간격 = 패드 지름 × (1 − 오버랩) → step_over_spacing_ratio */
+      let recipe = {};
+      try { recipe = JSON.parse(fs.readFileSync(path.join(REPO, 'learning', 'polytwin', 'outputs', ({ fast: 'recipes/feed1.5_f1.15_top.json', quality: 'recipes/feed1.3_f1.0_top.json' })[params.recipe] || 'bo_best_recipe_top.json'), 'utf8')); } catch (e) { recipe = {}; }
+      recipe = Object.assign({}, recipe, {
+        recipe_id: 'ui_console', source: 'PolyTwin console (' + sess.login_id + ')',
+        target_contact_force_n: params.force, rpm: params.rpm, feed_speed_mm_s: params.feed_mm_s,
+        step_over_spacing_ratio: Math.max(0.05, Math.min(1.0, 1 - params.overlap / 100)),
+        n_passes: recipe.n_passes || 2,
+      });
+      fs.mkdirSync(OUT, { recursive: true });
+      const recipePath = path.join(OUT, 'ui_recipe.json');
+      fs.writeFileSync(recipePath, JSON.stringify(recipe, null, 1));
+      try { fs.unlinkSync(feed); } catch (e) { /* 없어도 됨 */ }
+      try { fs.unlinkSync(path.join(OUT, 'last_run.json')); } catch (e) { /* 없어도 됨 */ }
+      const env = Object.assign({}, process.env, {
+        POLISH_RL: '1', POLISH_MONITOR_FEED: feed, POLISH_RL_RECIPE_TOP: recipePath, POLISH_RL_RECIPE_SIDE: recipePath,
+        POLISH_RL_OUT: path.join(OUT, 'ui_cells.csv'), POLISH_RENDER_EVERY: '10', POLISH_ROS_PUBLISH: '0',
+        POLISH_ROS_CAMERAS: '0', MAX_SIM_STEPS: String(params.max_steps), POLISH_EXIT_WHEN_DONE: '1',
+        POLISH_PHYSICAL_CONTACT: params.physical ? '1' : '0',
+        /* 콘솔 배치 → v5 (sim_worker.layout_env 와 동일 규칙) */
+        POLISH_ROBOTS: ({ 1: 'C', 2: 'SL,SR' })[Number(params.robotCount)] || 'C,SL,SR',
+        POLISH_RAIL: params.hasRail === false ? '0' : '1', POLISH_LIFT: params.hasLift === false ? '0' : '1',
+        POLISH_PAD_RADIUS: (Number(params.pad || 110) / 2000).toFixed(4),
+        POLISH_CAR_LIFT_Z: (0.90 + Number(params.carLift || 0) / 1000).toFixed(3),
+        POLISH_RECORD: (S.recordPath = path.join(OUT, 'run_local_' + Date.now() + '.sqlite')),
+        POLISH_CONTROL: path.join(OUT, 'control.json'),
+      });
+      const args = [ 'polishing_v5.py', '--obj_name', 'car', '--headless' ];
+      if (body.dry_run) return json(res, 200, { ok: true, dry_run: true, cmd: ISAAC + ' ' + args.join(' '), cwd: path.join(REPO, 'scripts'), recipe, feed });
+      const logPath = path.join(OUT, 'sim_run.log');
+      const logFd = fs.openSync(logPath, 'w');
+      let proc;
+      try {
+        proc = spawn(ISAAC, args, { cwd: path.join(REPO, 'scripts'), env, detached: true, stdio: ['ignore', logFd, logFd] });
+      } catch (e) {
+        return json(res, 500, { error: '시뮬레이션을 시작하지 못했습니다: ' + e.message });
+      }
+      S.proc = proc; S.pid = proc.pid; S.startedAt = Date.now(); S.params = params; S.exitCode = null; S.log = logPath;
+      if (S.tailer) { try { S.tailer.stop(true); } catch { /* */ } }
+      S.tailer = startRunTailer(store, S.recordPath, { name: 'local ' + new Date().toISOString().slice(0, 16).replace('T', ' '), params });
+      proc.on('exit', (code) => { S.exitCode = code === null ? -1 : code; if (S.tailer) S.tailer.stop(S.exitCode !== 0).catch(() => {}); });
+      proc.unref();
+      await store.log(sess.login_id, 'sim.start', String(proc.pid), JSON.stringify(params));
+      return json(res, 201, { ok: true, pid: proc.pid, params, recipe, feed, log: logPath });
+    }
+    return json(res, 404, { error: '없는 요청입니다.' });
+  }
+  /* ── 브라우저 ← 시뮬 기록 (리플레이) ── */
+  if (pathname.indexOf('/api/runs') === 0) {
+    const sess = await sessionOf(req);
+    if (!sess) return json(res, 401, { error: '로그인이 필요합니다.' });
+    const mm = pathname.match(/^\/api\/runs(?:\/(\d+)(?:\/(chunks|events|cells))?|\/import|\/watch)?$/);
+    if (!mm) return json(res, 404, { error: 'not found' });
+    if (pathname === '/api/runs/watch' && method === 'POST') {
+      /* 로컬 전용: GUI 로 직접 띄운 v5(run_v5_rl_view.sh, POLISH_RECORD)의 기록 파일을 따라간다 → 콘솔 목록에 '기록 중' 으로 뜸 */
+      if (process.env.VERCEL) return json(res, 501, { error: '배포 서버에서는 워커 업로드만 지원합니다.' });
+      const body = await readBody(req);
+      const file = String(body.path || '');
+      if (!file) return json(res, 400, { error: 'path 가 필요합니다.' });
+      global.__ptTailers = global.__ptTailers || [];
+      const t = startRunTailer(store, file, { name: String(body.name || ('watch ' + require('node:path').basename(file))) });
+      global.__ptTailers.push(t);
+      return json(res, 200, { ok: true, watching: file });
+    }
+    const runPublic = (r) => ({ id: r.id, job_id: r.job_id, name: r.name, status: r.status, t_sim_end: Number(r.t_sim_end || 0),
+      n_frames: Number(r.n_frames || 0), created_at: Number(r.created_at), finished_at: r.finished_at ? Number(r.finished_at) : null,
+      meta: (() => { try { return JSON.parse(r.meta || '{}'); } catch { return {}; } })(),
+      result: (() => { try { return r.result ? JSON.parse(r.result) : null; } catch { return null; } })() });
+    if (pathname === '/api/runs/import' && method === 'POST') {
+      /* 로컬 전용: 기록 sqlite 파일을 서버 DB 로 복사한다 (Vercel 은 워커 업로드 경로만) */
+      if (process.env.VERCEL) return json(res, 501, { error: '배포 서버에서는 워커 업로드만 지원합니다.' });
+      const body = await readBody(req);
+      const file = String(body.path || '');
+      if (!file || !require('node:fs').existsSync(file)) return json(res, 400, { error: '파일이 없습니다.' });
+      const { DatabaseSync } = require('node:sqlite');
+      const src = new DatabaseSync(file, { readOnly: true });
+      const meta = {}; for (const r of src.prepare('SELECT key, value FROM meta').all()) { try { meta[r.key] = JSON.parse(r.value); } catch { meta[r.key] = r.value; } }
+      const id = await store.createRun({ jobId: body.job_id != null ? Number(body.job_id) : null, name: String(body.name || require('node:path').basename(file)), meta });
+      const chunks = src.prepare('SELECT seq, t0, t1, n, data FROM chunks ORDER BY seq').all();
+      for (let i = 0; i < chunks.length; i += 200) await store.appendChunks(id, chunks.slice(i, i + 200).map((c) => ({ ...c, data: Buffer.from(c.data) })));
+      await store.addRunEvents(id, src.prepare('SELECT id, t, robot, level, msg FROM events ORDER BY id').all());
+      await store.addRunCells(id, src.prepare('SELECT id, t, data FROM cells ORDER BY id').all().map((c) => ({ ...c, data: Buffer.from(c.data) })));
+      const rr = src.prepare('SELECT data FROM result WHERE id = 1').get();
+      let result = null; try { result = rr ? JSON.parse(rr.data) : null; } catch { result = null; }
+      await store.finishRun(id, 'done', result);
+      src.close();
+      return json(res, 200, { ok: true, run: runPublic(await store.getRun(id)), chunks: chunks.length });
+    }
+    if (!mm[1] && method === 'GET') return json(res, 200, { runs: (await store.listRuns(50)).map(runPublic) });
+    const run = mm[1] ? await store.getRun(Number(mm[1])) : null;
+    if (!run) return json(res, 404, { error: 'run not found' });
+    if (!mm[2] && method === 'GET') return json(res, 200, { run: runPublic(run), last_seq: await store.lastChunkSeq(run.id) });
+    if (!mm[2] && method === 'DELETE') {
+      if (run.status === 'recording') return json(res, 409, { error: '기록 중인 런은 지울 수 없습니다. 먼저 정지하세요.' });
+      const n = await store.deleteRun(run.id);
+      await store.log(sess.login_id, 'run.delete', String(run.id), run.name || '');
+      return json(res, 200, { ok: true, deleted: n });
+    }
+    if (mm[2] === 'chunks' && method === 'GET') {
+      const u = new URL(req.url, 'http://x');
+      const from = Number(u.searchParams.get('from') || 0), to = Number(u.searchParams.get('to') || (from + 30));
+      const rows = await store.getChunks(run.id, from, to, 120);
+      return json(res, 200, { run_id: run.id, from, to, chunks: rows.map((c) => ({ seq: Number(c.seq), t0: Number(c.t0), t1: Number(c.t1), n: Number(c.n),
+        data: Buffer.from(c.data).toString('base64') })) });
+    }
+    if (mm[2] === 'events' && method === 'GET') return json(res, 200, { events: await store.getRunEvents(run.id) });
+    if (mm[2] === 'cells' && method === 'GET') {
+      const u = new URL(req.url, 'http://x');
+      const rows = await store.getRunCells(run.id, Number(u.searchParams.get('after') || 0), 20);
+      return json(res, 200, { cells: rows.map((c) => ({ id: Number(c.id), t: Number(c.t), data: Buffer.from(c.data).toString('base64') })) });
+    }
+    return json(res, 405, { error: 'method' });
+  }
+
+  if (pathname === '/api/monitor' && method === 'GET') {
+    const sess = await sessionOf(req);
+    if (!sess) return json(res, 401, { error: '로그인이 필요합니다.' });
+    if (simMode() === 'queue') {
+      /* 배포/큐 모드: 워커가 POST /api/sim/jobs/:id/feed 로 올린 최신 스냅샷 */
+      const row = await store.getState('feed');
+      if (!row) return json(res, 200, { live: false, age_s: null, feed: null });
+      let data = null; try { data = JSON.parse(row.payload); } catch { data = null; }
+      const age = (Date.now() - Number(row.updated_at)) / 1000;
+      const cur = await store.latestJob();
+      const running = !!cur && cur.status === 'running';
+      return json(res, 200, { live: !!data && age < 8 && running, age_s: Math.round(age * 10) / 10, feed: data });
+    }
+    const fs = require('fs'), path = require('path');
+    const feed = process.env.PT_MONITOR_FEED
+      || path.join(__dirname, '..', '..', 'cacadaca', 'learning', 'ui_bridge', 'out', 'monitor_feed.json');
+    try {
+      const raw = fs.readFileSync(feed, 'utf8');
+      const data = JSON.parse(raw);
+      const age = Date.now() / 1000 - Number(data.ts || 0);
+      return json(res, 200, { live: age < 5, age_s: Math.round(age * 10) / 10, feed: data });
+    } catch (e) {
+      return json(res, 200, { live: false, age_s: null, feed: null });
+    }
+  }
   if (pathname.indexOf('/api/dataset/') === 0) {
     const sess = await sessionOf(req);
     if (!sess) return json(res, 401, { error: '로그인이 필요합니다.' });
@@ -282,11 +693,14 @@ async function handleApi(req, res, pathname) {
       const name = String(body.name || '').trim();
 
       if (!refId || refId.length > 64) return json(res, 400, { error: '기록 ID가 올바르지 않습니다.' });
-      if (!body.ref || !body.rl) return json(res, 400, { error: '저장할 기록이 비어 있습니다.' });
+      /* ref(숙련공 정답 세그먼트)가 없어도 실제 시뮬 결과(sim)가 있으면 저장한다 — 실행 종료 시 자동 등록 */
+      if (!body.rl || !(body.ref || body.sim)) return json(res, 400, { error: '저장할 기록이 비어 있습니다.' });
       if (name.length > 200) return json(res, 400, { error: '이름이 너무 깁니다.' });
 
-      /* 클라이언트가 보낸 것 중 라이브러리가 실제로 읽는 것만 남긴다 */
-      const payload = JSON.stringify({ env: body.env || null, rl: body.rl, ref: body.ref });
+      /* 클라이언트가 보낸 것 중 라이브러리가 실제로 읽는 것만 남긴다.
+         sim = 시뮬 결과 요약(품질·RL·셀 처분·레시피), run_id = 기록(sim_runs) — 라이브러리에서 재생 링크 */
+      const payload = JSON.stringify({ env: body.env || null, rl: body.rl, ref: body.ref || null,
+                                       sim: body.sim || null, run_id: body.run_id != null ? Number(body.run_id) : null });
       if (payload.length > 200 * 1024) return json(res, 413, { error: '기록이 너무 큽니다.' });
 
       const { entry, created } = await store.createLibraryEntry({

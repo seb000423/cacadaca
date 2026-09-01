@@ -41,6 +41,10 @@ PT_ADMIN_PW='원하는-비밀번호' node backend/server.js   # 최초 1회에�
 | `PORT` | `8000` | 포트 |
 | `HOST` | `127.0.0.1` | 바인딩 주소. 같은 망에서 보려면 `0.0.0.0` |
 | `PT_DB` | `backend/data/polytwin.db` | DB 경로 |
+| `PT_SIM_MODE` | `local` (Vercel 에선 `queue`) | `local`: 실행 버튼이 이 PC 의 Isaac 을 직접 띄움. `queue`: 작업 행만 만들고 GPU 워커가 가져감 |
+| `PT_SIM_REPO` | `../cacadaca` | (local) 시뮬 저장소 경로 |
+| `PT_MONITOR_FEED` | `<PT_SIM_REPO>/learning/ui_bridge/out/monitor_feed.json` | (local) 시뮬이 쓰는 실시간 피드 파일 |
+| `PT_WORKER_TOKEN` | 없음 | (queue) 워커 인증 토큰 — 없으면 워커 API 가 모두 403 |
 
 ### WAL 주의
 
@@ -188,6 +192,7 @@ assets/js/auth-client.js   헤더 세션 표시 · 로그아웃 · API 래퍼
 | `TURSO_DATABASE_URL` | `libsql://<db>-<org>.turso.io` |
 | `TURSO_AUTH_TOKEN` | Turso 토큰 |
 | `PT_SECRET` | 32바이트 랜덤 (`node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))"`) |
+| `PT_WORKER_TOKEN` | GPU PC 워커와 공유하는 랜덤 토큰 (같은 방법으로 생성) |
 
 ### 절차
 
@@ -204,6 +209,32 @@ TURSO_DATABASE_URL=… TURSO_AUTH_TOKEN=… npm run seed:data
 # 3. 배포
 vercel login && vercel link && vercel --prod
 ```
+
+### 시뮬레이션 워커 (GPU PC)
+
+Vercel 에는 GPU·Isaac 이 없으므로 콘솔의 실행 버튼은 작업(`sim_jobs`)만 만든다. 시뮬 저장소의
+워커가 이 서버를 폴링해 작업을 가져가 Isaac 을 돌리고, 실시간 피드(`sim_state.feed`, 1 KB 덮어쓰기)와
+결과 요약(`sim_jobs.result`)을 올린다. 아웃바운드 HTTPS 만 쓰므로 GPU PC 가 NAT 뒤에 있어도 된다.
+
+```bash
+# GPU PC (시뮬 저장소 cacadaca 루트에서) — PT_WORKER_TOKEN 은 Vercel 과 같은 값
+python3 learning/ui_bridge/sim_worker.py --server https://<app>.vercel.app --token <PT_WORKER_TOKEN>
+python3 learning/ui_bridge/sim_worker.py --server http://127.0.0.1:8000 --token <t> --fake --once   # 연결 확인(합성 피드)
+```
+
+워커 API(헤더 `X-PT-Worker: <토큰>`): `GET /api/sim/jobs/next?worker=<이름>` 클레임 →
+`POST /api/sim/jobs/:id/feed` {feed} (응답 `stopRequested`) → `POST …/result` {result} → `POST …/exit` {exitCode,status}.
+브라우저 쪽은 모드와 무관하게 `POST /api/sim/start|stop`, `GET /api/sim/status`, `GET /api/monitor` 를 쓴다.
+
+### 시뮬 기록(리플레이)
+
+워커는 작업마다 시뮬 프레임(관절각·베이스·힘·상태·진행·공정시간)을 SQLite 로 기록하고 2 s 마다 청크를 올린다:
+`POST /api/sim/runs` {job_id, name, meta} → `POST /api/sim/runs/:id/chunks` {chunks:[{seq,t0,t1,n,data(base64 gzip JSON)}]},
+`…/events`, `…/cells`, `…/meta`, `…/finish` {status, result}. 브라우저(세션)는 `GET /api/runs`, `GET /api/runs/:id`,
+`GET /api/runs/:id/chunks?from=<s>&to=<s>`, `…/events`, `…/cells?after=` 로 받아 보간 재생한다(콘솔 "기록 재생").
+로컬에서만 `POST /api/runs/import {path}` 로 기록 sqlite 파일을 서버 DB 에 복사할 수 있다.
+용량: 10 Hz·로봇 3대 ≈ 1.2 KB/s (18 h ≈ 80 MB) — Turso 무료 한도(5 GB) 안이지만 오래된 런은 지울 것.
+DB 에는 작업 파라미터·최신 피드 한 줄·결과 요약만 들어가고 타일 데이터셋·힘 로그 같은 큰 파일은 GPU PC 에 남는다.
 
 ### 세션 구조 (왜 이렇게인가)
 
