@@ -106,7 +106,10 @@ def cell_normal(r):
 
 def base_for(rid, r):
     cx, cy, cz = float(r["center_x_m"]), float(r["center_y_m"]), float(r["center_z_m"]) + CAR_LIFT_Z
-    if rid == "C": return [0.0, cy, max(2.05, min(2.85, cz + 0.75))]   # 천장 로봇: 갠트리 중앙(x=0) y 이동, 높이는 셀 위 0.75 m (팔이 접혀 차를 뚫지 않게; Isaac 승강 범위 2.05~2.85)
+    if rid == "C":
+        if r["region"] in ("front", "rear"):   # 범퍼: 갠트리 끝에서 낮게 내려와 앞/뒤에서 접근
+            return [cx * 0.5, max(-2.2, min(2.2, cy + (0.55 if r["region"] == "front" else -0.55))), 2.05]
+        return [0.0, cy, max(2.05, min(2.85, cz + 0.75))]   # 천장 로봇: 갠트리 중앙(x=0) y 이동, 높이는 셀 위 0.75 m (팔이 접혀 차를 뚫지 않게; Isaac 승강 범위 2.05~2.85)
     y = cy - 0.35 if r["region"] == "front" else cy + 0.35 if r["region"] == "rear" else cy
     return [POSE[rid]["x"], max(-1.9, min(1.9, y)), max(1.05, min(1.6, cz - 0.05))]   # 베이스를 셀 높이 근처에 — 팔이 수평으로 뻗어 차를 뚫지 않게
 
@@ -124,6 +127,40 @@ for rid, cells in plan.items():
     tl.append((t, t + 1e9, "DONE", None, prev, prev))
     timelines[rid] = tl
 T_END = max(tl[-2][1] for tl in timelines.values())
+
+# ── 전·후면 셀 재배정: 측면 로봇(레일 끝)과 천장 로봇 중 도달(패드 오차)이 좋은 쪽 ──
+if IK is not None:
+    import numpy as _np
+    moved = 0
+    for rid in ("SL", "SR"):
+        keep = []
+        for r in plan[rid]:
+            if r["region"] not in ("front", "rear"): keep.append(r); continue
+            c = _np.array([float(r["center_x_m"]), float(r["center_y_m"]), float(r["center_z_m"]) + CAR_LIFT_Z])
+            n = _np.array(cell_normal(r), float); n /= (_np.linalg.norm(n) or 1.0)
+            e_side = IK.solve(base_T(base_for(rid, r), POSE[rid]["quat"]), c, n, _np.array(POSE[rid]["q"]))[1]
+            e_top = IK.solve(base_T(base_for("C", r), POSE["C"]["quat"]), c, n, _np.array(POSE["C"]["q"]))[1]
+            if e_top + 0.02 < e_side: plan["C"].append(r); moved += 1
+            else: keep.append(r)
+        plan[rid] = keep
+    if moved:
+        plan["C"] = order_for("C", [c for c in plan["C"] if c["region"] == "top"]) + [c for c in plan["C"] if c["region"] != "top"]
+        print(f"front/rear cells moved to ceiling robot: {moved}")
+    # 타임라인 재계산
+    timelines = {}
+    for rid, cells in plan.items():
+        t = 0.0; tl = []; prev = [POSE[rid]["x"] if POSE[rid]["x"] is not None else 0.0, 1.9, POSE[rid]["z"]]
+        for r in cells:
+            b = base_for(rid, r); d = math.dist(prev, b); ts = max(3.0, d / SLIDE_V)
+            tl.append((t, t + ts, "SLIDE", None, prev, b)); t += ts
+            tl.append((t, t + APPROACH_S, "APPROACH", r, b, b)); t += APPROACH_S
+            tp = cell_time(r); tl.append((t, t + tp, "POLISH", r, b, b)); t += tp
+            tl.append((t, t + 3.0, "RETRACT", r, b, b)); t += 3.0
+            prev = b
+        tl.append((t, t + 1e9, "DONE", None, prev, prev))
+        timelines[rid] = tl
+    T_END = max(tl[-2][1] for tl in timelines.values())
+    print(f"reassigned: C={len(plan['C'])} SL={len(plan['SL'])} SR={len(plan['SR'])}  total sim time {T_END/3600:.1f} h")
 
 # ── 오프라인 IK: 셀마다 (접근 시작, 폴리싱 시작, 중간 −, 중간 +, 끝, 후퇴 끝) 관절 키프레임 ──
 KEYQ = {}          # (rid, cell_id) → dict(app0, pol0, polm, polp, pol1, ret1)
@@ -146,8 +183,8 @@ if IK is not None:
             KEYQ[(rid, r["cell_id"])] = keys; prev_q = q_app
             stats.append((e0, d0))
     es = _np.array([x[0] for x in stats]); ds = _np.array([x[1] for x in stats])
-    print(f"IK: {len(stats)} cells, pad error mean {es.mean()*1000:.1f} mm / max {es.max()*1000:.1f} mm, "
-          f"min link clearance mean {ds.mean()*100:.1f} cm, cells < 5 cm: {(ds < 0.05).sum()}")
+    print(f"IK: {len(stats)} cells, pad error mean {es.mean()*1000:.1f} mm / median {_np.median(es)*1000:.1f} / max {es.max()*1000:.1f} mm, "
+          f">5 cm: {(es > 0.05).sum()}, >15 cm: {(es > 0.15).sum()}; min link clearance mean {ds.mean()*100:.1f} cm, cells < 5 cm: {(ds < 0.05).sum()}")
 
 def _lerp_q(qa, qb, u):
     return [float(qa[j] + (qb[j] - qa[j]) * u) for j in range(6)]
