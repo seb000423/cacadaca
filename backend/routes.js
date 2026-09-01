@@ -420,7 +420,9 @@ async function handleApi(req, res, pathname) {
       if (!row) return json(res, 200, { live: false, age_s: null, feed: null });
       let data = null; try { data = JSON.parse(row.payload); } catch { data = null; }
       const age = (Date.now() - Number(row.updated_at)) / 1000;
-      return json(res, 200, { live: !!data && age < 8, age_s: Math.round(age * 10) / 10, feed: data });
+      const cur = await store.latestJob();
+      const running = !!cur && cur.status === 'running';
+      return json(res, 200, { live: !!data && age < 8 && running, age_s: Math.round(age * 10) / 10, feed: data });
     }
     const fs = require('fs'), path = require('path');
     const feed = process.env.PT_MONITOR_FEED
