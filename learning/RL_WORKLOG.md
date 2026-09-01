@@ -1050,3 +1050,32 @@ best map (−x, z, −y) **거울상**(det −1, 회전 부호 전체 반전), �
 브라우저에서 팔이 맞게 서는지(앞뒤 `LIVE_LONG_FLIP`, 좌우, 관절 부호)는 **Isaac 실피드로 실측 후 확정** —
 재실행 종료 후 `run_v5_rl_view.sh --headless` 를 잠깐 띄우고 콘솔을 열어 HOME 자세 비교. 큐 모드는 같은 피드
 필드를 그대로 전달하므로 추가 작업 없음(단 1~2 Hz 스냅샷 보간).
+
+### 9.41 시뮬 기록 → DB → 렉 없는 재생 (UI 동기화 2단계) (2026-09-01 19:55~20:15)
+
+**왜**: 실시간 폴링(0.5~1 s 스냅샷)으로 3D 팔을 움직이면 갱신 주기와 네트워크 지터가 그대로 끊김으로 보인다.
+시뮬이 길면(차 1대 10~18 h) 사람이 실시간으로 볼 일도 없다. → **시뮬이 매 프레임을 DB 에 기록**하고, UI 는
+DB 에서 프레임을 미리 받아 **보간하며 재생**한다(속도 0.5~16×, 탐색). 실시간도 같은 경로로 3 s 지연 재생.
+
+**기록기** `learning/ui_bridge/sim_recorder.py` (`SimRecorder`): SQLite 한 파일 —
+`meta`(scene bbox·로봇·레시피·hz·시작/끝), `chunks`(1 s 묶음 gzip JSON 프레임), `events`, `cells`(판정 스냅샷 ~10 s),
+`result`(last_run.json). 프레임 = `{t, s(state), p(progress), e(elapsed), r:[[id, force, target, state, prog, fs, fd, q[6], pos[3], quat[4]]…]}`.
+10 Hz·로봇 3대 ≈ **1.2 KB/s → 18 h ≈ 80 MB**(gzip). v5 러너: `POLISH_RECORD=<경로|1>` 이면 `_feed_tick` 과 같은 주기로
+기록, 종료 시 결과 저장. `feed_demo.py <초> <피드> <sqlite>` 로 합성 기록.
+
+**전송** `sim_worker.py`(`RunUploader`): 작업마다 `out/run_job<id>_<ts>.sqlite` 에 기록시키고 2 s 마다 새 청크·이벤트·셀을
+`POST /api/sim/runs/:id/chunks|events|cells`(워커 토큰)로 올림, 종료 시 `meta`·`finish`(result). 아웃바운드만.
+
+**서버(UI2 커밋 289c6b9)**: 테이블 `sim_runs`(job_id·status recording/done·meta·result·t_sim_end·n_frames),
+`sim_chunks`(run_id, seq, t0, t1, n, data BLOB), `sim_run_events`, `sim_run_cells`. 브라우저: `GET /api/runs`,
+`GET /api/runs/:id`, `GET /api/runs/:id/chunks?from=&to=`(base64 gzip), `/events`, `/cells?after=`.
+로컬 전용 `POST /api/runs/import {path}` 로 sqlite 파일을 서버 DB 에 복사(Vercel 은 워커 업로드만).
+
+**콘솔(UI2 커밋 93da8b8)**: `viewport.replay`(`ReplayPlayer`) — 30 s 선행 프리페치, `DecompressionStream` 으로 gzip 해제,
+이웃 프레임 보간(q 선형·pos 선형·quat slerp) 후 `setLive(frame, snap=true)` → 60 fps. 기록 중 런은 끝−3 s 를 따라감
+(지연 재생). 패널 "기록 재생": 기록 선택·재생/일시정지·속도·탐색 슬라이더·시뮬 시각 표시. 실행 버튼으로 시작한 작업은
+워커가 기록을 올리기 시작하면 자동으로 지연 재생기로 전환(폴링 경로는 예비). 공정 모니터 값(힘·진행·경과/남음)은
+재생 프레임의 시뮬 시각 기준 — 공정시간 = 시뮬 시간.
+
+**검증**: 합성 기록 6 s(60 프레임·6 청크·7.4 KB) import → 청크/이벤트/런 API 정상. 워커 스트리밍 경로는 큐 작업 + `--fake`
+로 확인(아래 로그). Isaac 실기록은 재실행 종료 후 `POLISH_RECORD=1 bash scripts/run_v5_rl_view.sh --headless` 로 생성 예정.

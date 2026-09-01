@@ -25,6 +25,8 @@ import urllib.request
 _HERE = os.path.dirname(os.path.abspath(__file__))
 _REPO = os.path.dirname(os.path.dirname(_HERE))
 OUT = os.path.join(_HERE, "out")
+if _REPO not in sys.path:
+    sys.path.insert(0, _REPO)          # `python3 learning/ui_bridge/sim_worker.py` 로 실행해도 learning.* 임포트 가능
 
 
 def api(server: str, token: str, path: str, body=None, method: str | None = None, timeout: float = 10.0):
