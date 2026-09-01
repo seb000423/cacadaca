@@ -210,6 +210,8 @@ while t <= T_END + 1.0:
         tcp = None; nrm = None; q = None
         keys = KEYQ.get((rid, r["cell_id"])) if (r is not None and IK is not None) else None
         if keys is not None and state in ("APPROACH", "POLISH", "RETRACT"):
+            c = [float(r["center_x_m"]), float(r["center_y_m"]), float(r["center_z_m"]) + CAR_LIFT_Z]
+            nrm = cell_normal(r); tcp = list(c)
             if state == "APPROACH":
                 q = _lerp_q(keys["app0"], keys["pol0"], u); force = 0.0
             elif state == "POLISH":
@@ -240,7 +242,7 @@ while t <= T_END + 1.0:
         rob = {"id": rid, "force": force, "target": TARGET[rid], "state": state, "progress": done_n / max(1, len(plan[rid])),
                "rl_force_scale": 1.0, "rl_feed_scale": 1.0, "base": {"pos": base, "quat": POSE[rid]["quat"]}}
         if q is not None: rob["q"] = [float(v) for v in q]
-        if tcp is not None and IK is None: rob["tcp"] = tcp; rob["normal"] = nrm   # 콘솔 IK 경로(오프라인 IK 없을 때만)
+        if tcp is not None: rob["tcp"] = tcp; rob["normal"] = nrm   # 작업영역(셀 목표점) — 콘솔 '작업영역 추종' 모드가 쓴다
         robots.append(rob)
         # 셀 완료 시각(RETRACT 시작) 에 판정 기록
         if state == "RETRACT" and r is not None and r["cell_id"] not in done_ids:
