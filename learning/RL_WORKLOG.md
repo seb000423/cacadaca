@@ -1130,3 +1130,17 @@ DB 에서 프레임을 미리 받아 **보간하며 재생**한다(속도 0.5~16
 **UI 동기화 현황(9.37~9.46)**: 설정→Isaac 배치 반영 ✔, 피드(관절·베이스·힘·상태·셀) ✔, 기록→DB→보간 재생(콘솔·모니터) ✔,
 로컬/큐 양쪽 실시간(지연 재생) ✔, 셀 판정 지도 ✔, 결과→라이브러리→재생 링크 ✔. 남은 것: Isaac 실피드로 관절 부호·차 방향
 확정(GPU), Vercel 배포 확인(계정), 오래된 기록 정리 API.
+
+### 9.47 웹 실행 컨트롤 — 일시정지·배율·레시피 프리셋·워커 상태 (2026-09-01 21:30)
+
+- **명령 채널**: 콘솔 `POST /api/sim/control {pause, force_scale, feed_scale}` → 서버 `sim_state.control` → 큐 모드는 워커가
+  피드 POST 응답(`control`)으로 받아 `out/control.json` 에 씀, 로컬 모드는 서버가 직접 씀. v5 러너는 `POLISH_CONTROL` 파일의
+  mtime 을 30 스텝마다 확인해 pause(에이전트 step 건너뜀, 피드 state=HOLD)·배율(`agent._ui_force_scale/_ui_feed_scale`,
+  잔차 정책 배율 위에 곱함; 힘 0.3~2.0, 이송 0.2~3.0; 하드리밋 14 N 은 그대로)을 적용. 실행 시작 시 control 은 초기화.
+- **레시피 프리셋**: 콘솔 select `base | fast | quality` → 워커/로컬 spawn 이 `learning/polytwin/outputs/recipes/`
+  (`feed1.5_f1.15_*.json` = 시간 단축 −43 %, `feed1.3_f1.0_*.json` = 품질 우선 148/150) 를 top/side 로 사용; 프리셋이면 힘·이송은
+  프리셋 값, rpm·겹침만 콘솔 값.
+- **워커 상태**: 워커의 `jobs/next` 폴링이 `sim_state.worker` 하트비트를 남기고 `/api/sim/status.worker_online`(10 s) 로 콘솔에
+  "GPU 워커 온라인/오프라인" 표시.
+- 콘솔 실행 패널에 "실행 컨트롤" 섹션(일시정지/재개·배율 ±0.1·초기화). 검증: 가짜 시뮬로 pause → HOLD, resume+힘×1.3 → 힘 값 배율
+  반영, control.json 전달 확인. (시뮬 커밋 d89a3fc·d3b0454, UI2 965f36a)
