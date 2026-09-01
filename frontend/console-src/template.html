@@ -640,6 +640,8 @@ class Component extends DCLogic {
 
   toggleRun() {
     if (this.state.replay && this.state.replay.active && !this._liveRun) return this.stopReplay();
+    /* 실행 직후 6 s 안의 클릭은 무시 — Isaac 기동(~60 s) 동안 반응이 없어 보여 다시 누르면 정지 요청이 나가 버린다 */
+    if (this.state.running && this._liveRun && this._runT0 && performance.now() - this._runT0 < 6000) return;
     if (this.state.running) {
       if (this._liveRun) {
         fetch('/api/sim/stop', { method: 'POST', credentials: 'same-origin' }).catch(() => {});
@@ -707,7 +709,8 @@ class Component extends DCLogic {
     hist.push(force); if (hist.length > 44) hist.shift();
     const prog = feed ? Math.max(0, Math.min(1, Number(feed.progress) || 0)) : 0;
     return { prog, force, dev: force - target, target, rpm: t.rpm, feed: t.feed * 1000,
-             cov: prog * 100, hist: hist.slice(), cells: [], points: 0, assigned: 0, live: !!feed };
+             cov: prog * 100, hist: hist.slice(), cells: [], points: 0, assigned: 0, live: !!feed,
+             starting: !feed };   // 피드가 아직 없음 = 작업 대기 또는 Isaac 기동 중
   }
   finishLiveRun(result) {
     const seed = this.state.seed;
@@ -864,7 +867,7 @@ class Component extends DCLogic {
     }));
 
     return {
-      running: true, idle: false, panelTitle: rp ? (rp.follow ? '공정 모니터링 · 지연 재생' : '기록 재생') : '공정 모니터링',
+      running: true, idle: false, panelTitle: rp ? (rp.follow ? '공정 모니터링 · 지연 재생' : '기록 재생') : (m.starting ? '공정 모니터링 · Isaac 기동 중 (약 1분)' : '공정 모니터링'),
       monPct: pct.toFixed(1),
       monBarW: pct.toFixed(1) + '%',
       monElapsed: mmss(elSec),
@@ -1103,7 +1106,7 @@ class Component extends DCLogic {
       spacing: String(spacing),
       passes: String(passes),
       eta: mmss(Math.round(passes * 8)),
-      runLabel: s.running ? '공정 중단' : (s.replay && s.replay.active ? '재생 중지' : 'RL 공정 시작'),
+      runLabel: s.running ? (s.mon && s.mon.starting && this._liveRun ? 'Isaac 기동 중 — 잠시 기다려 주세요' : '공정 중단') : (s.replay && s.replay.active ? '재생 중지' : 'RL 공정 시작'),
       hasRuns: s.runs.length > 0,
       runOpts: s.runs.map((r) => ({ id: String(r.id),
         label: (r.name || ('run ' + r.id)) + ' · ' + (r.status === 'recording' ? '기록 중' : r.status === 'done' ? '완료' : r.status)
