@@ -494,6 +494,7 @@ const MESHOPT_URL = asset('assets/vendor/meshopt_decoder.mjs');
 // 차체는 디스크의 압축본을 쓴다. 번들에 박아 두면 HTML 하나가 6MB 가 된다 —
 // CLAUDE.md 성능 예산과 '자산을 base64 로 박지 마라' 규칙 그대로다.
 const CAR_URL = asset('assets/models/car.opt.glb');
+const SCAN_CAR_URL = asset('assets/models/car_scan.glb');   // Isaac 이 쓰는 스캔 차체(BMW Z4 스캔, 미터, 길이 3.04 m) — 시뮬 동기화용
 
 const RIG = {
   j1: { p: [0.000000, 0.134500, 0.000000], a: [0.000000, 1.000000, 0.000000] },
@@ -916,7 +917,15 @@ class PolyTwinViewport extends HTMLElement {
     }
     // only the Z4 has a real model; the other two are the same body restyled,
     // standing in until their own scans arrive
-    const tint = { z4: 0x2f343b, coupe: 0x3a3f47, sf90: 0x4a2226 }[id] || 0x2f343b;
+    const tint = { z4: 0x2f343b, coupe: 0x3a3f47, sf90: 0x4a2226, scan: 0x2f343b }[id] || 0x2f343b;
+    if (id === 'scan') {
+      // Isaac 과 같은 스캔 메시 — 시뮬 피드/기록을 따를 때 자동 선택된다 (크기·형상이 시뮬과 동일)
+      const scan = await loadCar(SCAN_CAR_URL);
+      scan.traverse((o) => { if (o.isMesh) { o.material = new THREE.MeshPhysicalMaterial({ color: tint, metalness: 0.75, roughness: 0.32, clearcoat: 1.0, clearcoatRoughness: 0.08 }); o.castShadow = true; o.receiveShadow = true; } });
+      this._models.set(id, scan);
+      this._showVehicle(id);
+      return;
+    }
     // one parse of the 8 MB file, then share geometry between vehicles
     this._basePromise = this._basePromise || loadCar(CAR_URL);
     const base = await this._basePromise;
@@ -1018,9 +1027,16 @@ class PolyTwinViewport extends HTMLElement {
     const LONG = (this._field && this._field.long) || (size.x >= size.z ? 'x' : 'z');
     const CROSS = LONG === 'x' ? 'z' : 'x';
     this._axes = { LONG, CROSS };
-    const half = size[CROSS] / 2 + 0.46;
-    const l0 = mid[LONG] - size[LONG] * 0.42;
-    const l1 = mid[LONG] + size[LONG] * 0.42;
+    let half = size[CROSS] / 2 + 0.46;
+    let l0 = mid[LONG] - size[LONG] * 0.42;
+    let l1 = mid[LONG] + size[LONG] * 0.42;
+    /* 시뮬을 따르는 중이면 설비 수치도 Isaac 값(feed.scene): 측면 레일 x, 갠트리 반길이·반폭·보 높이 */
+    const SC = this._liveScene, XF = this._liveXf;
+    const liveGear = !!(SC && XF && SC.rail_x && SC.gantry_half_y);
+    if (liveGear) {
+      half = Math.abs(Number(SC.rail_x[0]) || 1.36);
+      l0 = XF.t.z - Number(SC.gantry_half_y); l1 = XF.t.z + Number(SC.gantry_half_y);
+    }
     /* 받침대 높이는 차체 리프트를 따라가지 않는다. 같이 올라가면 어깨와
        옆면의 상대 높이가 그대로라 차를 든 의미가 없다 — 실제로 리프트는
        차를 로봇 쪽으로 올리는 장치다. 차를 들면 사이드실이 어깨로 올라오고
@@ -1054,7 +1070,7 @@ class PolyTwinViewport extends HTMLElement {
       const side = SLOTS[i][0];
       const cell = robotCell(this._armParts, this.armMats);
       cell.position.set(0, 0, 0);
-      cell.position[CROSS] = mid[CROSS] + side * half;
+      cell.position[CROSS] = (liveGear ? XF.t.x : mid[CROSS]) + side * half;
       cell.position[LONG] = mid[LONG] + size[LONG] * SLOTS[i][1];
       buildStand(cell, standY);
       cell.userData.armRoot.position.y = standY;
@@ -1130,7 +1146,7 @@ class PolyTwinViewport extends HTMLElement {
 
     // 천장 갠트리 — 지붕은 옆에서 못 닿는다. 위에서 한 대가 맡는다.
     if (ceiling && this._railGeo && this._liftGeo) {
-      const beamY = surfaceY + 1.28;
+      const beamY = liveGear && SC.gantry_beam_z ? Number(SC.gantry_beam_z) + XF.t.y : surfaceY + 1.28;
       const beam = new THREE.Mesh(this._railGeo, this.armMats.rail);
       beam.scale.set(0.55, 1, (l1 - l0) / this._railGeo.userData.size.z);
       beam.rotation.x = Math.PI;                     // 레일 면을 아래로 향하게
@@ -1141,7 +1157,7 @@ class PolyTwinViewport extends HTMLElement {
       this.props.add(beam);
 
       // 문형 프레임 — 양쪽에 기둥을 세우고 위를 가로보로 잇는다
-      const postC = half + 0.62;
+      const postC = liveGear && SC.gantry_half_x ? Number(SC.gantry_half_x) + 0.25 : half + 0.62;
       for (const lEnd of [l0, l1]) {
         for (const sc of [-1, 1]) {
           const post = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.09, beamY, 12), this.armMats.dark);
@@ -1363,6 +1379,10 @@ class PolyTwinViewport extends HTMLElement {
   setLive(feed, snap = false) {
     const had = !!this._live;
     this._live = feed && feed.robots && feed.robots.some((r) => Array.isArray(r.q) || r.tcp) ? feed : null;
+    if (this._live && !had && this._vehicle !== 'scan') {          // 시뮬을 따르는 동안은 Isaac 과 같은 스캔 차체
+      this._vehicleBefore = this._vehicle;
+      this.setVehicle('scan').then(() => { this._liveXf = null; if (this._live && this._live.scene) this._buildLiveXform(this._live.scene); }).catch(() => {});
+    }
     this._liveSnap = !!snap;
     if (this._live && this._live.scene && !this._liveXf) this._buildLiveXform(this._live.scene);
     if (this._live && this._cellsEnabled && this._live.cells && Array.isArray(this._live.cells.items)) this.setCells(this._live.cells, this._live.scene);   // 실시간 피드의 셀 스냅샷(옵션)
@@ -1370,6 +1390,8 @@ class PolyTwinViewport extends HTMLElement {
     if (had && !this._live) {
       this.raster.visible = true;
       this.clearCells();
+      this._liveScene = null;
+      if (this._vehicleBefore && this._vehicleBefore !== 'scan') { const vb = this._vehicleBefore; this._vehicleBefore = null; this.setVehicle(vb).catch(() => {}); }
       if (this._modelScale0 && this._model) {        // 차체 크기·배치 원복
         this._model.scale.copy(this._modelScale0); this._model.updateMatrixWorld(true);
         this._cellSig = null; this.layoutCells();
@@ -1387,6 +1409,7 @@ class PolyTwinViewport extends HTMLElement {
   /* Isaac 월드 → 콘솔 월드. 차 점군 bbox(feed.scene) 와 콘솔 차체 bbox 를 맞춘다(길이축 스케일 + 중심 정렬). */
   _buildLiveXform(scene) {
     if (!this._model || !scene || !scene.car_min || !scene.car_max) return;
+    this._liveScene = scene;
     this._model.updateMatrixWorld(true);
     const b = new THREE.Box3().setFromObject(this._model);
     const mid = b.getCenter(new THREE.Vector3()), size = b.getSize(new THREE.Vector3());
