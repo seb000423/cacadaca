@@ -698,10 +698,23 @@ function robotCell(parts, mats) {
   padAnchor.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), j6a);
   parent.add(padAnchor);
 
-  const padDisc = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.055, 0.005, 36), mats.pad);
-  padDisc.rotation.x = Math.PI / 2;
-  padDisc.position.z = 0.0025;
+  /* 연마 스펀지 패드 — 접촉면(앵커 원점)에서 툴 쪽(+Z)으로 2.8 cm 두께의 폼 + 어두운 백킹 플레이트.
+     떠 있는 얇은 원판 대신 실제 패드처럼 보이고, 툴 하우징과의 틈을 메운다. */
+  const padDisc = new THREE.Group();
+  const foam = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.052, 0.028, 40), mats.pad);
+  foam.rotation.x = Math.PI / 2; foam.position.z = 0.014; foam.castShadow = true;
+  const plate = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.01, 40), mats.dark);
+  plate.rotation.x = Math.PI / 2; plate.position.z = 0.033;
+  const stem = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.018, 0.05, 16), mats.dark);
+  stem.rotation.x = Math.PI / 2; stem.position.z = 0.06;
+  padDisc.add(foam, plate, stem);
   padAnchor.add(padDisc);
+  // 작업 지점 표시 — 레이저처럼 툴에서 표면으로 내려오는 투명한 빔과 표면 글로우(월드에 두고 매 프레임 옮긴다)
+  const glow = new THREE.MeshBasicMaterial({ color: 0x8FE9FF, transparent: true, opacity: 0.42, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
+  const spot = new THREE.Mesh(new THREE.CircleGeometry(0.075, 40), glow);
+  const beam = new THREE.Mesh(new THREE.CylinderGeometry(0.005, 0.012, 1, 12, 1, true), new THREE.MeshBasicMaterial({ color: 0x8FE9FF, transparent: true, opacity: 0.22, blending: THREE.AdditiveBlending, depthWrite: false }));
+  spot.visible = false; beam.visible = false;
+  g.userData.spot = spot; g.userData.beam = beam;
 
   g.userData.joints = joints;
   g.userData.padAnchor = padAnchor;
@@ -886,7 +899,7 @@ class PolyTwinViewport extends HTMLElement {
         clearcoat: 0.4, clearcoatRoughness: 0.3, envMapIntensity: 1.1,
       }),
       tool: new THREE.MeshPhysicalMaterial({ color: 0x2A3038, metalness: 0.6, roughness: 0.4 }),
-      pad: new THREE.MeshPhysicalMaterial({ color: 0x3E9DBE, metalness: 0.1, roughness: 0.72 }),
+      pad: new THREE.MeshStandardMaterial({ color: 0xD8B24A, metalness: 0.0, roughness: 0.95 }),   // 연마 스펀지(폼) 색
       lift: new THREE.MeshPhysicalMaterial({ color: 0x5b626b, metalness: 0.45, roughness: 0.62, envMapIntensity: 0.45 }),
       rail: new THREE.MeshPhysicalMaterial({ color: 0x474d55, metalness: 0.5, roughness: 0.58, envMapIntensity: 0.4 }),
     };
@@ -1053,7 +1066,7 @@ class PolyTwinViewport extends HTMLElement {
     if (sig === this._cellSig) return;
     this._cellSig = sig;
 
-    this._cells.forEach((c) => this.robots.remove(c));
+    this._cells.forEach((c) => { this.robots.remove(c); if (c.userData.spot) this.robots.remove(c.userData.spot, c.userData.beam); });
     while (this.props.children.length) this.props.remove(this.props.children[0]);
     this._cells = [];
 
@@ -1132,6 +1145,7 @@ class PolyTwinViewport extends HTMLElement {
       cell.userData.span = [l0, l1];
       cell.userData.home = cell.position[LONG];
       this.robots.add(cell);
+      this.robots.add(cell.userData.spot, cell.userData.beam);
       this._cells.push(cell);
     }
 
@@ -1242,6 +1256,7 @@ class PolyTwinViewport extends HTMLElement {
       cell.userData.span = [l0, l1];
       cell.userData.home = mid[LONG];
       this.robots.add(cell);
+      this.robots.add(cell.userData.spot, cell.userData.beam);
       this._cells.unshift(cell);                     // Isaac 피드 순서(C, SL, SR)와 같게 앞에
     }
 
@@ -1725,7 +1740,7 @@ class PolyTwinViewport extends HTMLElement {
       // 패드 자전·연마 자국 — 접촉 중(POLISH)일 때만. 자국은 패드가 3 mm 이상 움직였을 때만 찍는다
       // (매 프레임 찍으면 텍스처 재업로드가 프레임마다 일어난다).
       const rpm = this._params.rpm || 3000;
-      cell.userData.padDisc.rotation.y += (rpm / 60) * Math.PI * 2 * dt;
+      cell.userData.padDisc.rotation.z += (rpm / 60) * Math.PI * 2 * dt;
       if (r.state === 'POLISH' && (Number(r.force) || 0) > 0.5) {
         cell.userData.padAnchor.getWorldPosition(_p);
         const last = cell.userData.liveStamp || (cell.userData.liveStamp = new THREE.Vector3(1e9, 1e9, 1e9));
@@ -1950,10 +1965,28 @@ class PolyTwinViewport extends HTMLElement {
         _ikPad.copy(pt).addScaledVector(nrm, -PATH_LIFT);
         _ikBack.copy(_ikPad).addScaledVector(nrm, 0.12);
 
+        // 작업 지점 빛: 표면 글로우(법선 정렬) + 손목→표면 빔. 접촉 중일 때만, 숨쉬듯 맥동
+        {
+          const spot = cell.userData.spot, beam = cell.userData.beam;
+          if (spot && beam) {
+            if (contact) {
+              spot.visible = true; beam.visible = true;
+              spot.position.copy(_ikPad).addScaledVector(nrm, 0.006);
+              spot.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), nrm);
+              spot.material.opacity = 0.3 + 0.18 * (0.5 + 0.5 * Math.sin(t * 6 + ci));
+              const wrist = cell.userData.joints[5].getWorldPosition(new THREE.Vector3());
+              const dir = new THREE.Vector3().subVectors(_ikPad, wrist); const len = Math.max(0.01, dir.length()); dir.normalize();
+              beam.position.copy(wrist).addScaledVector(dir, len / 2);
+              beam.scale.set(1, len, 1);
+              beam.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir);
+            } else { spot.visible = false; beam.visible = false; }
+          }
+        }
+
         // 이번 프레임 시작 자세를 기억해 두고 푼다
         const q0 = cell.userData.qPrev || (cell.userData.qPrev = cell.userData.q.slice());
         for (let jj = 0; jj < 6; jj++) q0[jj] = cell.userData.q[jj];
-        solveIK(cell, _ikPad, _ikBack, 12);
+        solveIK(cell, _ikPad, _ikBack, 8);
 
         // 관절 각속도 제한 — 해가 튀어도 팔은 튀지 않게
         const maxStep = JOINT_RATE * dt;
@@ -1967,19 +2000,13 @@ class PolyTwinViewport extends HTMLElement {
 
         // 패드 자전 — 공정 중일 때만 RPM 대로 돈다
         const rpm = p.rpm || 3000;
-        cell.userData.padDisc.rotation.y += (rpm / 60) * Math.PI * 2 * dt;
+        cell.userData.padDisc.rotation.z += (rpm / 60) * Math.PI * 2 * dt;
 
-        // 지나간 자리를 무광에서 유광으로
-        if (contact) {
-          cell.userData.padAnchor.getWorldPosition(_ikBase);
-          this.stampPolish(_ikBase, (p.pad / 1000) / 2);
-        }
+        // 지나간 자리를 무광에서 유광으로 — 빛이 닿는 표면 작업점(패드가 조금 떠도 광택은 정확히 그 자리)
+        if (contact) this.stampPolish(_ikPad, (p.pad / 1000) / 2);
       }
 
-      if (lead) this.head.position.copy(lead);
-      this.head.visible = true;
-      const pulse = 0.55 + Math.sin(t * 14) * 0.3;
-      this.head.material.opacity = pulse;
+      this.head.visible = false;   // 작업점 구슬 대신 빔·글로우가 보여준다
     }
 
   }
@@ -2031,7 +2058,8 @@ class PolyTwinViewport extends HTMLElement {
           moved = true;
         }
         if (moved) setCellQ(cell, q);
-        if (cell.userData.padDisc) cell.userData.padDisc.rotation.y = 0;
+        if (cell.userData.padDisc) cell.userData.padDisc.rotation.z = 0;
+        if (cell.userData.spot) { cell.userData.spot.visible = false; cell.userData.beam.visible = false; }
         cell.userData.qPrev = null;
       }
       this.head.visible = false;              // 작업점 표시도 공정 중에만
