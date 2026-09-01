@@ -140,7 +140,8 @@ if IK is not None:
             n = _np.array(cell_normal(r), float); n /= (_np.linalg.norm(n) or 1.0)
             e_side = IK.solve(base_T(base_for(rid, r), POSE[rid]["quat"]), c, n, _np.array(POSE[rid]["q"]))[1]
             e_top = IK.solve(base_T(base_for("C", r), POSE["C"]["quat"]), c, n, _np.array(POSE["C"]["q"]))[1]
-            if e_top + 0.02 < e_side: plan["C"].append(r); moved += 1
+            # 측면 로봇이 10 cm 이내로 못 닿을 때만 천장으로 — 공정시간(3대 병렬 균형)을 크게 흔들지 않게
+            if e_side > 0.10 and e_top + 0.02 < e_side: plan["C"].append(r); moved += 1
             else: keep.append(r)
         plan[rid] = keep
     if moved:
