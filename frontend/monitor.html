@@ -269,6 +269,7 @@ button { font: inherit; color: inherit; background: none; border: 0; cursor: poi
 
   <section class="view" aria-label="실시간 3D 뷰">
     <canvas id="cv"></canvas>
+    <div id="vpwrap" style="position: absolute; inset: 0; display: none"><polytwin-viewport id="vp" vehicle="z4" style="position: absolute; inset: 0"></polytwin-viewport></div>
 
     <div class="view__top">
       <div class="cams" id="cams" role="group" aria-label="카메라"></div>
@@ -317,6 +318,16 @@ button { font: inherit; color: inherit; background: none; border: 0; cursor: poi
 
 </div>
 
+<script>
+  /* ① 콘솔과 같은 3D 엔진(console-src/viewport.js)을 그대로 쓴다 — 기록 재생 시 공정 애니메이션이 콘솔과 동일하게 동기화된다 */
+  window.__resources = {
+    three: new URL('./assets/vendor/three.module.js', location.href).href,
+    gltfLoader: new URL('./assets/vendor/loaders/GLTFLoader.js', location.href).href,
+    orbitControls: new URL('./assets/vendor/controls/OrbitControls.js', location.href).href,
+    bufferGeometryUtils: new URL('./assets/vendor/utils/BufferGeometryUtils.js', location.href).href,
+  };
+</script>
+<script type="module" src="./console-src/viewport.js"></script>
 <script type="importmap">
 { "imports": { "three": "./assets/vendor/three.module.js",
                "three/addons/": "./assets/vendor/" } }
@@ -744,15 +755,35 @@ function replayFeed(fr) {
   return { ts: Date.now() / 1000, state: fr.s, progress: fr.p, elapsed_s: fr.e, robots,
            metrics: { cv, band, keep, cov: 100 * fr.p, unif: 100 - Math.min(cv, 100) * 0.5, over }, events: ev, t_sim: fr.t };
 }
+let VP_MODE = false;   // 콘솔 뷰포트가 3D 를 그리는 중 (모니터 자체 장면은 멈춤)
 async function replayStart(id, speed) {
   REPLAY.id = id; REPLAY.speed = speed || 1;
   const r = await fetch('/api/runs/' + id, { cache: 'no-store' }).then((x) => x.json());
   REPLAY.run = r.run; REPLAY.follow = r.run.status === 'recording';
   try { REPLAY.events = ((await fetch(`/api/runs/${id}/events`, { cache: 'no-store' }).then((x) => x.json())).events || []).map((e) => ({ ...e, t: Number(e.t) })); } catch { REPLAY.events = []; }
-  REPLAY.on = true; REPLAY.t = 0;
-  await replayEnsure(0);
   document.body.dataset.live = '1';
   addEvent('C', '기록 재생 — ' + (r.run.name || ('run ' + id)) + ' · ' + REPLAY.speed + 'x', 'info');
+  /* 콘솔과 같은 뷰포트로 3D 재생: 기록의 환경 설정을 복원하고, 뷰포트 플레이어의 프레임으로 데이터 패널을 채운다 */
+  try {
+    await customElements.whenDefined('polytwin-viewport');
+    const vp = $('vp'); $('vpwrap').style.display = 'block'; $('cv').style.display = 'none';
+    await new Promise((res) => setTimeout(res, 50));
+    const pr = (r.run.meta && r.run.meta.params) || {}, rv = (r.run.meta && r.run.meta.recipe_values) || {};
+    const robots = (r.run.meta && r.run.meta.robots) || [];
+    const set = robots.map((x) => x.id).sort().join('/');
+    const robotCount = pr.robotCount || (set === 'C' ? 1 : set === 'SL/SR' ? 2 : 3);
+    vp.setParams({ robotCount, hasRail: pr.hasRail !== undefined ? !!pr.hasRail : true, hasLift: pr.hasLift !== undefined ? !!pr.hasLift : true,
+                   pad: Number(pr.pad || (rv.pad_radius_m ? rv.pad_radius_m * 2000 : 110)), overlap: rv.step_over_ratio ? Math.round(100 * (1 - rv.step_over_ratio)) : 40,
+                   feed: rv.feed_mm_s ? rv.feed_mm_s / 1000 : 0.03, force: rv.force_n || 8, rpm: rv.rpm || 3000, carLift: (Number(pr.carLift) || 0) / 1000, running: false });
+    const pl = vp.replay;
+    pl.onFrame = (feed, raw) => { LIVE.on = true; LIVE.feed = replayFeed(raw); };
+    pl.onState = (st) => { REPLAY.t = st.t; REPLAY.speed = st.speed; };
+    await pl.load(id); pl.setSpeed(REPLAY.speed); pl.play();
+    VP_MODE = true; REPLAY.on = false;
+    return;
+  } catch (e) { console.warn('콘솔 뷰포트 재생 실패 — 모니터 자체 3D 로 대체', e); }
+  REPLAY.on = true; REPLAY.t = 0;
+  await replayEnsure(0);
 }
 function replayTick(dt) {
   if (!REPLAY.run) return;
@@ -833,16 +864,15 @@ function loop(now) {
 
   if (REPLAY.on) replayTick(dt);
   const p = LIVE.on ? Math.max(0, Math.min(1, Number(LIVE.feed.progress) || 0)) : S.t / CYCLE;
-  animate3D(p, dt);
+  if (!VP_MODE) animate3D(p, dt);
 
   acc += dt;
   if (acc >= 0.25) { if (LIVE.on) tickLive(LIVE.feed); else tickData(p, acc); acc = 0; }
 
   frames++; fpsT += dt;
-  if (fpsT >= 1) { $('fps').textContent = (REPLAY.on ? ('REPLAY ' + REPLAY.speed + 'x · ' + hhmmss(REPLAY.t) + ' · ') : LIVE.on ? 'LIVE · ' : 'DEMO · ') + Math.round(frames / fpsT) + ' fps'; frames = 0; fpsT = 0; }
+  if (fpsT >= 1) { $('fps').textContent = ((REPLAY.on || VP_MODE) ? ('REPLAY ' + REPLAY.speed + 'x · ' + hhmmss(REPLAY.t) + ' · ') : LIVE.on ? 'LIVE · ' : 'DEMO · ') + Math.round(frames / fpsT) + ' fps'; frames = 0; fpsT = 0; }
 
-  placeCamera();
-  renderer.render(scene, camera);
+  if (!VP_MODE) { placeCamera(); renderer.render(scene, camera); }
 }
 
 function animate3D(p, dt) {
