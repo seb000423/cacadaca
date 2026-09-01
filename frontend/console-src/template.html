@@ -320,7 +320,7 @@
       </sc-if>
       <div sc-camel-on-click="{{ toggleRun }}" style="padding: 17px 0; border: 1px solid {{ runBorder }}; background: {{ runBg }}; font-size: 16px; font-weight: 500; letter-spacing: 0.18em; text-transform: uppercase; color: var(--text-hi); text-align: center; cursor: pointer; transition: background-color 220ms cubic-bezier(0.4,0,0.2,1), border-color 220ms cubic-bezier(0.4,0,0.2,1), color 220ms cubic-bezier(0.4,0,0.2,1)">{{ runLabel }}</div>
       <div style="display: flex; gap: 10px">
-        <a href="monitor.html" style="flex: 1; padding: 10px 0; font-size: 14px; letter-spacing: 0.06em; color: var(--text-lo); text-align: center; transition: color var(--t-base) var(--e-out); word-break: keep-all">② 공정 감시 →</a>
+        <a href="{{ monitorHref }}" style="flex: 1; padding: 10px 0; font-size: 14px; letter-spacing: 0.06em; color: var(--text-lo); text-align: center; transition: color var(--t-base) var(--e-out); word-break: keep-all">② 공정 감시 →</a>
         <a href="PolyTwin%20Save.html" style="flex: 1; padding: 10px 0; font-size: 14px; letter-spacing: 0.06em; text-align: center; color: var(--text-lo); transition: color var(--t-base) var(--e-out); word-break: keep-all" style-hover="color: var(--text-mid)">③ 결과 저장 →</a>
         <div sc-camel-on-click="{{ goLibrary }}" tabindex="0" style="flex: 1; padding: 10px 0; font-size: 14px; letter-spacing: 0.06em; color: var(--text-lo); text-align: center; cursor: pointer; transition: color var(--t-base) var(--e-out); word-break: keep-all" style-hover="color: var(--text-mid)">④ 라이브러리 →</div>
       </div>
@@ -1052,6 +1052,7 @@ class Component extends DCLogic {
         label: (r.name || ('run ' + r.id)) + ' · ' + (r.status === 'recording' ? '기록 중' : r.status === 'done' ? '완료' : r.status)
                + ' · ' + mmss(Math.round(Number(r.t_sim_end) || 0)) })),
       replayId: s.replayId,
+      monitorHref: s.replayId ? ('monitor.html?run=' + s.replayId + '&speed=' + (s.replay ? s.replay.speed : 1)) : 'monitor.html',
       replayPos: s.replay && s.replay.duration > 0 ? String(Math.round(1000 * s.replay.t / s.replay.duration)) : '0',
       replayTime: s.replay ? (mmss(Math.round(s.replay.t)) + ' / ' + mmss(Math.round(s.replay.duration)) + (s.replay.follow ? ' · LIVE' : '')) : '',
       replayBtn: s.replay && s.replay.playing ? '일시정지' : '재생',

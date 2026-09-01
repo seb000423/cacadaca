@@ -694,8 +694,84 @@ async function pollLive() {
     if (LIVE.on) { LIVE.on = false; LIVE.feed = null; document.body.dataset.live = '0'; }
   }
 }
-setInterval(pollLive, 500);
-pollLive();
+/* ══ 기록 재생 ═══════════════════════════════
+   monitor.html?run=<id>[&speed=4] — 서버 DB 의 시뮬 기록(/api/runs/:id/chunks)을 시뮬 시각 기준으로 재생한다.
+   청크를 30 s 앞서 받아 두고 시각 ≤ t 인 프레임을 쓰므로 폴링 지터가 없다. 기록 중인 런은 끝−3 s 를 따라간다. */
+const REPLAY = { on: false, id: null, run: null, t: 0, speed: 1, frames: [], loadedTo: -1, loading: false, events: [], evIdx: 0,
+                 hist: {}, follow: false, lastRefresh: 0 };
+async function gunzipJson(b64) {
+  const bin = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+  const ds = new DecompressionStream('gzip');
+  const w = ds.writable.getWriter(); w.write(bin); w.close();
+  return JSON.parse(await new Response(ds.readable).text());
+}
+async function replayEnsure(t) {
+  if (!REPLAY.run || REPLAY.loading) return;
+  const need = t + 30 * Math.max(1, REPLAY.speed);
+  if (REPLAY.loadedTo >= need) return;
+  REPLAY.loading = true;
+  try {
+    const from = Math.max(0, REPLAY.loadedTo);
+    const r = await fetch(`/api/runs/${REPLAY.id}/chunks?from=${from}&to=${Math.min(need, from + 110)}`, { cache: 'no-store' }).then((x) => x.json());
+    const have = new Set(REPLAY.frames.map((f) => f.t));
+    for (const c of r.chunks || []) {
+      for (const f of await gunzipJson(c.data)) if (!have.has(f.t)) { REPLAY.frames.push(f); have.add(f.t); }
+      REPLAY.loadedTo = Math.max(REPLAY.loadedTo, c.t1);
+    }
+    REPLAY.frames.sort((a, b) => a.t - b.t);
+    if (!(r.chunks || []).length) REPLAY.loadedTo = Math.max(REPLAY.loadedTo, need);
+    const cut = t - 60; let k = 0; while (k < REPLAY.frames.length && REPLAY.frames[k].t < cut) k++; if (k) REPLAY.frames.splice(0, k);
+  } catch (e) { console.warn('재생 청크 로드 실패', e); }
+  finally { REPLAY.loading = false; }
+}
+/* 압축 프레임 → /api/monitor 피드 모양 (+ 최근 240 표본으로 cv/band/keep 계산: MonitorFeed 와 같은 정의) */
+function replayFeed(fr) {
+  const robots = fr.r.map((a) => ({ id: a[0], force: a[1], target: a[2], state: a[3], progress: a[4], rl_force_scale: a[5], rl_feed_scale: a[6] }));
+  const all = [];
+  robots.forEach((r) => { const h = REPLAY.hist[r.id] || (REPLAY.hist[r.id] = []); h.push(r.force); if (h.length > 240) h.shift(); h.forEach((v) => { if (v > 0.3) all.push(v); }); });
+  let cv = 0, band = 0, keep = 0;
+  if (all.length >= 4) {
+    const m = all.reduce((a, b) => a + b, 0) / all.length;
+    const sd = Math.sqrt(all.reduce((a, b) => a + (b - m) * (b - m), 0) / all.length);
+    cv = m > 1e-6 ? 100 * sd / m : 0;
+    band = 100 * all.filter((v) => v >= BAND[0] && v <= BAND[1]).length / all.length;
+    const tg = robots[0] ? robots[0].target : m;
+    keep = 100 * all.filter((v) => Math.abs(v - tg) <= 1.0).length / all.length;
+  }
+  const ev = [];
+  while (REPLAY.evIdx < REPLAY.events.length && REPLAY.events[REPLAY.evIdx].t <= fr.t) ev.push(REPLAY.events[REPLAY.evIdx++]);
+  const over = REPLAY.events.filter((e) => e.level === 'crit' && e.t <= fr.t).length;
+  return { ts: Date.now() / 1000, state: fr.s, progress: fr.p, elapsed_s: fr.e, robots,
+           metrics: { cv, band, keep, cov: 100 * fr.p, unif: 100 - Math.min(cv, 100) * 0.5, over }, events: ev, t_sim: fr.t };
+}
+async function replayStart(id, speed) {
+  REPLAY.id = id; REPLAY.speed = speed || 1;
+  const r = await fetch('/api/runs/' + id, { cache: 'no-store' }).then((x) => x.json());
+  REPLAY.run = r.run; REPLAY.follow = r.run.status === 'recording';
+  try { REPLAY.events = ((await fetch(`/api/runs/${id}/events`, { cache: 'no-store' }).then((x) => x.json())).events || []).map((e) => ({ ...e, t: Number(e.t) })); } catch { REPLAY.events = []; }
+  REPLAY.on = true; REPLAY.t = 0;
+  await replayEnsure(0);
+  document.body.dataset.live = '1';
+  addEvent('C', '기록 재생 — ' + (r.run.name || ('run ' + id)) + ' · ' + REPLAY.speed + 'x', 'info');
+}
+function replayTick(dt) {
+  if (!REPLAY.run) return;
+  const dur = Number(REPLAY.run.t_sim_end || 0);
+  if (REPLAY.follow) {
+    if (performance.now() - REPLAY.lastRefresh > 5000) { REPLAY.lastRefresh = performance.now(); fetch('/api/runs/' + REPLAY.id, { cache: 'no-store' }).then((x) => x.json()).then((r) => { REPLAY.run = r.run; if (r.run.status !== 'recording') REPLAY.follow = false; }).catch(() => {}); }
+    REPLAY.t = Math.min(Math.max(0, dur - 3), REPLAY.t + dt * REPLAY.speed);
+  } else {
+    REPLAY.t = Math.min(dur, REPLAY.t + dt * REPLAY.speed);
+  }
+  replayEnsure(REPLAY.t);
+  const F = REPLAY.frames; if (!F.length) return;
+  let lo = 0, hi = F.length - 1;
+  while (lo < hi) { const mid = (lo + hi + 1) >> 1; if (F[mid].t <= REPLAY.t) lo = mid; else hi = mid - 1; }
+  LIVE.on = true; LIVE.feed = replayFeed(F[lo]);
+}
+const _qs = new URLSearchParams(location.search);
+if (_qs.get('run')) replayStart(Number(_qs.get('run')), Number(_qs.get('speed')) || 1).catch((e) => { console.warn('기록 재생 실패', e); REPLAY.on = false; });
+else { setInterval(pollLive, 500); pollLive(); }
 
 function tickLive(f) {
   const byId = {};
@@ -755,6 +831,7 @@ function loop(now) {
     if (S.t >= CYCLE) { S.t = CYCLE; S.done = true; setState('DONE'); }
   }
 
+  if (REPLAY.on) replayTick(dt);
   const p = LIVE.on ? Math.max(0, Math.min(1, Number(LIVE.feed.progress) || 0)) : S.t / CYCLE;
   animate3D(p, dt);
 
@@ -762,7 +839,7 @@ function loop(now) {
   if (acc >= 0.25) { if (LIVE.on) tickLive(LIVE.feed); else tickData(p, acc); acc = 0; }
 
   frames++; fpsT += dt;
-  if (fpsT >= 1) { $('fps').textContent = (LIVE.on ? 'LIVE · ' : 'DEMO · ') + Math.round(frames / fpsT) + ' fps'; frames = 0; fpsT = 0; }
+  if (fpsT >= 1) { $('fps').textContent = (REPLAY.on ? ('REPLAY ' + REPLAY.speed + 'x · ' + hhmmss(REPLAY.t) + ' · ') : LIVE.on ? 'LIVE · ' : 'DEMO · ') + Math.round(frames / fpsT) + ' fps'; frames = 0; fpsT = 0; }
 
   placeCamera();
   renderer.render(scene, camera);
