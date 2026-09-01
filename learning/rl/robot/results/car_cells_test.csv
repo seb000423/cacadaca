@@ -1,0 +1,9 @@
+cell_id,region,center_x_m,center_y_m,center_z_m,tilt_deg,is_side,quad_c3,quad_c5,fit_rms_mm,outcome,passes,gu_before,gu_final,ra_final_um,rz_final_um,scratch_before_um,scratch_final_um,clearcoat_initial_um,clearcoat_min_um,temperature_peak_c,gu_target_pass,ra_target_pass,rz_target_pass,scratch_improved,clearcoat_safe,warranty_removal_ok,overall_pass,disposition,checkpoint
+300,top,-0.576,0.703,0.624,42.2,False,-1.7766,+0.2332,2.09,fail_force_overload,0,66.11,72.06,0.1774,0.888,0.416,0.095,44.50,40.02,35.64,True,True,True,True,True,True,False,spot_repaint_review,model_ppo_curved.pt
+301,top,-0.575,0.778,0.632,26.6,False,-4.2479,-0.5526,3.71,success,1,63.25,72.09,0.1145,0.758,0.224,0.025,45.25,41.85,35.58,True,True,True,True,True,True,True,pass,model_ppo_curved.pt
+302,top,-0.568,0.901,0.637,13.7,False,-3.8744,-0.2743,5.70,success,1,71.71,72.43,0.1361,0.877,0.257,0.047,44.79,40.46,35.61,True,True,True,True,True,True,True,pass,model_ppo_curved.pt
+303,top,-0.561,1.024,0.634,17.8,False,+1.0181,-0.1169,7.89,fail_clearcoat_budget,1,60.83,68.85,0.1153,0.791,0.862,0.175,41.10,36.47,35.99,False,True,True,True,True,True,False,rework_candidate,model_ppo_curved.pt
+100,side_left,-0.651,-0.538,0.419,85.0,True,+0.0881,-0.5318,1.15,success,1,72.95,71.21,0.1087,0.713,0.265,0.026,42.77,38.46,35.86,True,True,True,True,True,True,True,pass,model_ppo_curved.pt
+101,side_left,-0.635,-0.540,0.538,79.5,True,+0.0530,-0.9164,1.71,success,1,53.38,71.11,0.1286,0.795,0.356,0.035,45.09,40.67,35.87,True,True,True,True,True,True,True,pass,model_ppo_curved.pt
+250,side_right,0.616,0.546,0.538,66.2,True,+0.9604,-0.2060,5.43,fail_force_overload,0,72.04,72.17,0.1367,0.898,0.335,0.335,49.06,47.15,34.51,True,True,True,False,True,True,False,spot_repaint_review,model_ppo_curved.pt
+251,side_right,0.575,0.540,0.625,54.4,True,-0.0040,-0.2959,1.51,success,1,70.94,73.28,0.1222,0.941,0.243,0.025,48.03,42.95,35.86,True,True,True,True,True,True,True,pass,model_ppo_curved.pt
