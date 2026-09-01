@@ -1634,6 +1634,7 @@ class PolyTwinViewport extends HTMLElement {
    실시간(기록 중) 런은 끝(t_sim_end)에서 LIVE_LAG 초 뒤를 따라간다 → 지연 재생. */
 const REPLAY_PREFETCH_S = 30;   // 앞으로 미리 받아 둘 구간
 const REPLAY_LIVE_LAG_S = 3.0;  // 기록 중 런을 따라갈 때의 지연
+const REPLAY_KEEP_BACK_S = 60;  // 지나간 프레임은 이만큼만 남기고 버린다 — 수 시간짜리 기록도 메모리 일정
 
 async function gunzipJson(b64) {
   const bin = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
@@ -1671,13 +1672,14 @@ class ReplayPlayer {
   /* t 부터 REPLAY_PREFETCH_S 앞까지 받아 둔다 (중복 요청 방지) */
   async _ensure(t) {
     if (!this.run || this.loading) return;
-    const need = t + REPLAY_PREFETCH_S;
-    if (this.loadedTo >= need && this.loadedTo >= this.duration) return;
+    const need = t + REPLAY_PREFETCH_S * Math.max(1, this.speed);   // 배속만큼 더 앞까지
+    // 뒤로 탐색했으면 그 구간부터 다시 받는다
+    if (this.frames.length && t < this.frames[0].t - 0.5) { this.frames = []; this.loadedTo = Math.max(0, t - 1); }
     if (this.loadedTo >= need) return;
     this.loading = true;
     try {
       const from = Math.max(0, this.loadedTo);
-      const r = await fetch(`/api/runs/${this.run.id}/chunks?from=${from}&to=${need}`, { credentials: 'same-origin', cache: 'no-store' }).then((x) => x.json());
+      const r = await fetch(`/api/runs/${this.run.id}/chunks?from=${from}&to=${Math.min(need, from + 110)}`, { credentials: 'same-origin', cache: 'no-store' }).then((x) => x.json());
       const have = new Set(this.frames.map((f) => f.t));
       for (const c of r.chunks || []) {
         const fr = await gunzipJson(c.data);
@@ -1686,6 +1688,10 @@ class ReplayPlayer {
       }
       this.frames.sort((a, b) => a.t - b.t);
       if (!(r.chunks || []).length) this.loadedTo = Math.max(this.loadedTo, need);
+      // 지나간 프레임 정리 (탐색용으로 REPLAY_KEEP_BACK_S 만 남김)
+      const cut = t - REPLAY_KEEP_BACK_S;
+      let k = 0; while (k < this.frames.length && this.frames[k].t < cut) k++;
+      if (k > 0) this.frames.splice(0, k);
     } catch (err) { console.warn('리플레이 청크 로드 실패:', err); }
     finally { this.loading = false; }
   }
