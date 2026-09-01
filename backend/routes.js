@@ -230,6 +230,93 @@ async function handleApi(req, res, pathname) {
      Isaac Sim 쪽(learning/ui_bridge/monitor_feed.py)이 JSON 파일을 20 스텝마다 갱신하고
      여기서는 그 파일을 읽어 돌려준다. 파일이 없거나 5 s 이상 오래되면 live:false —
      monitor.html 은 그때 데모 데이터로 돌아간다. 경로는 PT_MONITOR_FEED 로 바꾼다. ══ */
+  /* ══ 시뮬레이션 런처 (① 콘솔 → Isaac Sim) ═══════════════════════
+     콘솔의 실행/정지 버튼이 실제 폴리싱 시뮬(원코드 v5 + 잔차 정책)을 띄우고 내린다.
+     로컬 서버 전용 — Vercel 함수에서는 프로세스를 띄울 수 없어 501 을 돌려준다.
+       POST /api/sim/start {tool, force, rpm, feed_mm_s, overlap, robotCount, physical, max_steps, dry_run}
+       POST /api/sim/stop
+       GET  /api/sim/status → {running, pid, startedAt, elapsed_s, params, exitCode, result}
+     경로: PT_SIM_REPO(시뮬 저장소, 기본 ../cacadaca), PT_ISAAC_PY(기본 ~/isaacsim/python.sh) ══ */
+  if (pathname.indexOf('/api/sim/') === 0) {
+    const sess = await sessionOf(req);
+    if (!sess) return json(res, 401, { error: '로그인이 필요합니다.' });
+    if (process.env.VERCEL) return json(res, 501, { error: '배포 서버에서는 시뮬레이션을 실행할 수 없습니다.' });
+    const fs = require('fs'), path = require('path'), os = require('os');
+    const { spawn } = require('child_process');
+    const REPO = process.env.PT_SIM_REPO || path.join(__dirname, '..', '..', 'cacadaca');
+    const ISAAC = process.env.PT_ISAAC_PY || path.join(os.homedir(), 'isaacsim', 'python.sh');
+    const OUT = path.join(REPO, 'learning', 'ui_bridge', 'out');
+    const feed = process.env.PT_MONITOR_FEED || path.join(OUT, 'monitor_feed.json');
+    global.__ptSim = global.__ptSim || { proc: null, pid: null, startedAt: null, params: null, exitCode: null, log: null };
+    const S = global.__ptSim;
+    const running = !!(S.proc && S.exitCode === null);
+    if (pathname === '/api/sim/status' && method === 'GET') {
+      let result = null;
+      try {
+        const rp = path.join(OUT, 'last_run.json');
+        const st = fs.statSync(rp);
+        if (!S.startedAt || st.mtimeMs >= S.startedAt - 1000) result = JSON.parse(fs.readFileSync(rp, 'utf8'));
+      } catch (e) { result = null; }
+      return json(res, 200, {
+        running, pid: S.pid, startedAt: S.startedAt, params: S.params, exitCode: S.exitCode, log: S.log,
+        elapsed_s: S.startedAt ? Math.round((Date.now() - S.startedAt) / 1000) : 0, result,
+      });
+    }
+    if (pathname === '/api/sim/stop' && method === 'POST') {
+      if (!running) return json(res, 200, { ok: true, running: false });
+      try { process.kill(-S.proc.pid, 'SIGTERM'); } catch (e) { try { S.proc.kill('SIGTERM'); } catch (e2) { /* ignore */ } }
+      await store.log(sess.login_id, 'sim.stop', String(S.pid), '');
+      return json(res, 200, { ok: true, running: true, stopping: true });
+    }
+    if (pathname === '/api/sim/start' && method === 'POST') {
+      if (running) return json(res, 409, { error: '이미 실행 중입니다.', pid: S.pid });
+      const body = await readBody(req, 64 * 1024);
+      const num = (v, d) => (Number.isFinite(Number(v)) ? Number(v) : d);
+      const params = {
+        tool: String(body.tool || 'dual'), force: num(body.force, 5.6), rpm: num(body.rpm, 3000),
+        feed_mm_s: num(body.feed_mm_s, 5.65), overlap: num(body.overlap, 40),
+        robotCount: num(body.robotCount, 3), physical: !!body.physical, max_steps: num(body.max_steps, 6000),
+      };
+      if (params.force < 3 || params.force > 8) return json(res, 400, { error: '접촉력은 3~8 N 대역 안이어야 합니다.' });
+      /* 레시피 JSON — 시뮬 저장소의 윗면 레시피를 바탕으로 콘솔 값을 덮어쓴다.
+         경로 간격 = 패드 지름 × (1 − 오버랩) → step_over_spacing_ratio */
+      let recipe = {};
+      try { recipe = JSON.parse(fs.readFileSync(path.join(REPO, 'learning', 'polytwin', 'outputs', 'bo_best_recipe_top.json'), 'utf8')); } catch (e) { recipe = {}; }
+      recipe = Object.assign({}, recipe, {
+        recipe_id: 'ui_console', source: 'PolyTwin console (' + sess.login_id + ')',
+        target_contact_force_n: params.force, rpm: params.rpm, feed_speed_mm_s: params.feed_mm_s,
+        step_over_spacing_ratio: Math.max(0.05, Math.min(1.0, 1 - params.overlap / 100)),
+        n_passes: recipe.n_passes || 2,
+      });
+      fs.mkdirSync(OUT, { recursive: true });
+      const recipePath = path.join(OUT, 'ui_recipe.json');
+      fs.writeFileSync(recipePath, JSON.stringify(recipe, null, 1));
+      try { fs.unlinkSync(feed); } catch (e) { /* 없어도 됨 */ }
+      try { fs.unlinkSync(path.join(OUT, 'last_run.json')); } catch (e) { /* 없어도 됨 */ }
+      const env = Object.assign({}, process.env, {
+        POLISH_RL: '1', POLISH_MONITOR_FEED: feed, POLISH_RL_RECIPE_TOP: recipePath, POLISH_RL_RECIPE_SIDE: recipePath,
+        POLISH_RL_OUT: path.join(OUT, 'ui_cells.csv'), POLISH_RENDER_EVERY: '10', POLISH_ROS_PUBLISH: '0',
+        POLISH_ROS_CAMERAS: '0', MAX_SIM_STEPS: String(params.max_steps), POLISH_EXIT_WHEN_DONE: '1',
+        POLISH_PHYSICAL_CONTACT: params.physical ? '1' : '0',
+      });
+      const args = [ 'polishing_v5.py', '--obj_name', 'car', '--headless' ];
+      if (body.dry_run) return json(res, 200, { ok: true, dry_run: true, cmd: ISAAC + ' ' + args.join(' '), cwd: path.join(REPO, 'scripts'), recipe, feed });
+      const logPath = path.join(OUT, 'sim_run.log');
+      const logFd = fs.openSync(logPath, 'w');
+      let proc;
+      try {
+        proc = spawn(ISAAC, args, { cwd: path.join(REPO, 'scripts'), env, detached: true, stdio: ['ignore', logFd, logFd] });
+      } catch (e) {
+        return json(res, 500, { error: '시뮬레이션을 시작하지 못했습니다: ' + e.message });
+      }
+      S.proc = proc; S.pid = proc.pid; S.startedAt = Date.now(); S.params = params; S.exitCode = null; S.log = logPath;
+      proc.on('exit', (code) => { S.exitCode = code === null ? -1 : code; });
+      proc.unref();
+      await store.log(sess.login_id, 'sim.start', String(proc.pid), JSON.stringify(params));
+      return json(res, 201, { ok: true, pid: proc.pid, params, recipe, feed, log: logPath });
+    }
+    return json(res, 404, { error: '없는 요청입니다.' });
+  }
   if (pathname === '/api/monitor' && method === 'GET') {
     const sess = await sessionOf(req);
     if (!sess) return json(res, 401, { error: '로그인이 필요합니다.' });
