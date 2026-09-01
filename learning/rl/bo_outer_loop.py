@@ -79,7 +79,7 @@ def _work(args_):
     return run_cell_episode(row, recipe, _G["policy"], _G["cal"], max_repolish=2)
 
 
-def make_evaluator(pool):
+def make_evaluator(pool, time_weight=0.15, time_ref_s=1800.0, require_all_pass=False):
     def evaluate(x: np.ndarray) -> dict:
         rows = [_row(*c) for c in EVAL_CELLS]
         outs = pool.map(_work, [(r, x) for r in rows])
@@ -90,9 +90,11 @@ def make_evaluator(pool):
             costs.append(1.0 * float(np.clip((70.0 - gu) / 10.0, 0, 1))
                          + 0.3 * float(np.clip(scr / 2.0, 0, 1))
                          + 0.3 * float(np.clip((ra - 0.20) / 0.20, 0, 1))
-                         + 0.15 * float(np.clip(t / 1800.0, 0, 1)))
+                         + time_weight * float(np.clip(t / time_ref_s, 0, 2)))
             if (o["episode_completed"] != True or "force_hard" in o["failure_reason"]
                     or float(o["clearcoat_remaining_min_um"]) < 35.0):
+                feas = False
+            if require_all_pass and o["overall_pass"] != True:
                 feas = False
         return {"x": [float(v) for v in x],
                 "cost": 0.7 * float(np.mean(costs)) + 0.3 * float(np.max(costs)),
@@ -111,6 +113,12 @@ def main():
     ap.add_argument("--workers", type=int, default=6)
     ap.add_argument("--seed", type=int, default=11)
     ap.add_argument("--posture", choices=list(EVAL_SETS), default="mixed")
+    ap.add_argument("--time_weight", type=float, default=0.15,
+                    help="비용의 시간 항 가중치 (9.35: 사이클 타임 최적화 시 0.6 권장)")
+    ap.add_argument("--time_ref_s", type=float, default=1800.0, help="시간 항 정규화 기준(s)")
+    ap.add_argument("--require_all_pass", action="store_true",
+                    help="평가 셀 전부 5종 통과해야 feasible (품질을 제약으로, 시간을 목적으로)")
+    ap.add_argument("--out_tag", type=str, default="", help="결과 파일명 태그")
     ap.add_argument("--baseline_json", default=os.path.join(OUT_DIR, "bo_best_recipe.json"),
                     help="비교 기준 recipe (side 탐색 시 side 현행)")
     args = ap.parse_args()
@@ -121,7 +129,7 @@ def main():
     from scipy.stats import qmc
     rng = np.random.default_rng(args.seed)
     pool = mp.get_context("fork").Pool(args.workers, _init_worker, (args.checkpoint,))
-    ev = make_evaluator(pool)
+    ev = make_evaluator(pool, args.time_weight, args.time_ref_s, args.require_all_pass)
 
     # 현행 recipe 를 기준점으로 반드시 포함 (개선 여부를 같은 평가자로 직접 비교)
     with open(args.baseline_json, encoding="utf-8") as f:
@@ -164,7 +172,7 @@ def main():
            "current_recipe_result": dataset[0], "best": best, "dataset": dataset,
            "note": "평가자 = 챔피언 정책 + 어드미턴스 + 재폴리싱 (05 문서 9장 outer loop). "
                    "SYNTHETIC — 논문 기반 트윈 출력."}
-    path = os.path.join(OUT_DIR, f"bo_outer_dataset_{args.posture}.json")
+    path = os.path.join(OUT_DIR, f"bo_outer_dataset_{args.posture}{('_' + args.out_tag) if args.out_tag else ''}.json")
     with open(path, "w", encoding="utf-8") as f:
         json.dump(out, f, ensure_ascii=False, indent=2, default=str)
     print(f"\n현행 recipe cost {dataset[0]['cost']:.3f} (pass {dataset[0]['n_pass']}/6)")
