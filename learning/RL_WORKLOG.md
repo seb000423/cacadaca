@@ -1091,3 +1091,13 @@ DB 에서 프레임을 미리 받아 **보간하며 재생**한다(속도 0.5~16
   (`learning/ui_bridge/out/run_local_<ts>.sqlite` → 끝난 뒤 `POST /api/runs/import`).
 - 주의: 잔차 정책의 제거 모델(polytwin config) 패드 반경은 보정값 그대로 — 패드 지름을 크게 바꾸면 제거량 모델과 물리 패드가 어긋난다
   (9.34 재실행의 소형 패드와 같은 경고). 검증은 Isaac 실행 시(재실행 종료 후).
+
+### 9.43 로컬 실행도 콘솔 실시간 (UI 동기화 4단계) (2026-09-01 20:30)
+
+로컬 모드(서버가 Isaac 을 직접 spawn)와 GUI 로 직접 띄운 `run_v5_rl_view.sh` 는 워커가 없어 기록이 서버로 안 올라갔다.
+→ UI2 서버에 **기록 테일러**(`startRunTailer`, routes.js): 시뮬이 쓰는 SimRecorder sqlite 를 2 s 마다 읽어(node:sqlite 읽기 전용)
+서버 DB 의 `sim_runs/sim_chunks/...` 에 그대로 넣는다. spawn 시 자동 시작·프로세스 종료 시 마무리(result 저장),
+`/api/sim/status.run_id` 로 콘솔이 즉시 지연 재생으로 전환. 외부 실행은 `POST /api/runs/watch {path,name}` (로컬 전용).
+`run_v5_rl_view.sh` 는 기본으로 `learning/ui_bridge/out/run_view_<ts>.sqlite` 에 기록하고 watch 명령을 출력한다.
+콘솔은 대기 중 10 s 마다 기록 목록을 갱신(기록 중인 런이 '기록 중' 으로 뜸 → 선택하면 3 s 지연으로 따라감).
+검증: 합성 25 s 기록을 watch → recording(6.6 s → 12 s → 19 s) → done 248 프레임, 테일러 경고 0. (UI2 커밋 d827253, 시뮬 fd3841a)
