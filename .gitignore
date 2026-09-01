@@ -37,3 +37,6 @@ scripts/__pycache__/
 frontend/assets/models/_orig/*.obj
 frontend/assets/models/_orig/ferrari.glb
 frontend/assets/models/_orig/2015-hyundai-sonata/
+
+# PowerPoint 임시 잠금 파일 — 열려 있는 동안만 존재한다
+~$*

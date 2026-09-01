@@ -80,12 +80,32 @@
   /* 클릭 요소가 div 라 기본 포커스 링이 없다. 직접 준다. */
   :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
+  /* 파라미터 패널 스크롤바가 OS 기본값이라 흰 막대로 떴다.
+     ④ 라이브러리와 같은 선언을 쓴다. accent 는 상태 신호용이라
+     크롬에는 쓰지 않는다 — 옆의 토글·수치와 경쟁한다.
+     ::-webkit-scrollbar 는 WebKit 전용이라 color-scheme 로
+     Firefox 와 폼 컨트롤 기본색까지 어둡게 맞춘다. */
+  :root { color-scheme: dark; }
+  ::-webkit-scrollbar { width: 8px; height: 8px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--bg-raised); }
+  ::-webkit-scrollbar-thumb:hover { background: var(--line-hi); }
+
+  /* thumb 은 --text-hi 였다. 이 패널에서 제일 밝은 색은 글자 몫이고,
+     켜진 컨트롤(토글·선택된 버튼)은 전부 accent 다. 슬라이더만 예외일
+     이유가 없어서 accent 로 내렸다. hover 가 resting 보다 어두워지던
+     역전도 같이 사라진다.
+     채움 구간이 없으면 0 과 800 이 점 위치 말고는 구별이 안 된다.
+     --fill 은 위 바인딩에서 백분율로 내려온다. */
   input[type="range"] { -webkit-appearance: none; appearance: none; width: 100%; height: 18px; background: transparent; cursor: pointer; }
-  input[type="range"]::-webkit-slider-runnable-track { height: 2px; background: var(--line); }
-  input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 12px; height: 12px; margin-top: -5px; border-radius: 50%; background: var(--text-hi); }
-  input[type="range"]:hover::-webkit-slider-thumb { background: var(--accent); }
+  input[type="range"]::-webkit-slider-runnable-track { height: 2px;
+    background: linear-gradient(to right, var(--accent-dim) var(--fill, 0%), var(--line) var(--fill, 0%)); }
+  input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 6px; height: 14px; margin-top: -6px; border-radius: 1px; background: var(--accent); }
+  input[type="range"]:hover::-webkit-slider-thumb { background: var(--text-hi); }
   input[type="range"]::-moz-range-track { height: 2px; background: var(--line); }
-  input[type="range"]::-moz-range-thumb { width: 12px; height: 12px; border: 0; border-radius: 50%; background: var(--text-hi); }
+  input[type="range"]::-moz-range-progress { height: 2px; background: var(--accent-dim); }
+  input[type="range"]::-moz-range-thumb { width: 6px; height: 14px; border: 0; border-radius: 1px; background: var(--accent); }
+  input[type="range"]:hover::-moz-range-thumb { background: var(--text-hi); }
 
   /* 공정이 도는 동안만 켜지는 표시등. 값이 아니라 상태를 알리는 것이라
      여기에는 이징을 써도 된다 — 계측 수치에는 쓰지 않는다 */
@@ -183,7 +203,7 @@
             <div style="font-size: 15px; font-weight: 500; letter-spacing: 0.12em; text-transform: uppercase; color: var(--text-lo)">차체 리프트(Car Lift)</div>
             <div style="font-family: var(--f-mono); font-size: 16px; color: {{ carLiftColor }}; font-variant-numeric: tabular-nums">{{ carLiftLabel }}</div>
           </div>
-          <input type="range" min="0" max="800" step="50" value="{{ carLift }}" sc-camel-on-input="{{ setCarLift }}" aria-label="차체 리프트 높이">
+          <input type="range" min="0" max="800" step="50" value="{{ carLift }}" style="--fill: {{ carLiftFill }}" sc-camel-on-input="{{ setCarLift }}" aria-label="차체 리프트 높이">
           <div style="font-size: 16px; color: var(--text-mid); line-height: 1.5; margin-top: 10px; word-break: keep-all">{{ carLiftNote }}</div>
         </div>
         <div>
@@ -917,6 +937,8 @@ class Component extends DCLogic {
       railDotLeft: s.hasRail ? '20px' : '2px',
       toggleLift: () => this.setState(p => ({ hasLift: !p.hasLift }), () => this.push()),
       carLift: String(s.carLift),
+      // WebKit 은 ::-moz-range-progress 가 없어서 트랙 그라디언트로 채운다
+      carLiftFill: (s.carLift / 800 * 100) + '%',
       setCarLift: (e) => this.setState({ carLift: Number(e.target.value) }, () => this.push()),
       carLiftLabel: s.carLift ? (s.carLift + ' mm') : '내림',
       carLiftColor: s.carLift ? 'var(--accent)' : 'var(--text-lo)',
