@@ -594,7 +594,8 @@ class Component extends DCLogic {
     }
     const s = this.state, t = toolOf(s.tool);
     const body = { tool: s.tool, force: t.force, rpm: t.rpm, feed_mm_s: t.feed * 1000, overlap: t.overlap,
-                   robotCount: s.robotCount, physical: false, max_steps: 9000 };
+                   robotCount: s.robotCount, hasRail: s.hasRail, hasLift: s.hasLift, pad: t.pad, carLift: s.carLift,
+                   physical: false, max_steps: 9000 };
     fetch('/api/sim/start', { method: 'POST', credentials: 'same-origin',
                               headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
       .then((r) => r.json().catch(() => ({})).then((d) => ({ ok: r.ok, status: r.status, d })))

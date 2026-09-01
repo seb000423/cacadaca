@@ -365,6 +365,8 @@ async function handleApi(req, res, pathname) {
         tool: String(body.tool || 'dual'), force: num(body.force, 5.6), rpm: num(body.rpm, 3000),
         feed_mm_s: num(body.feed_mm_s, 5.65), overlap: num(body.overlap, 40),
         robotCount: num(body.robotCount, 3), physical: !!body.physical, max_steps: num(body.max_steps, 6000),
+        hasRail: body.hasRail === undefined ? true : !!body.hasRail, hasLift: body.hasLift === undefined ? true : !!body.hasLift,
+        pad: num(body.pad, 110), carLift: num(body.carLift, 0),
       };
       if (params.force < 3 || params.force > 8) return json(res, 400, { error: '접촉력은 3~8 N 대역 안이어야 합니다.' });
       if (body.dry_run) return json(res, 200, { ok: true, dry_run: true, mode: 'queue', params });
@@ -413,6 +415,8 @@ async function handleApi(req, res, pathname) {
         tool: String(body.tool || 'dual'), force: num(body.force, 5.6), rpm: num(body.rpm, 3000),
         feed_mm_s: num(body.feed_mm_s, 5.65), overlap: num(body.overlap, 40),
         robotCount: num(body.robotCount, 3), physical: !!body.physical, max_steps: num(body.max_steps, 6000),
+        hasRail: body.hasRail === undefined ? true : !!body.hasRail, hasLift: body.hasLift === undefined ? true : !!body.hasLift,
+        pad: num(body.pad, 110), carLift: num(body.carLift, 0),
       };
       if (params.force < 3 || params.force > 8) return json(res, 400, { error: '접촉력은 3~8 N 대역 안이어야 합니다.' });
       /* 레시피 JSON — 시뮬 저장소의 윗면 레시피를 바탕으로 콘솔 값을 덮어쓴다.
@@ -435,6 +439,12 @@ async function handleApi(req, res, pathname) {
         POLISH_RL_OUT: path.join(OUT, 'ui_cells.csv'), POLISH_RENDER_EVERY: '10', POLISH_ROS_PUBLISH: '0',
         POLISH_ROS_CAMERAS: '0', MAX_SIM_STEPS: String(params.max_steps), POLISH_EXIT_WHEN_DONE: '1',
         POLISH_PHYSICAL_CONTACT: params.physical ? '1' : '0',
+        /* 콘솔 배치 → v5 (sim_worker.layout_env 와 동일 규칙) */
+        POLISH_ROBOTS: ({ 1: 'C', 2: 'SL,SR' })[Number(params.robotCount)] || 'C,SL,SR',
+        POLISH_RAIL: params.hasRail === false ? '0' : '1', POLISH_LIFT: params.hasLift === false ? '0' : '1',
+        POLISH_PAD_RADIUS: (Number(params.pad || 110) / 2000).toFixed(4),
+        POLISH_CAR_LIFT_Z: (0.90 + Number(params.carLift || 0) / 1000).toFixed(3),
+        POLISH_RECORD: path.join(OUT, 'run_local_' + Date.now() + '.sqlite'),
       });
       const args = [ 'polishing_v5.py', '--obj_name', 'car', '--headless' ];
       if (body.dry_run) return json(res, 200, { ok: true, dry_run: true, cmd: ISAAC + ' ' + args.join(' '), cwd: path.join(REPO, 'scripts'), recipe, feed });
