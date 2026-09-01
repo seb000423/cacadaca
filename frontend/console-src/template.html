@@ -307,14 +307,14 @@
       </sc-if>
 
       <section style="display: grid; grid-template-columns: 1fr 1fr; gap: 1px; background: var(--bg-panel); border: 1px solid var(--bg-panel)">
-        <div style="background: var(--bg-base); padding: 13px 14px">
+        <sc-if value="{{ showDetail }}" hint-placeholder-val="{{ true }}"><div style="background: var(--bg-base); padding: 13px 14px">
           <div style="font-size: 14px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-lo)">패드 회전</div>
           <div style="margin-top: 6px"><span style="font-family: var(--f-mono); font-size: 19px; color: var(--text-hi); font-variant-numeric: tabular-nums">{{ monRpm }}</span> <span style="font-size: 14px; color: var(--text-lo)">rpm</span></div>
-        </div>
-        <div style="background: var(--bg-base); padding: 13px 14px">
+        </div></sc-if>
+        <sc-if value="{{ showDetail }}" hint-placeholder-val="{{ true }}"><div style="background: var(--bg-base); padding: 13px 14px">
           <div style="font-size: 14px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-lo)">이송 속도</div>
           <div style="margin-top: 6px"><span style="font-family: var(--f-mono); font-size: 19px; color: var(--text-hi); font-variant-numeric: tabular-nums">{{ monFeed }}</span> <span style="font-size: 14px; color: var(--text-lo)">mm/s</span></div>
-        </div>
+        </div></sc-if>
         <div style="background: var(--bg-base); padding: 13px 14px">
           <div style="font-size: 14px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-lo)">커버리지</div>
           <div style="margin-top: 6px"><span style="font-family: var(--f-mono); font-size: 19px; color: var(--accent); font-variant-numeric: tabular-nums">{{ monCov }}</span> <span style="font-size: 14px; color: var(--text-lo)">%</span></div>
@@ -326,6 +326,7 @@
       </section>
       <div style="margin-top: -12px; font-size: 16px; color: var(--text-lo); line-height: 1.5; word-break: keep-all; font-variant-numeric: tabular-nums">{{ monReachNote }}</div>
 
+      <sc-if value="{{ showDetail }}" hint-placeholder-val="{{ true }}">
       <section>
         <div style="font-size: 14px; font-weight: 500; letter-spacing: 0.12em; text-transform: uppercase; color: var(--text-lo); margin-bottom: 11px">로봇별 진행</div>
         <div style="display: flex; flex-direction: column; gap: 10px">
@@ -345,6 +346,7 @@
           </sc-for>
         </div>
       </section>
+      </sc-if>
 
     </div>
     </sc-if>

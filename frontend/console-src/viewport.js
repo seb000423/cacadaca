@@ -1381,7 +1381,7 @@ class PolyTwinViewport extends HTMLElement {
     const y = Math.max(0, this._params.carLift || 0);
     this._models.forEach((m) => { m.position.y = y; m.updateMatrixWorld(true); });
     this._waBox = null; this._paintBox = null;   // 차가 움직였다 — 셀 매핑 기준 상자 무효화 (다음 _buildFields 에서 재계산)
-    if (this._cellsEnabled && this._lastCells) { this._cellsKey = null; this.setCells(this._lastCells, this._lastScene); }   // 이미 찍힌 구슬도 새 높이로
+    if (this._live && this._cellsEnabled && this._lastCells) { this._cellsKey = null; this.setCells(this._lastCells, this._lastScene); }   // 이미 찍힌 구슬도 새 높이로 (라이브 중일 때만)
   }
 
   /** 위에서 한 장, 옆에서 두 장. 옆면 두 장이 도어와 펜더를 맡는다. */
@@ -1402,7 +1402,7 @@ class PolyTwinViewport extends HTMLElement {
     if (pts.length) { const pb = new THREE.Box3(); for (const q of pts) pb.expandByPoint(w.copy(q).applyMatrix4(this._model.matrixWorld)); this._paintBox = pb; }
     else this._paintBox = null;
     this._waBox = null;                       // 셀 매핑 기준 상자는 필드와 같이 다시 잡는다
-    if (this._cellsEnabled && this._lastCells) { this._cellsKey = null; this.setCells(this._lastCells, this._lastScene); }
+    if (this._live && this._cellsEnabled && this._lastCells) { this._cellsKey = null; this.setCells(this._lastCells, this._lastScene); }
   }
 
   /** 윗면 높이맵에서 (long, cross) 위치의 표면 높이 — 없으면 NaN */
@@ -1608,8 +1608,7 @@ class PolyTwinViewport extends HTMLElement {
   stampCells(snapshot, scene) {
     if (this._liveWorkArea) return;                                 // 진행률 모드: 광택은 패드가 지나간 자리로만 (레인이 전 표면을 덮는다)
     const items = snapshot && Array.isArray(snapshot.items) ? snapshot.items : [];
-    if (!this._liveWorkArea && !this._liveXf && scene) this._buildLiveXform(scene);
-    const xf = this._liveXf; if ((!xf && !this._liveWorkArea) || !this._polish) return;
+    const xf = this._liveXf; if ((!xf && !this._liveWorkArea) || !this._polish) return;   // 변환이 아직 없으면 건너뜀(여기서 만들지 않는다 — 재귀 원인)
     const key = 'stamp:' + items.length;
     if (key === this._stampKey) return;
     this._stampKey = key;
@@ -1711,6 +1710,11 @@ class PolyTwinViewport extends HTMLElement {
   /* Isaac 월드 → 콘솔 월드. 차 점군 bbox(feed.scene) 와 콘솔 차체 bbox 를 맞춘다(길이축 스케일 + 중심 정렬). */
   _buildLiveXform(scene) {
     if (!this._model || !scene || !scene.car_min || !scene.car_max) return;
+    if (this._buildingXf) return;                      // 재진입 금지 (_applyCarLift → setCells → … → 여기로 되돌아오던 무한 재귀)
+    this._buildingXf = true;
+    try { this._buildLiveXformInner(scene); } finally { this._buildingXf = false; }
+  }
+  _buildLiveXformInner(scene) {
     this._liveScene = scene;
     this._model.updateMatrixWorld(true);
     const b = new THREE.Box3().setFromObject(this._model);
