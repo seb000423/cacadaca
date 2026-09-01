@@ -45,6 +45,16 @@ EVAL_SETS = {
         (9105, 0.9, 45.0, (0.0, 1.0, 0.0)),
         (9106, 1.5, 42.0, (0.0, -1.0, 0.0)),
     ],
+    "newcar": [  # 신차 PDI 프로파일 (9.26): Ra 0.12, 자국 0.05~1.0 μm, 코트 40~50 — top 5 + side 3
+        (9301, 0.10, 48.0, (0.0, 0.0, 1.0), 0.12),
+        (9302, 0.25, 44.0, (0.0, 0.0, 1.0), 0.12),
+        (9303, 0.40, 41.0, (-0.10, 0.0, 0.995), 0.12),
+        (9304, 0.60, 46.0, (0.0, 0.0, 1.0), 0.12),
+        (9305, 0.90, 43.0, (0.0, 0.0, 1.0), 0.12),
+        (9306, 0.30, 45.0, (0.0, 1.0, 0.0), 0.12),
+        (9307, 0.50, 42.0, (0.0, -1.0, 0.0), 0.12),
+        (9308, 0.80, 47.0, (0.15, -0.97, 0.19), 0.12),
+    ],
     "side": [    # 전부 수직면 — side 전용 recipe 탐색 (달성힘 ~2.8N 포화 영역)
         (9201, 0.6, 44.0, (0.0, 1.0, 0.0)),
         (9202, 0.9, 47.0, (0.0, -1.0, 0.0)),
@@ -55,11 +65,11 @@ EVAL_SETS = {
     ],
 }
 
-def _row(seed, scr, cc, n):
+def _row(seed, scr, cc, n, ra=0.08):
     return {"region_id": "EV", "region_name": "bo_eval", "cell_id": seed,
             "position_x_m": 0, "position_y_m": 0, "position_z_m": 0,
             "normal_x": n[0], "normal_y": n[1], "normal_z": n[2],
-            "init_ra_um": 0.08, "init_scratch_um": scr, "init_clearcoat_um": cc,
+            "init_ra_um": ra, "init_scratch_um": scr, "init_clearcoat_um": cc,
             "surface_seed": seed}
 
 EVAL_CELLS = EVAL_SETS["mixed"]
