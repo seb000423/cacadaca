@@ -1406,6 +1406,12 @@ class PolyTwinViewport extends HTMLElement {
     }
     this._liftFollow = true;
     this._animateLanes(dt, t, p, true);
+    // 마무리 보정: 100 % 에 도달하면 배정에서 빠진 레인 조각까지 전부 유광으로 (Voronoi 배정이 버린 짧은 구간 대비)
+    if (prog >= 0.995 && !this._waFilled && this._flat && this._flat.length) {
+      this._waFilled = true;
+      const r = (p.pad / 1000) / 2;
+      for (let i = 0; i < this._flat.length; i += 2) this.stampPolish(this._flat[i], r, true, 1.0);
+    } else if (prog < 0.9) this._waFilled = false;
     return;
     for (const cell of this._cells) {
       const rid = cell.userData.robotId;
