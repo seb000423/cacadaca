@@ -1552,6 +1552,15 @@ class PolyTwinViewport extends HTMLElement {
     /* 공정 시작 전에는 로봇이 멈춰 있어야 한다. 이 화면은 환경을 구성하는
        화면이고, 팔이 도는 것은 'RL 공정 시작' 이후의 일이다.
        대수를 바꾸면 팔이 늘고 줄되, 늘어난 팔도 대기 자세로 서 있는다. */
+    /* 시뮬 피드/기록을 따르는 중이면 공정 실행 여부와 무관하게 팔·베이스를 피드대로 구동한다
+       (기록 재생은 running=false 상태로 돈다 — 여기서 먼저 잡지 않으면 아래 대기 자세 복귀가 삼킨다) */
+    if (this._live) {
+      this._driveLive(dt);
+      this.head.visible = false;
+      this.renderer.render(this.scene, this.camera);
+      return;
+    }
+
     if (!p.running) {
       const rate = JOINT_RATE * dt * 0.5;      // 대기 복귀는 공정보다 느리게
       for (const cell of this._cells) {
@@ -1570,13 +1579,6 @@ class PolyTwinViewport extends HTMLElement {
         cell.userData.qPrev = null;
       }
       this.head.visible = false;              // 작업점 표시도 공정 중에만
-      this.renderer.render(this.scene, this.camera);
-      return;
-    }
-
-    if (this._live) {
-      this._driveLive(dt);
-      this.head.visible = false;
       this.renderer.render(this.scene, this.camera);
       return;
     }
