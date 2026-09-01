@@ -933,3 +933,43 @@ detached 로 기동, `GET /api/sim/status` 가 실행 상태+`last_run.json` 반
 실제 값으로, 종료 시 판정 모달을 `last_run.json`(quality: ra/rz/clearcoat/scratch/gloss 5종, rl: 힘·배율·
 강성·감쇠)로 채움. 러너는 `_rl_flush` 때 `learning/ui_bridge/out/last_run.json` 기록. 실제 E2E(콘솔 →
 Isaac → LIVE → 결과)는 GPU 여유 시 검증 예정. 남은 동기화: 라이브러리(④) POST 자동화, ③ 셀 지도.
+
+### 9.38 배포(Vercel) 동기화 — 작업 큐 + GPU 워커 (2026-09-01 18:20~18:30)
+
+**문제**: 9.37 의 로컬 방식(서버가 Isaac 을 직접 spawn, 피드 파일을 읽음)은 Vercel 에서 불가능
+(서버리스에 GPU·Isaac 없음, 파일시스템 휘발). 사용자가 웹에서 "실행" 을 누르면 GPU PC 의 시뮬이
+돌고, 그 경과·결과가 웹으로 돌아와야 한다.
+
+**설계 (UI2 커밋 831a760, 349e3d3 / 시뮬 커밋 f4c9b8d)**
+- `PT_SIM_MODE=queue` (Vercel 기본): `POST /api/sim/start` 는 spawn 대신 `sim_jobs` 행(파라미터·상태
+  queued) 을 만든다. `POST /api/sim/stop` 은 `stop_requested=1` 만 세운다.
+- GPU PC 워커 `learning/ui_bridge/sim_worker.py` (아웃바운드 HTTPS 만, NAT/방화벽 뒤 OK, ROS 불필요):
+  `GET /api/sim/jobs/next?worker=<이름>` (헤더 `X-PT-Worker: <PT_WORKER_TOKEN>`) 로 작업을 클레임 →
+  레시피 JSON 작성 → Isaac 기동(`POLISH_RL=1 POLISH_MONITOR_FEED=… POLISH_EXIT_WHEN_DONE=1`) →
+  0.7 s 마다 `monitor_feed.json` 을 `POST /api/sim/jobs/<id>/feed` (응답 `stopRequested` 면 프로세스
+  그룹 SIGTERM) → 종료 시 `last_run.json` 을 `POST …/result`, 종료 코드를 `POST …/exit`.
+- `sim_state` 테이블의 `feed` 행 한 줄을 **덮어쓴다**(누적 없음, ~1 KB). `GET /api/monitor` 는 큐 모드에서
+  이 행을 돌려주고, `live = 스냅샷 8 s 이내 && 최신 작업이 running` (349e3d3).
+- DB 에 들어가는 것은 작업 파라미터(~0.3 KB) + 최신 피드 스냅샷(1 KB, 덮어쓰기) + 결과 요약
+  (`last_run.json` ~3 KB: 품질 5종·gloss 분포·RL 배율·셀 처분 집계)뿐. 타일 데이터셋·힘 로그·셀 CSV 등
+  MB 급은 GPU PC 파일로 남고 경로만 기록 — UI2 가 183 MB 힘 로그를 파일에 두고 바이트 범위만
+  DB 에 두는 방식과 같다. 객체(차종)가 달라도 스캔·USD·셀 격자는 워커 PC 소유, DB 엔 객체 ID 만.
+
+**E2E 검증 (로컬 큐 모드, `--fake` 합성 시뮬)**
+```
+cd ../cacadaca-ui2 && . ~/.nvm/nvm.sh && PORT=8000 PT_SIM_MODE=queue PT_WORKER_TOKEN=<토큰> node backend/server.js
+python3 learning/ui_bridge/sim_worker.py --server http://127.0.0.1:8000 --token <토큰> --fake --once
+```
+- job 1: start → queued → 워커 클레임(running) → `/api/monitor` live=True age 0.3 s, 로봇 C/SL/SR 힘·진행
+  갱신 → done, exit 0, `/api/sim/status` 에 결과(glossMean 72.4, Ra 0.121, CC 38.9, 셀 491/합격 300…) 저장.
+- job 2: 정지 경로 — 실행 중 `POST /api/sim/stop` → 2 s 안에 워커가 SIGTERM → `stopped`, exit −15,
+  결과 없음. 정지 직후 모니터가 8 s 동안 LIVE 로 남던 것은 349e3d3 로 수정(작업 running 일 때만 LIVE).
+- 오류 경로: 서버 불통이면 워커가 1 s 마다 재시도(피드 전송 실패는 로그만 남기고 계속).
+
+**배포 시 환경변수 (Vercel)**: `TURSO_DATABASE_URL`, `TURSO_AUTH_TOKEN`, `PT_SECRET`, `PT_WORKER_TOKEN`
+(`PT_SIM_MODE` 는 Vercel 에서 자동 queue). GPU PC: `PT_WORKER_TOKEN` 동일 값,
+`python3 learning/ui_bridge/sim_worker.py --server https://<app>.vercel.app` 를 systemd/nohup 로 상시 실행.
+로컬 개발은 `PT_SIM_MODE=local`(기본) 로 9.37 의 spawn 경로 그대로.
+
+**미검증/남은 것**: 실제 Isaac(v5+RL) 을 워커로 띄우는 것(순회가 GPU 를 쓰는 동안 보류; 인자·env 는
+9.37 로컬 런처와 동일), Vercel 실배포 확인, 결과 → 라이브러리 자동 POST, ③ 셀 지도.
