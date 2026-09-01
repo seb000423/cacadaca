@@ -961,7 +961,7 @@ class PolyTwinViewport extends HTMLElement {
   }
 
   /** 패드가 지나간 자리를 마스크에 찍는다. 반지름은 패드 지름 파라미터 그대로. */
-  stampPolish(worldPos, radius) {
+  stampPolish(worldPos, radius, flat = false, gain = 1.0) {
     const P = this._polish, f = this._field;
     if (!P) return;
     const u = (worldPos[f.long] - f.l0) / (f.l1 - f.l0);
@@ -977,9 +977,9 @@ class PolyTwinViewport extends HTMLElement {
         if (i < 0 || i >= f.nLong) continue;
         const d = Math.hypot((i - ci) / ri, (j - cj) / rj);
         if (d > 1) continue;
-        // 가장자리는 덜 먹인다 — 패드 압력 분포와 같은 모양
+        // 가장자리는 덜 먹인다 — 패드 압력 분포와 같은 모양. flat 이면 셀 면적을 균일하게(점박이 없이) 채운다
         const k = j * f.nLong + i;
-        const nv = Math.min(255, P.data[k] + 255 * (1 - d * d) * 0.9);
+        const nv = Math.min(255, P.data[k] + 255 * (flat ? gain : (1 - d * d) * 0.9));
         if (nv !== P.data[k]) { P.data[k] = nv; touched = true; }
       }
     }
@@ -1358,6 +1358,12 @@ class PolyTwinViewport extends HTMLElement {
     out.y = b.min.y + v * (b.max.y - b.min.y);
     return out;
   }
+  /** 셀(12 cm 격자) 하나를 빈틈 없이 덮는 스탬프 반경 — 콘솔 차/Isaac 차 길이 비율로 환산 */
+  _waCellRadius() {
+    const sc = this._live && this._live.scene; if (!sc || !this._waBox) return 0.11;
+    const k = (this._waBox.max.z - this._waBox.min.z) / Math.max(1e-6, sc.car_max[1] - sc.car_min[1]);
+    return 0.085 * k;
+  }
   /** 콘솔 차 표면 레인 중 pt 에 가장 가까운 점 주변 ±0.16 m 를 셀의 작업 구간으로 준다 */
   _setWorkWindow(cell, pt) {
     if (!this._lanes || !this._lanes.length) return false;
@@ -1390,7 +1396,7 @@ class PolyTwinViewport extends HTMLElement {
       const pt = this._mapRel(r.tcp); if (!pt) continue;
       const last = cell.userData.waPt;
       if (!last || last.distanceTo(pt) > 0.06) {                    // 셀이 바뀌었다 → 새 작업 구간
-        if (this._setWorkWindow(cell, pt)) cell.userData.waPt = pt.clone();
+        if (this._setWorkWindow(cell, pt)) { cell.userData.waPt = pt.clone(); this.stampPolish(pt, this._waCellRadius(), true, 0.6); }   // 작업 중인 셀: 팔이 있는 자리부터 광택
       }
     }
     this._animateLanes(dt, t, p);                                   // 콘솔 자체 동작: 레일 슬라이딩·접근·훑기·광택
@@ -1406,12 +1412,12 @@ class PolyTwinViewport extends HTMLElement {
     this._stampKey = key;
     const p = new THREE.Vector3();
     // 작업영역 모드: 콘솔 차가 Isaac 차보다 크므로(약 1.35배) 스탬프 반경도 비례
-    const rad = this._liveWorkArea && this._waBox && scene ? 0.09 * ((this._waBox.max.z - this._waBox.min.z) / Math.max(1e-6, scene.car_max[1] - scene.car_min[1])) : 0.09;
+    const rad = this._liveWorkArea ? this._waCellRadius() : 0.085;
     for (let i = this._stampedN || 0; i < items.length; i++) {
       const it = items[i]; if (!it || it[3] === 'not_reached') continue;
       if (this._liveWorkArea) { const m = this._mapRel([Number(it[0]), Number(it[1]), Number(it[2])]); if (!m) continue; p.copy(m); }
       else p.set(Number(it[0]), Number(it[1]), Number(it[2])).multiplyScalar(xf.s).applyMatrix4(xf.rot).add(xf.t);
-      this.stampPolish(p, rad);
+      this.stampPolish(p, rad, true, 1.0);                          // 완료 셀: 면적 전체 100 %
     }
     this._stampedN = items.length;
   }

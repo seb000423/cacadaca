@@ -231,10 +231,10 @@
         <div style="margin-top: 12px; height: 4px; background: var(--bg-panel); border-radius: var(--r-sm); overflow: hidden">
           <div style="width: {{ monBarW }}; height: 100%; background: var(--accent)"></div>
         </div>
-        <div style="margin-top: 9px; display: flex; font-family: var(--f-mono); font-size: 16px; color: var(--text-lo)">
-          <div>경과 <span style="color: var(--text-mid)">{{ monElapsed }}</span></div>
-          <div style="flex: 1"></div>
-          <div>남음 <span style="color: var(--text-mid)">{{ monLeft }}</span> / {{ monTotal }}</div>
+        <div style="margin-top: 9px; display: grid; grid-template-columns: auto 1fr; column-gap: 12px; row-gap: 4px; font-family: var(--f-mono); font-size: 15px; color: var(--text-lo); font-variant-numeric: tabular-nums; white-space: nowrap">
+          <div>경과</div><div style="color: var(--text-mid); text-align: right">{{ monElapsed }}</div>
+          <div>남음</div><div style="color: var(--text-mid); text-align: right">{{ monLeft }}</div>
+          <div>총</div><div style="text-align: right">{{ monTotal }}</div>
         </div>
       </section>
 
@@ -347,6 +347,7 @@
         <div style="display: flex; gap: 8px">
           <div sc-camel-on-click="{{ replayToggle }}" tabindex="0" style="flex: 1; padding: 9px 0; border: 1px solid var(--line); text-align: center; font-size: 14px; letter-spacing: 0.06em; color: var(--text-mid); cursor: pointer">{{ replayBtn }}</div>
           <div sc-camel-on-click="{{ toggleCells }}" tabindex="0" style="padding: 9px 10px; border: 1px solid var(--line); text-align: center; font-size: 13px; color: var(--text-lo); cursor: pointer; white-space: nowrap">{{ cellsLabel }}</div>
+          <div sc-camel-on-click="{{ deleteRun }}" tabindex="0" title="선택한 기록 삭제" style="padding: 9px 10px; border: 1px solid var(--line); text-align: center; font-size: 13px; color: var(--warn); cursor: pointer; white-space: nowrap">삭제</div>
           <select sc-camel-on-input="{{ replaySpeed }}" aria-label="재생 속도" style="width: 88px; padding: 8px 10px; border: 1px solid var(--line); background: var(--bg-void); color: var(--text-mid); font-size: 14px; border-radius: var(--r-sm)">
             <option value="0.5">0.5x</option><option value="1" selected>1x</option><option value="2">2x</option><option value="4">4x</option><option value="8">8x</option><option value="16">16x</option><option value="32">32x</option><option value="64">64x</option><option value="128">128x</option>
           </select>
@@ -665,6 +666,14 @@ class Component extends DCLogic {
     this.setState({ replay: null, replayId: '', mon: null }, () => this.push());
   }
   pickRun(e) { const id = Number(e.target.value); if (!id) this.stopReplay(); else this.loadReplay(id); }
+  deleteRun() {
+    const id = Number(this.state.replayId); if (!id) return;
+    const run = this.state.runs.find((r) => r.id === id);
+    if (!window.confirm('기록 "' + ((run && run.name) || id) + '" 을(를) 삭제할까요? 되돌릴 수 없습니다.')) return;
+    this.stopReplay();
+    fetch('/api/runs/' + id, { method: 'DELETE', credentials: 'same-origin' }).then((r) => r.json())
+      .then((d) => { if (d && d.error) window.alert(d.error); this.fetchRuns(); }).catch(() => this.fetchRuns());
+  }
   replayToggle() {
     const v = this.vp(); if (!v || !v._replay || !this.state.replay) return;
     if (this.state.replay.playing) v.replay.pause(); else v.replay.play();
@@ -1218,6 +1227,7 @@ class Component extends DCLogic {
       cellsOn: !!s.cellsOn,
       cellsLabel: s.cellsOn ? '셀 판정 표시: 켬' : '셀 판정 표시: 끔',
       toggleCells: () => this.setState({ cellsOn: !s.cellsOn }, () => { const v = this.vp(); if (v && v.setCellsVisible) v.setCellsVisible(this.state.cellsOn); }),
+      deleteRun: () => this.deleteRun(),
       replaySpeedVal: String(s.replay ? s.replay.speed : 1),
       pickRun: (e) => this.pickRun(e),
       replayToggle: () => this.replayToggle(),

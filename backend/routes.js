@@ -590,6 +590,12 @@ async function handleApi(req, res, pathname) {
     const run = mm[1] ? await store.getRun(Number(mm[1])) : null;
     if (!run) return json(res, 404, { error: 'run not found' });
     if (!mm[2] && method === 'GET') return json(res, 200, { run: runPublic(run), last_seq: await store.lastChunkSeq(run.id) });
+    if (!mm[2] && method === 'DELETE') {
+      if (run.status === 'recording') return json(res, 409, { error: '기록 중인 런은 지울 수 없습니다. 먼저 정지하세요.' });
+      const n = await store.deleteRun(run.id);
+      await store.log(sess.login_id, 'run.delete', String(run.id), run.name || '');
+      return json(res, 200, { ok: true, deleted: n });
+    }
     if (mm[2] === 'chunks' && method === 'GET') {
       const u = new URL(req.url, 'http://x');
       const from = Number(u.searchParams.get('from') || 0), to = Number(u.searchParams.get('to') || (from + 30));

@@ -361,6 +361,13 @@ const store = {
     for (const c of cells) await be.run('INSERT OR REPLACE INTO sim_run_cells (run_id, id, t, data) VALUES (?, ?, ?, ?)', [runId, c.id, c.t, c.data]);
   },
   getRunCells: (runId, after = 0, limit = 50) => be.all('SELECT id, t, data FROM sim_run_cells WHERE run_id = ? AND id > ? ORDER BY id LIMIT ?', [runId, after, limit]),
+  async deleteRun(id) {
+    await be.run('DELETE FROM sim_chunks WHERE run_id = ?', [id]);
+    await be.run('DELETE FROM sim_run_events WHERE run_id = ?', [id]);
+    await be.run('DELETE FROM sim_run_cells WHERE run_id = ?', [id]);
+    const r = await be.run('DELETE FROM sim_runs WHERE id = ?', [id]);
+    return r.changes;
+  },
   finishRun: (id, status, result) => be.run('UPDATE sim_runs SET status = ?, result = COALESCE(?, result), finished_at = ? WHERE id = ?',
     [status, result ? JSON.stringify(result) : null, Date.now(), id]),
   updateRunMeta: (id, meta) => be.run('UPDATE sim_runs SET meta = ? WHERE id = ?', [JSON.stringify(meta), id]),
