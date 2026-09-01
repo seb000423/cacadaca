@@ -658,13 +658,14 @@ class Component extends DCLogic {
     const ref = seed && seed.length ? seed[(seq - 1) % seed.length] : null;
     const q = result.quality || {}, rl0 = result.rl || {};
     const qualEp = Object.assign({ episode: seq, recipe: 'rl_live', seed: 0, cells: q.cells || 0 }, q);
-    const rl = ref ? {
-      force: Number(rl0.force) || ref.p.force,
-      stiffness: Number(rl0.stiffness) || ref.p.stiffness,
-      damping: Number(rl0.damping) || ref.p.damping,
+    /* 숙련공 정답(ref)이 없어도 실제 결과는 남긴다 — 자동 등록(evalSave(true)) 에 필요 */
+    const rl = {
+      force: Number(rl0.force) || (ref ? ref.p.force : 0),
+      stiffness: Number(rl0.stiffness) || (ref ? ref.p.stiffness : 0),
+      damping: Number(rl0.damping) || (ref ? ref.p.damping : 0),
       speed: Number(rl0.feed_scale_mean) || 1.0,
       inband: (result.cells && result.cells.polished) ? Math.min(1, (result.cells.pass || 0) / Math.max(1, result.cells.polished)) : 0,
-    } : null;
+    };
     this._simResult = result;
     this.setState({ running: false, mon: null, showEvalModal: true, runSeq: seq, refSeg: ref, rl, qualEp,
                     evalSaved: false, evalErr: '' }, () => { this.push(); this.evalSave(true); });   // 실제 실행 결과는 자동 등록
