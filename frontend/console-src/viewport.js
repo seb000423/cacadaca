@@ -838,6 +838,9 @@ class PolyTwinViewport extends HTMLElement {
     scene.add(robots);
     const props = new THREE.Group();      // 리프트·레일·갠트리 등 설비
     scene.add(props);
+    const cellsLayer = new THREE.Group();  // ③ 셀 판정 지도 — 시뮬 피드/기록의 셀 스냅샷을 차체 위에 색으로
+    scene.add(cellsLayer);
+    this.cellsLayer = cellsLayer;
 
     // M0609 의 도달거리는 0.9 m 다. 셀은 차체 바운딩 박스에서 계산해
     // 작업면 바로 옆에 세운다 — 고정 좌표로 3 m 밖에 두면 영원히 닿지 않는다.
@@ -1288,6 +1291,39 @@ class PolyTwinViewport extends HTMLElement {
     this._sideFields = buildSideFields(this.renderer, this._model);
   }
 
+  /** ③ 셀 판정 지도 — snapshot = {total, pass, rework, repaint, not_reached, items:[[x,y,z,disposition,gu],...]} (Isaac 월드).
+      Isaac→콘솔 변환(_liveXf)이 있어야 한다(피드/기록의 scene). 처분별 색: 합격 초록·재도장 검토 주황·재작업 빨강. */
+  setCells(snapshot, scene) {
+    const items = snapshot && Array.isArray(snapshot.items) ? snapshot.items.filter((it) => it && it[3] && it[3] !== 'not_reached') : [];
+    if (!this._liveXf && scene) this._buildLiveXform(scene);
+    const xf = this._liveXf;
+    if (!xf || !items.length) { this.clearCells(); return; }
+    const key = items.length + ':' + items.reduce((a, it) => a + (it[3] === 'pass' ? 1 : it[3] === 'rework_candidate' ? 3 : 2), 0);
+    if (key === this._cellsKey) return;                       // 바뀐 게 없으면 그대로
+    this._cellsKey = key;
+    this.clearCells();
+    const geo = new THREE.SphereGeometry(0.032, 10, 8);
+    const mat = new THREE.MeshStandardMaterial({ roughness: 0.55, metalness: 0.05, vertexColors: false });
+    const mesh = new THREE.InstancedMesh(geo, mat, items.length);
+    const m4 = new THREE.Matrix4(), p = new THREE.Vector3(), col = new THREE.Color();
+    const C = { pass: 0x2e8b57, spot_repaint_review: 0xe69f00, rework_candidate: 0xd55e00 };
+    for (let i = 0; i < items.length; i++) {
+      const it = items[i];
+      p.set(Number(it[0]), Number(it[1]), Number(it[2])).multiplyScalar(xf.s).applyMatrix4(xf.rot).add(xf.t);
+      m4.makeTranslation(p.x, p.y, p.z);
+      mesh.setMatrixAt(i, m4);
+      mesh.setColorAt(i, col.setHex(C[it[3]] || 0x888888));
+    }
+    mesh.instanceMatrix.needsUpdate = true; if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
+    mesh.castShadow = false; mesh.receiveShadow = false;
+    this.cellsLayer.add(mesh);
+    this._cellsMesh = mesh;
+  }
+  clearCells() {
+    if (this._cellsMesh) { this.cellsLayer.remove(this._cellsMesh); this._cellsMesh.geometry.dispose(); this._cellsMesh.material.dispose(); this._cellsMesh = null; }
+    this._cellsKey = null;
+  }
+
   /** 기록 재생기 (지연 생성) — 콘솔이 v.replay.load(id) / play() / pause() / seek(t) / setSpeed(x) 로 쓴다 */
   get replay() { return this._replay || (this._replay = new ReplayPlayer(this)); }
 
@@ -1297,7 +1333,9 @@ class PolyTwinViewport extends HTMLElement {
     this._live = feed && feed.robots && feed.robots.some((r) => Array.isArray(r.q)) ? feed : null;
     this._liveSnap = !!snap;
     if (this._live && this._live.scene && !this._liveXf) this._buildLiveXform(this._live.scene);
+    if (this._live && this._live.cells && Array.isArray(this._live.cells.items)) this.setCells(this._live.cells, this._live.scene);   // 실시간 피드의 셀 스냅샷
     if (had && !this._live) {
+      this.clearCells();
       // 해제: 받침대 다시 보이고 배치 자세로
       for (const cell of this._cells) {
         if (cell.userData.stand) cell.userData.stand.visible = true;
@@ -1658,6 +1696,8 @@ class ReplayPlayer {
     this.run = r.run; this.frames = []; this.loadedTo = -1; this.t = 0;
     this.follow = this.run.status === 'recording';
     this.scene = (this.run.meta && this.run.meta.scene) || null;
+    this.cellSnaps = []; this._cellAfter = 0; this._cellApplied = -1;
+    await this._loadCells();
     await this._ensure(0);
     this._emitState();
     return this.run;
@@ -1695,9 +1735,28 @@ class ReplayPlayer {
     } catch (err) { console.warn('리플레이 청크 로드 실패:', err); }
     finally { this.loading = false; }
   }
+  /* 셀 판정 스냅샷(~10 s 간격)을 전부 받아 둔다 — 작다(수십 KB). 기록 중이면 따라가며 더 받는다 */
+  async _loadCells() {
+    if (!this.run) return;
+    try {
+      for (let guard = 0; guard < 200; guard++) {
+        const r = await fetch(`/api/runs/${this.run.id}/cells?after=${this._cellAfter}`, { credentials: 'same-origin', cache: 'no-store' }).then((x) => x.json());
+        const rows = r.cells || [];
+        for (const c of rows) { this.cellSnaps.push({ id: c.id, t: Number(c.t), data: await gunzipJson(c.data) }); this._cellAfter = c.id; }
+        if (rows.length < 20) break;
+      }
+    } catch (err) { console.warn('셀 스냅샷 로드 실패:', err); }
+  }
+  _applyCells() {
+    const S = this.cellSnaps; if (!S.length) return;
+    let k = -1; for (let i = 0; i < S.length; i++) { if (S[i].t <= this.t) k = i; else break; }
+    if (k === this._cellApplied) return;
+    this._cellApplied = k;
+    if (k < 0) this.vp.clearCells(); else this.vp.setCells(S[k].data, this.scene);
+  }
   play() { if (!this.run) return; this.playing = true; this._last = performance.now(); if (!this._raf) this._raf = requestAnimationFrame((n) => this._tick(n)); this._emitState(); }
   pause() { this.playing = false; this._emitState(); }
-  stop() { this.playing = false; if (this._raf) cancelAnimationFrame(this._raf); this._raf = null; this.vp.setLive(null); this._emitState(); }
+  stop() { this.playing = false; if (this._raf) cancelAnimationFrame(this._raf); this._raf = null; this.vp.setLive(null); this.vp.clearCells(); this._cellApplied = -1; this._emitState(); }
   seek(t) { this.t = Math.max(0, Math.min(t, this.duration)); this._ensure(this.t); this._apply(); this._emitState(true); }
   setSpeed(x) { this.speed = x; this._emitState(); }
   _emitState(force) {
@@ -1710,7 +1769,7 @@ class ReplayPlayer {
     if (!this.playing || !this.run) return;
     if (this.follow) {
       // 기록 중: 끝에서 LAG 만큼 뒤를 따라간다 (5 s 마다 런 정보 갱신)
-      if (!this._lastRefresh || now - this._lastRefresh > 5000) { this._lastRefresh = now; this._refreshRun().then(() => { if (this.run.status !== 'recording') this.follow = false; }); }
+      if (!this._lastRefresh || now - this._lastRefresh > 5000) { this._lastRefresh = now; this._refreshRun().then(() => { if (this.run.status !== 'recording') this.follow = false; }); this._loadCells(); }
       const target = Math.max(0, this.duration - REPLAY_LIVE_LAG_S);
       this.t = Math.min(target, this.t + dt * this.speed);
     } else {
@@ -1730,6 +1789,7 @@ class ReplayPlayer {
     const u = b.t > a.t ? Math.max(0, Math.min(1, (this.t - a.t) / (b.t - a.t))) : 0;
     const feed = ReplayPlayer.interp(a, b, u, this.scene);
     this.vp.setLive(feed, true);
+    this._applyCells();
     if (this.onFrame) this.onFrame(feed, a);
   }
   static interp(a, b, u, scene) {
