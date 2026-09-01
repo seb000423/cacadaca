@@ -49,7 +49,7 @@ class MonitorFeed:
             self._over += 1
 
     def update(self, state: str, progress: float, robots: list[dict], elapsed_s: float | None = None,
-               cells: dict | None = None, scene: dict | None = None):
+               cells: dict | None = None, scene: dict | None = None, recipe: dict | None = None):
         """robots: [{id, name, force, target, state, progress, rl_force_scale, rl_feed_scale}]"""
         self._n += 1
         forces_all = []
@@ -85,6 +85,8 @@ class MonitorFeed:
             "cells": cells or {},
             # 장면 기준(선택): {"up": "z", "long": "y", "car_min": [x,y,z], "car_max": [x,y,z]} — 콘솔 좌표 정렬용
             **({"scene": scene} if scene else {}),
+            # 유효 레시피(선택): {force_n, feed_mm_s, rpm, step_over_ratio, n_passes, pad_radius_m, robots[]} — 콘솔 상태줄·조건 대조
+            **({"recipe": recipe} if recipe else {}),
         }
         tmp = self.path + ".tmp"
         with open(tmp, "w", encoding="utf-8") as f:

@@ -472,6 +472,17 @@ def main(simulation_app, obj_name="car"):
                    "car_min": [float(v) for v in np.min(raw_points, axis=0)] if len(raw_points) else [0, 0, 0],
                    "car_max": [float(v) for v in np.max(raw_points, axis=0)] if len(raw_points) else [0, 0, 0]}
     _FEED_EVERY = max(1, int(os.environ.get("POLISH_MONITOR_FEED_EVERY", "6")))   # 6 스텝 ≈ 10 Hz (팔 동기화용)
+    # 유효 레시피 값(콘솔 상태줄·조건 대조용): 잔차 브리지의 top 레시피
+    _feed_recipe = None
+    try:
+        _rc = getattr(rl_bridge, "recipe_top", None) if rl_bridge is not None else None
+        if _rc is not None:
+            _feed_recipe = {"force_n": float(getattr(_rc, "target_contact_force_n", 0.0)), "feed_mm_s": float(getattr(_rc, "feed_speed_mm_s", 0.0)),
+                            "rpm": float(getattr(_rc, "rpm", 0.0)), "step_over_ratio": float(getattr(_rc, "step_over_spacing_ratio", 0.0)),
+                            "n_passes": int(getattr(_rc, "n_passes", 0)), "pad_radius_m": float(common.POLISHING_DISK_RADIUS),
+                            "robots": [a.label for a in agents]}
+    except Exception as _exc:
+        print(f"[main] ⚠ 레시피 값 수집 실패: {_exc}", flush=True)
     # 기록기(POLISH_RECORD=<sqlite 경로> 또는 1): UI 리플레이/지연 재생용 — 피드와 같은 주기로 프레임을 DB 에 쓴다
     recorder = None
     _rec_env = os.environ.get("POLISH_RECORD", "")
@@ -480,7 +491,7 @@ def main(simulation_app, obj_name="car"):
             from learning.ui_bridge.sim_recorder import SimRecorder
             _rec_path = _rec_env if _rec_env != "1" else os.path.join(_SRC_DIR, "learning", "ui_bridge", "out",
                                                                        time.strftime("run_%Y%m%d_%H%M%S.sqlite"))
-            recorder = SimRecorder(_rec_path, meta={"scene": _feed_scene, "hz": 60.0 / _FEED_EVERY,
+            recorder = SimRecorder(_rec_path, meta={"scene": _feed_scene, "hz": 60.0 / _FEED_EVERY, "recipe_values": _feed_recipe,
                                                      "robots": [{"id": a.label, "name": _NAMES.get(a.label, a.label)} for a in agents],
                                                      "recipe": {"top": os.environ.get("POLISH_RL_RECIPE_TOP", ""),
                                                                 "side": os.environ.get("POLISH_RL_RECIPE_SIDE", "")},
@@ -540,7 +551,7 @@ def main(simulation_app, obj_name="car"):
             except Exception as _exc:
                 print(f"[main] ⚠ 기록 실패: {_exc}", flush=True)
         if monitor_feed is not None:
-            monitor_feed.update(overall_state, cov, robots, elapsed_s=sim_step / 60.0, cells=cells, scene=_feed_scene)
+            monitor_feed.update(overall_state, cov, robots, elapsed_s=sim_step / 60.0, cells=cells, scene=_feed_scene, recipe=_feed_recipe)
 
     # 물리 초기화
     world.reset()

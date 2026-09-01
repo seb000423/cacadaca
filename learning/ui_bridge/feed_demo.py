@@ -21,7 +21,8 @@ if rec_path:
     from learning.ui_bridge.sim_recorder import SimRecorder
     recorder = SimRecorder(rec_path, meta={"scene": {"up": "z", "long": "y", "car_min": [-0.92, -2.3, 0.05], "car_max": [0.92, 2.3, 1.45]},
                                           "hz": 10.0, "robots": [{"id": "C", "name": "천장"}, {"id": "SL", "name": "좌측"}, {"id": "SR", "name": "우측"}],
-                                          "recipe": {"synthetic": True}, "rl": False, "physical_contact": False})
+                                          "recipe": {"synthetic": True}, "rl": False, "physical_contact": False,
+                                          "recipe_values": {"force_n": 6.69, "feed_mm_s": 5.65, "rpm": 3259, "step_over_ratio": 0.27, "n_passes": 2, "pad_radius_m": 0.055, "robots": ["C", "SL", "SR"]}})
 feed.event("C", "합성 피드 시작 (feed_demo.py)", "info", 0.0)
 ctl_path = os.environ.get("POLISH_CONTROL", "")
 ctl = {"pause": False, "force_scale": 1.0, "feed_scale": 1.0}; _ctl_m = 0.0
@@ -69,7 +70,8 @@ while t < dur:
              "repaint": sum(1 for d in _DISP[:_k] if d == "spot_repaint_review"), "not_reached": len(_GRID) - _k,
              "items": [[*_GRID[i], _DISP[i], 71.0 + (i % 7) * 0.5] for i in range(_k)]}
     scene = {"up": "z", "long": "y", "car_min": [-0.92, -2.3, 0.05], "car_max": [0.92, 2.3, 1.45]}
-    feed.update("POLISH" if prog < 1.0 else "DONE", prog, robots, elapsed_s=t, cells=cells, scene=scene)
+    recipe = {"force_n": 6.69, "feed_mm_s": 5.65, "rpm": 3259, "step_over_ratio": 0.27, "n_passes": 2, "pad_radius_m": 0.055, "robots": ["C", "SL", "SR"]}
+    feed.update("POLISH" if prog < 1.0 else "DONE", prog, robots, elapsed_s=t, cells=cells, scene=scene, recipe=recipe)
     if recorder is not None:
         recorder.frame(t, "POLISH" if prog < 1.0 else "DONE", prog, t, robots)
         if n % 40 == 0: recorder.event(t, "SL", "info", f"셀 {n // 40} 판정 통과 — GU {71 + (n % 5) * 0.4:.1f}")
