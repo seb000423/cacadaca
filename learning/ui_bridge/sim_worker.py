@@ -125,8 +125,8 @@ def launch(params: dict, feed_path: str, fake: bool, isaac_py: str) -> subproces
 
 class RunUploader:
     """SimRecorder sqlite 를 따라가며 새 청크/이벤트/셀을 서버에 올린다 (지연 재생·리플레이용)."""
-    def __init__(self, args, job_id: int, path: str):
-        self.args = args; self.job_id = job_id; self.path = path
+    def __init__(self, args, job_id: int, path: str, params: dict | None = None):
+        self.args = args; self.job_id = job_id; self.path = path; self.params = dict(params or {})
         self.run_id = None; self.seq = 0; self.ev = 0; self.cell = 0; self.reader = None
 
     def _open(self):
@@ -136,6 +136,7 @@ class RunUploader:
         try:
             self.reader = SimReader(self.path)
             meta = self.reader.meta()
+            meta["params"] = {k: v for k, v in self.params.items() if not str(k).startswith("_")}   # 콘솔 환경 설정 — 재생 시 자동 복원
             r = api(self.args.server, self.args.token, "/api/sim/runs",
                     {"job_id": self.job_id, "name": f"job {self.job_id} " + time.strftime("%Y-%m-%d %H:%M"), "meta": meta})
             self.run_id = r.get("run_id")
@@ -169,6 +170,7 @@ class RunUploader:
                 self.cell = cells[-1][0]
             if final:
                 meta = self.reader.meta()
+                meta["params"] = {k: v for k, v in self.params.items() if not str(k).startswith("_")}
                 api(self.args.server, self.args.token, f"/api/sim/runs/{self.run_id}/meta", {"meta": meta})
                 api(self.args.server, self.args.token, f"/api/sim/runs/{self.run_id}/finish",
                     {"status": status, "result": result if result is not None else self.reader.result()})
@@ -185,7 +187,7 @@ def run_job(job: dict, args) -> None:
     params["_record_path"] = rec_path
     print(f"[worker] job {jid} 시작 params={params}", flush=True)
     proc = launch(params, feed_path, args.fake, args.isaac)
-    uploader = RunUploader(args, jid, rec_path)
+    uploader = RunUploader(args, jid, rec_path, params)
     stop = False; last_ts = None; last_up = 0.0; last_ctl = None
     while True:
         code = proc.poll()
