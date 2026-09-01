@@ -1331,14 +1331,18 @@ class PolyTwinViewport extends HTMLElement {
         }
         cell.userData.armRoot.position.y = 0;
         if (cell.userData.stand) cell.userData.stand.visible = false;   // 천장 로봇은 받침대가 없다
-        cell.updateMatrixWorld(true);
       }
-      // 패드 자전·연마 자국 — 접촉 중(POLISH)일 때만
+      // 패드 자전·연마 자국 — 접촉 중(POLISH)일 때만. 자국은 패드가 3 mm 이상 움직였을 때만 찍는다
+      // (매 프레임 찍으면 텍스처 재업로드가 프레임마다 일어난다).
       const rpm = this._params.rpm || 3000;
       cell.userData.padDisc.rotation.y += (rpm / 60) * Math.PI * 2 * dt;
       if (r.state === 'POLISH' && (Number(r.force) || 0) > 0.5) {
         cell.userData.padAnchor.getWorldPosition(_p);
-        this.stampPolish(_p, (this._params.pad / 1000) / 2);
+        const last = cell.userData.liveStamp || (cell.userData.liveStamp = new THREE.Vector3(1e9, 1e9, 1e9));
+        if (last.distanceToSquared(_p) > 9e-6) {
+          this.stampPolish(_p, (this._params.pad / 1000) / 2);
+          last.copy(_p);
+        }
       }
     }
   }
