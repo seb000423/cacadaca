@@ -75,6 +75,7 @@ function attachPolish(mat) {
         '    polished = texture2D(uPolish, pUv).r;',
         '  }',
         '  roughnessFactor = mix(0.82, 0.14, polished);',
+        '  diffuseColor.rgb *= mix(1.0, 1.45, polished);',   // 닦인 곳은 눈에 띄게 밝아진다 (어두운 도장에서도 읽히게)
         '}',
       ].join('\n'))
       // 광택은 클리어코트가 만든다. 여기까지 같이 보간해야 무광->유광이 읽힌다.
@@ -1397,6 +1398,30 @@ class PolyTwinViewport extends HTMLElement {
       const last = cell.userData.waPt;
       if (!last || last.distanceTo(pt) > 0.06) {                    // 셀이 바뀌었다 → 새 작업 구간
         if (this._setWorkWindow(cell, pt)) { cell.userData.waPt = pt.clone(); this.stampPolish(pt, this._waCellRadius(), true, 0.6); }   // 작업 중인 셀: 팔이 있는 자리부터 광택
+      }
+      // 리프트 축 추종 — 팔만 뻗지 않고 설비가 셀 쪽으로 온다
+      const tgt = cell.userData.waPt; if (!tgt) continue;
+      const LONG = (this._axes && this._axes.LONG) || 'z';
+      if (cell.userData.ceiling) {
+        // 천장: 갠트리를 따라 길이축 이동 + 매달림 기둥을 늘였다 줄여 어깨를 셀 위 0.65 m 에
+        const beamY = this._beamY || (cell.position.y + 1.0);
+        const stepL = RAIL_SPEED * dt, stepY = 0.35 * dt;
+        cell.position[LONG] += THREE.MathUtils.clamp(tgt[LONG] - cell.position[LONG], -stepL, stepL);
+        const wantY = THREE.MathUtils.clamp(tgt.y + 0.65, (this._waBox ? this._waBox.max.y : tgt.y) + 0.3, beamY - 0.3);
+        cell.position.y += THREE.MathUtils.clamp(wantY - cell.position.y, -stepY, stepY);
+        if (this._hang && this._liftGeo) {
+          this._hang.position.set(cell.position.x, beamY, cell.position.z);
+          this._hang.scale.y = Math.max(0.05, beamY - cell.position.y) / this._liftGeo.userData.size.y;
+        }
+        cell.updateMatrixWorld(true);
+      } else if (this._params.hasLift) {
+        // 측면: 텔레스코픽 기둥으로 어깨를 셀 높이 근처(−0.15 m)에
+        const root = cell.userData.armRoot;
+        const wantY = THREE.MathUtils.clamp(tgt.y - 0.15, 0.55, 1.75);
+        const stepY = 0.25 * dt;
+        root.position.y += THREE.MathUtils.clamp(wantY - root.position.y, -stepY, stepY);
+        this._setStandHeight(cell, root.position.y);
+        cell.updateMatrixWorld(true);
       }
     }
     this._animateLanes(dt, t, p);                                   // 콘솔 자체 동작: 레일 슬라이딩·접근·훑기·광택
