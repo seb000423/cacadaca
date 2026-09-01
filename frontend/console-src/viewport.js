@@ -1340,7 +1340,24 @@ class PolyTwinViewport extends HTMLElement {
     if (!on) this.clearCells();
     else if (this._live && this._live.cells) this.setCells(this._live.cells, this._live.scene);
   }
+  /** 완료된 셀 전체를 광택 마스크에 찍는다(셀 12 cm → 반경 9 cm 원). 팔 동작과 무관하게 판정 완료 = 닦임. */
+  stampCells(snapshot, scene) {
+    const items = snapshot && Array.isArray(snapshot.items) ? snapshot.items : [];
+    if (!this._liveXf && scene) this._buildLiveXform(scene);
+    const xf = this._liveXf; if (!xf || !this._polish) return;
+    const key = 'stamp:' + items.length;
+    if (key === this._stampKey) return;
+    this._stampKey = key;
+    const p = new THREE.Vector3();
+    for (let i = this._stampedN || 0; i < items.length; i++) {
+      const it = items[i]; if (!it || it[3] === 'not_reached') continue;
+      p.set(Number(it[0]), Number(it[1]), Number(it[2])).multiplyScalar(xf.s).applyMatrix4(xf.rot).add(xf.t);
+      this.stampPolish(p, 0.09);
+    }
+    this._stampedN = items.length;
+  }
   setCells(snapshot, scene) {
+    this.stampCells(snapshot, scene);
     if (!this._cellsEnabled) return;
     const items = snapshot && Array.isArray(snapshot.items) ? snapshot.items.filter((it) => it && it[3] && it[3] !== 'not_reached') : [];
     if (!this._liveXf && scene) this._buildLiveXform(scene);
@@ -1385,7 +1402,7 @@ class PolyTwinViewport extends HTMLElement {
     }
     this._liveSnap = !!snap;
     if (this._live && this._live.scene && !this._liveXf) this._buildLiveXform(this._live.scene);
-    if (this._live && this._cellsEnabled && this._live.cells && Array.isArray(this._live.cells.items)) this.setCells(this._live.cells, this._live.scene);   // 실시간 피드의 셀 스냅샷(옵션)
+    if (this._live && this._live.cells && Array.isArray(this._live.cells.items)) this.setCells(this._live.cells, this._live.scene);   // 셀 스냅샷: 광택 스탬프(항상) + 구슬 표시(옵션)
     if (this._live) { this.raster.visible = false; this.head.visible = false; }   // 시뮬을 따를 땐 데모 경로선은 의미가 없다
     if (had && !this._live) {
       this.raster.visible = true;
@@ -1887,12 +1904,13 @@ class ReplayPlayer {
     const S = this.cellSnaps; if (!S.length) return;
     let k = -1; for (let i = 0; i < S.length; i++) { if (S[i].t <= this.t) k = i; else break; }
     if (k === this._cellApplied) return;
+    if (k < this._cellApplied) { this.vp._stampedN = 0; this.vp._stampKey = null; if (this.vp.resetPolish) this.vp.resetPolish(); }   // 뒤로 탐색: 광택 다시
     this._cellApplied = k;
     if (k < 0) this.vp.clearCells(); else this.vp.setCells(S[k].data, this.scene);
   }
   play() { if (!this.run) return; this.playing = true; this._last = performance.now(); if (!this._raf) this._raf = requestAnimationFrame((n) => this._tick(n)); this._emitState(); }
   pause() { this.playing = false; this._emitState(); }
-  stop() { this.playing = false; if (this._raf) cancelAnimationFrame(this._raf); this._raf = null; this.vp.setLive(null); this.vp.clearCells(); this._cellApplied = -1; this._emitState(); }
+  stop() { this.playing = false; if (this._raf) cancelAnimationFrame(this._raf); this._raf = null; this.vp.setLive(null); this.vp.clearCells(); this._cellApplied = -1; this.vp._stampedN = 0; this.vp._stampKey = null; this._emitState(); }
   seek(t) { this.t = Math.max(0, Math.min(t, this.duration)); this._ensure(this.t); this._apply(); this._emitState(true); }
   setSpeed(x) { this.speed = x; this._emitState(); }
   _emitState(force) {
