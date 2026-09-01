@@ -670,7 +670,11 @@ class Component extends DCLogic {
       const hist = this._cqHist || (this._cqHist = []);
       for (const c of cq) if (c.working) { hist.push(c.ok ? 1 : 0); if (hist.length > 100) hist.shift(); }
       const rate = hist.length ? Math.round(100 * hist.reduce((a, b) => a + b, 0) / hist.length) : null;
-      this.setState({ mon: this.liveMon(feed, t), contact: { rows: cq, rate } });
+      const mon = this.liveMon(feed, t);
+      /* 커버리지·도달률은 콘솔 3D 실측: 실제로 닦인 면적 비율(광택 마스크), 팔이 맡은 작업점/전체 작업점 */
+      const st = v.getStats ? v.getStats() : null;
+      if (st) { mon.points = st.points || 0; mon.assigned = st.assigned || 0; if (st.polished !== null && st.polished !== undefined) mon.cov = st.polished * 100; }
+      this.setState({ mon, contact: { rows: cq, rate } });
     };
     if (!keepTimers) this.stopTimers();
     this.setState({ replayId: String(id), mon: null }, () => {
