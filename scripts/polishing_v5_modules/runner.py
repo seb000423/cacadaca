@@ -342,6 +342,16 @@ def main(simulation_app, obj_name="car"):
         }
         for label, cfg in rail_config_data.items()
     ]
+    # 콘솔 대수 반영: POLISH_ROBOTS="C,SL,SR" 처럼 라벨을 주면 그 로봇만 만든다 (3대 = 천장 C + 측면 SL/SR)
+    _want = [x.strip() for x in os.environ.get("POLISH_ROBOTS", "").split(",") if x.strip()]
+    if _want:
+        _have = [c["label"] for c in RAIL_CONFIGS]
+        RAIL_CONFIGS = [c for c in RAIL_CONFIGS if c["label"] in _want]
+        print(f"[main] POLISH_ROBOTS={_want} → 활성 {[c['label'] for c in RAIL_CONFIGS]} (구성 {_have})", flush=True)
+        if not RAIL_CONFIGS:
+            print("[main] ⚠ POLISH_ROBOTS 에 맞는 로봇이 없어 전체를 사용합니다", flush=True)
+            RAIL_CONFIGS = [{"label": label, "rail_x": float(cfg["rail_x"]), "base_yaw": float(cfg["base_yaw"]), "yz_stops": cfg["yz_stops"],
+                             "mount_mode": cfg.get("mount_mode"), "outward_sign": cfg.get("outward_sign", -1)} for label, cfg in rail_config_data.items()]
     is_overhead_mode = any(c.get("mount_mode") == "overhead" for c in RAIL_CONFIGS)
 
     # 시각적 레일 — 레일 모드에서만 (오버헤드는 갠트리가 대체)

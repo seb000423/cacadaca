@@ -60,6 +60,21 @@ def write_recipe(params: dict) -> str:
     return p
 
 
+def layout_env(params: dict) -> dict:
+    """콘솔 설정(대수·레일·리프트·패드 지름·차 리프트) → v5 환경변수. 3대 = 천장 C + 측면 SL/SR (v5 고정 배치와 1:1),
+    2대 = 측면 SL/SR, 1대 = 천장 C."""
+    n = int(params.get("robotCount", 3) or 3)
+    robots = {1: "C", 2: "SL,SR"}.get(n, "C,SL,SR")
+    env = {"POLISH_ROBOTS": robots,
+           "POLISH_RAIL": "1" if params.get("hasRail", True) else "0",
+           "POLISH_LIFT": "1" if params.get("hasLift", True) else "0"}
+    if params.get("pad"):
+        env["POLISH_PAD_RADIUS"] = f"{float(params['pad']) / 2000.0:.4f}"        # mm 지름 → m 반경
+    if params.get("carLift") is not None:
+        env["POLISH_CAR_LIFT_Z"] = f"{0.90 + float(params['carLift']) / 1000.0:.3f}"   # 기본 0.90 m + 콘솔 리프트(mm)
+    return env
+
+
 def launch(params: dict, feed_path: str, fake: bool, isaac_py: str) -> subprocess.Popen:
     for f in (feed_path, os.path.join(OUT, "last_run.json")):
         try: os.remove(f)
@@ -80,6 +95,7 @@ def launch(params: dict, feed_path: str, fake: bool, isaac_py: str) -> subproces
         "POLISH_PHYSICAL_CONTACT": "1" if params.get("physical") else "0",
     })
     if rec_path: env["POLISH_RECORD"] = rec_path
+    env.update(layout_env(params))
     return subprocess.Popen([isaac_py, "polishing_v5.py", "--obj_name", "car", "--headless"],
                             cwd=os.path.join(_REPO, "scripts"), env=env, stdout=log, stderr=subprocess.STDOUT,
                             start_new_session=True)

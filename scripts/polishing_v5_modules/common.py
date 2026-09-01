@@ -94,7 +94,7 @@ VIRTUAL_PAD_STIFFNESS = 350.0   # 강성↓: 부드러운 접촉
 VIRTUAL_PAD_DAMPING = 35.0   # 댐핑↑ → 접촉 시 튕김(floating) 억제, 착 달라붙게
 POLISHING_COMPLIANT_STIFFNESS = 200.0   # ※실측 결과 PhysX 순응접촉이 이 셋업에선 미작동(200/2500 모두 슬램 동일) — 값 무의미
 POLISHING_COMPLIANT_DAMPING = 130.0
-POLISHING_DISK_RADIUS = 0.055   # 영상 기준 150mm가 과해 보여 110mm급으로 축소
+POLISHING_DISK_RADIUS = float(os.environ.get("POLISH_PAD_RADIUS", "0.055"))   # 영상 기준 150mm가 과해 보여 110mm급으로 축소. 콘솔 패드 지름/2 (POLISH_PAD_RADIUS, m)
 POLISHING_DISK_HEIGHT = 0.070   # 가상 스프링(최장 측면 0.065)을 패드 두께 안에 넣도록 키움. 접촉면은 캘리브로 표면에 붙임
 POLISHING_DISK_SIDES = 16
 POLISHING_VISUAL_MAX_COMPRESSION = 0.014   # 말랑 재질: 접촉하면 납작해짐(과도한 높이 튐 억제)
@@ -195,7 +195,7 @@ DIAG_LOG_ENABLED = True              # status_log.txt 진단 로그 on/off
 # 폴리싱 시작 전 차가 바닥에서 이 높이까지 상승(애니메이션). 측면이 바닥에 안 닿게.
 # 모든 점군/경로/베이스 z 가 +CAR_LIFT_Z 된 '리프트 좌표계'에서 동작.
 # ─────────────────────────────────────────────
-CAR_LIFT_Z = 0.90
+CAR_LIFT_Z = float(os.environ.get("POLISH_CAR_LIFT_Z", "0.90"))   # 차체 리프트 높이(m) — 콘솔 carLift(mm)/1000 로 덮어씀
 CAR_LIFT_ANIM_STEPS = 90   # 이 스텝 동안 바닥→리프트높이까지 상승
 
 # 주차 진입 애니메이션: 차가 +Y(창문 없앤 벽) 쪽에서 바닥으로 들어와 리프트(원점)에 주차

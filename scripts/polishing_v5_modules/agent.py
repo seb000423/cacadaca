@@ -38,6 +38,13 @@ class RailRobotAgent:
         self.label    = config["label"]
         # 리프트 좌표계로: 정지 위치 z 에 CAR_LIFT_Z 더함 (경로 점군도 동일하게 올림)
         self.yz_stops = [[float(y), float(z) + CAR_LIFT_Z] for (y, z) in config["yz_stops"]]
+        # 콘솔 "이동 레일" 끔(POLISH_RAIL=0): 측면 로봇은 가운데 정지 위치 하나만 쓴다(레일 이동 없음, 도달 범위만 닦음)
+        self.rail_enabled = os.environ.get("POLISH_RAIL", "1") != "0"
+        if not self.rail_enabled and config.get("mount_mode") == "side" and len(self.yz_stops) > 1:
+            self.yz_stops = [self.yz_stops[len(self.yz_stops) // 2]]
+        # 콘솔 "텔레스코픽 리프트" 끔(POLISH_LIFT=0): 측면 로봇 베이스 높이를 정지 위치 평균으로 고정
+        self.lift_enabled = os.environ.get("POLISH_LIFT", "1") != "0"
+        self._fixed_z = float(np.mean([z for (_, z) in self.yz_stops])) if self.yz_stops else None
         self.is_overhead = config.get("mount_mode") == "overhead"
         self.is_side = config.get("mount_mode") == "side"
         self.outward_sign = int(config.get("outward_sign", -1))   # 측면 바깥 방향(좌-1/우+1)
@@ -125,7 +132,7 @@ class RailRobotAgent:
         self.base_position = np.array([self.rail_x, first_y, first_z])
         # 측면 단상은 짧은 중립 높이에서 시작 → 차 상승 후 SLIDE에서 working 높이까지 천천히 상승
         if self.is_side:
-            self.base_position[2] = SIDE_COLUMN_NEUTRAL_Z
+            self.base_position[2] = SIDE_COLUMN_NEUTRAL_Z if self.lift_enabled else float(self._fixed_z)
         # 오버헤드는 천장 가까이(슬라이더 짧게) 시작 → 어프로치에서 천천히 하강
         if self.is_overhead:
             self.base_position[2] = OVERHEAD_Z_MAX
@@ -970,7 +977,7 @@ class RailRobotAgent:
             self.base_position[0] = self.rail_x
         self.current_seg_idx = seg_idx
         self.slide_target_y = y_stop
-        self.slide_target_z = z_stop
+        self.slide_target_z = z_stop if (self.lift_enabled or not self.is_side) else float(self._fixed_z)
 
         # 현재 베이스 위치에서 경로의 시작/끝 중 가까운 쪽부터 폴리싱 시작 (한붓그리기 연속성)
         if len(path) > 1:
