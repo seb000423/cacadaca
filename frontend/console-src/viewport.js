@@ -114,21 +114,21 @@ function attachPathFade(mat) {
       .replace('#include <common>', [
         '#include <common>',
         'varying vec3 vPolishPos;',
-        'uniform sampler2D uPolish;',
+        'uniform sampler2D uPolishTop;',
         'uniform vec3 uLongSel;',
         'uniform vec3 uCrossSel;',
-        'uniform vec2 uFieldMin;',
-        'uniform vec2 uFieldSpan;',
+        'uniform vec2 uTopMin;',
+        'uniform vec2 uTopSpan;',
         'uniform float uPolishOn;',
       ].join('\n'))
       .replace('#include <opaque_fragment>', [
         '  if (uPolishOn > 0.5) {',
         '    vec2 pUv = vec2(',
-        '      (dot(vPolishPos, uLongSel) - uFieldMin.x) / uFieldSpan.x,',
-        '      (dot(vPolishPos, uCrossSel) - uFieldMin.y) / uFieldSpan.y);',
+        '      (dot(vPolishPos, uLongSel) - uTopMin.x) / uTopSpan.x,',
+        '      (dot(vPolishPos, uCrossSel) - uTopMin.y) / uTopSpan.y);',
         '    if (pUv.x > 0.0 && pUv.x < 1.0 && pUv.y > 0.0 && pUv.y < 1.0) {',
         // 완전히 지우지 않는다. 옅게 남겨야 '어디를 지났는지'가 읽힌다
-        '      diffuseColor.a *= 1.0 - 0.88 * texture2D(uPolish, pUv).r;',
+        '      diffuseColor.a *= 1.0 - 0.88 * texture2D(uPolishTop, pUv).r;',
         '    }',
         '  }',
         '#include <opaque_fragment>',
@@ -1833,7 +1833,7 @@ class PolyTwinViewport extends HTMLElement {
   _polishCoverage() {
     const P = this._polish;
     if (!P) return null;
-    const d = P.data;
+    const d = P.top.data;
     let n = 0;
     for (let i = 0; i < d.length; i++) if (d[i] > 8) n++;
     return n / d.length;
