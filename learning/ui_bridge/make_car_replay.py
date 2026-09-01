@@ -68,7 +68,7 @@ def cell_normal(r):
 
 def base_for(rid, r):
     cx, cy, cz = float(r["center_x_m"]), float(r["center_y_m"]), float(r["center_z_m"]) + CAR_LIFT_Z
-    if rid == "C": return [0.0, cy, POSE["C"]["z"]]      # 천장 로봇은 갠트리 중앙(x=0)을 따라 y 로만 이동 — 옆으로는 팔이 뻗는다 (Isaac 과 동일)
+    if rid == "C": return [0.0, cy, max(2.05, min(2.85, cz + 0.75))]   # 천장 로봇: 갠트리 중앙(x=0) y 이동, 높이는 셀 위 0.75 m (팔이 접혀 차를 뚫지 않게; Isaac 승강 범위 2.05~2.85)
     y = cy - 0.35 if r["region"] == "front" else cy + 0.35 if r["region"] == "rear" else cy
     return [POSE[rid]["x"], max(-1.9, min(1.9, y)), max(1.05, min(1.6, cz + 0.15))]
 
