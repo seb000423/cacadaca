@@ -674,6 +674,74 @@ function resize() {
   camera.updateProjectionMatrix();
 }
 
+/* ══ LIVE 피드 ═══════════════════════════════
+   /api/monitor 가 시뮬레이션(Isaac Sim) 피드를 돌려주면 데모 대신 그 값으로 그린다.
+   피드가 끊기면(5 s) 자동으로 데모로 돌아간다 — 화면은 비지 않는다. */
+const LIVE = { on: false, feed: null, seen: new Set() };
+async function pollLive() {
+  try {
+    const r = await fetch('/api/monitor', { cache: 'no-store' });
+    if (!r.ok) throw new Error(r.status);
+    const d = await r.json();
+    const was = LIVE.on;
+    LIVE.on = !!(d && d.live && d.feed);
+    LIVE.feed = LIVE.on ? d.feed : null;
+    if (LIVE.on !== was) {
+      addEvent('C', LIVE.on ? '시뮬레이션 피드 연결 — LIVE' : '피드 끊김 — 데모 데이터로 전환', LIVE.on ? 'info' : 'warn');
+      document.body.dataset.live = LIVE.on ? '1' : '0';
+    }
+  } catch (e) {
+    if (LIVE.on) { LIVE.on = false; LIVE.feed = null; document.body.dataset.live = '0'; }
+  }
+}
+setInterval(pollLive, 500);
+pollLive();
+
+function tickLive(f) {
+  const byId = {};
+  (f.robots || []).forEach((r) => { byId[r.id] = r; });
+  ROBOTS.forEach((r, i) => {
+    const fr = byId[r.id];
+    const v = fr ? Math.max(0, Number(fr.force) || 0) : 0;
+    S.cur[i] = v;
+    const h = S.force[i];
+    h.copyWithin(0, 1);
+    h[HIST - 1] = v;
+    const out = v > 0.3 && (v < BAND[0] || v > BAND[1]);
+    fEls[i].v.innerHTML = v.toFixed(2) + '<small>N</small>';
+    fEls[i].v.dataset.out = out ? '1' : '0';
+    drawForce(fEls[i].c, h, out);
+  });
+  const m = f.metrics || {};
+  const vals = { cv: m.cv || 0, band: m.band || 0, keep: m.keep || 0, cov: (f.progress || 0) * 100,
+                 unif: m.unif || 0, over: m.over || 0 };
+  TILES.forEach((t) => {
+    const v = vals[t.k];
+    $('tv-' + t.k).textContent = t.k === 'over' ? String(v) : Number(v).toFixed(1);
+    const h = tileHist[t.k];
+    h.push(v); if (h.length > 40) h.shift();
+    drawSpark($('ts-' + t.k), h, t.k === 'over');
+    $('t-' + t.k).dataset.warn = (t.k === 'over' && v > 0) || (t.k === 'band' && v < 90) ? '1' : '0';
+  });
+  const p = Math.max(0, Math.min(1, Number(f.progress) || 0));
+  $('progFill').style.width = (p * 100).toFixed(1) + '%';
+  $('progPct').textContent = (p * 100).toFixed(1) + '%';
+  $('tElapsed').textContent = hhmmss(Number(f.elapsed_s) || 0);
+  $('tLeft').textContent = p > 0.02 ? hhmmss(Math.max(0, (Number(f.elapsed_s) || 0) * (1 - p) / p)) : '--:--:--';
+  drawHeat(p);
+  if (f.state) setState(String(f.state));
+  (f.events || []).forEach((e) => {
+    const key = (e.t || 0) + '|' + e.msg;
+    if (LIVE.seen.has(key)) return;
+    LIVE.seen.add(key);
+    S.events.unshift({ t: Number(e.t) || 0, rid: e.robot || 'C', msg: e.msg, lv: e.level || 'info' });
+  });
+  if (S.events.length > 40) S.events.length = 40;
+  $('log').innerHTML = S.events.map((e) =>
+    `<div class="log__row" data-lv="${e.lv}"><time>${hhmmss(e.t)}</time><i>${e.rid}</i><p>${e.msg}</p></div>`
+  ).join('');
+}
+
 /* ══ 루프 ═══════════════════════════════════════════ */
 let last = performance.now(), acc = 0, frames = 0, fpsT = 0;
 
@@ -687,14 +755,14 @@ function loop(now) {
     if (S.t >= CYCLE) { S.t = CYCLE; S.done = true; setState('DONE'); }
   }
 
-  const p = S.t / CYCLE;
+  const p = LIVE.on ? Math.max(0, Math.min(1, Number(LIVE.feed.progress) || 0)) : S.t / CYCLE;
   animate3D(p, dt);
 
   acc += dt;
-  if (acc >= 0.25) { tickData(p, acc); acc = 0; }
+  if (acc >= 0.25) { if (LIVE.on) tickLive(LIVE.feed); else tickData(p, acc); acc = 0; }
 
   frames++; fpsT += dt;
-  if (fpsT >= 1) { $('fps').textContent = Math.round(frames / fpsT) + ' fps'; frames = 0; fpsT = 0; }
+  if (fpsT >= 1) { $('fps').textContent = (LIVE.on ? 'LIVE · ' : 'DEMO · ') + Math.round(frames / fpsT) + ' fps'; frames = 0; fpsT = 0; }
 
   placeCamera();
   renderer.render(scene, camera);

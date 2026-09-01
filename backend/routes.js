@@ -226,6 +226,25 @@ async function handleApi(req, res, pathname) {
      바뀌고 파싱 코드는 그대로 쓴다.
      원본 CSV(183MB)는 DB 에 넣지 않는다. 세그먼트가 들고 있는
      byteStart/byteEnd 로 여전히 정적 파일에 Range 요청을 건다. ══ */
+  /* ══ 시뮬레이션 실시간 피드 (② 모니터) ═══════════════════════
+     Isaac Sim 쪽(learning/ui_bridge/monitor_feed.py)이 JSON 파일을 20 스텝마다 갱신하고
+     여기서는 그 파일을 읽어 돌려준다. 파일이 없거나 5 s 이상 오래되면 live:false —
+     monitor.html 은 그때 데모 데이터로 돌아간다. 경로는 PT_MONITOR_FEED 로 바꾼다. ══ */
+  if (pathname === '/api/monitor' && method === 'GET') {
+    const sess = await sessionOf(req);
+    if (!sess) return json(res, 401, { error: '로그인이 필요합니다.' });
+    const fs = require('fs'), path = require('path');
+    const feed = process.env.PT_MONITOR_FEED
+      || path.join(__dirname, '..', '..', 'cacadaca', 'learning', 'ui_bridge', 'out', 'monitor_feed.json');
+    try {
+      const raw = fs.readFileSync(feed, 'utf8');
+      const data = JSON.parse(raw);
+      const age = Date.now() / 1000 - Number(data.ts || 0);
+      return json(res, 200, { live: age < 5, age_s: Math.round(age * 10) / 10, feed: data });
+    } catch (e) {
+      return json(res, 200, { live: false, age_s: null, feed: null });
+    }
+  }
   if (pathname.indexOf('/api/dataset/') === 0) {
     const sess = await sessionOf(req);
     if (!sess) return json(res, 401, { error: '로그인이 필요합니다.' });
