@@ -1556,7 +1556,11 @@ class PolyTwinViewport extends HTMLElement {
     for (const cell of this._cells) {
       if (!cell.userData.work || cell.userData.work.length < 2) continue;
       const len = cell.userData.pathLen || 0;
-      const sTarget = prog * len;
+      /* 로봇별로 따로 간다: 기록의 로봇 진행률(자기 셀 몫 중 끝낸 비율)과 상태를 그대로 — 세 대가 한 진행률에 묶이지 않는다 */
+      const rb = (feed.robots || []).find((r) => r.id === cell.userData.robotId) || null;
+      const pi = rb && Number.isFinite(Number(rb.progress)) ? Math.max(0, Math.min(1, Number(rb.progress))) : prog;
+      cell.userData.liveState = rb ? rb.state : null;
+      const sTarget = pi * len;
       const cur = cell.userData.s || 0;
       const d = sTarget - cur;
       if (Math.abs(d) > 0.4) {                                      // 슬라이더 점프(앞/뒤): 즉시 그 지점으로
@@ -2034,7 +2038,9 @@ class PolyTwinViewport extends HTMLElement {
         /* 레인이 바뀌는 구간(20 cm 이상 건너뜀)은 표면을 긁으며 가지 않는다.
            실제 공정처럼 법선 방향으로 들었다가 내려놓는다. 이걸 안 하면
            패드가 도장면을 뚫고 직선으로 지나가면서 지나지도 않은 자리를 연마한다. */
-        const hop = seg > 0.20 ? Math.sin(Math.PI * u) * Math.min(0.20, seg * 0.26) : 0;
+        let hop = seg > 0.20 ? Math.sin(Math.PI * u) * Math.min(0.20, seg * 0.26) : 0;
+        const st = cell.userData.liveState;
+        if (holdS && st && st !== 'POLISH') hop = Math.max(hop, 0.12);   // 기록상 폴리싱 중이 아니면 패드를 12 cm 들고 따라만 간다
         if (hop > 0) pt.addScaledVector(nrm, hop);
         const contact = hop < 0.004;
         if (ci === 0) lead = _leadP.copy(pt);
