@@ -602,7 +602,7 @@ class Component extends DCLogic {
       .then((r) => r.json().catch(() => ({})).then((d) => ({ ok: r.ok, status: r.status, d })))
       .then(({ ok, status, d }) => {
         if (!ok) throw new Error(d.error || ('launcher ' + status));
-        this._liveRun = true; this._hist = []; this._runT0 = performance.now();
+        this._liveRun = true; this._hist = []; this._runT0 = performance.now(); this._liveRunId = null; this._simResult = null;
         this.setState({ running: true, runMs: 0, runEl: 0, mon: this.liveMon(null, t) }, () => {
           this.push(); this.stopTimers();
           this._liveTimer = setInterval(() => this.pollLiveRun(t), 500);
@@ -633,6 +633,7 @@ class Component extends DCLogic {
       if (!viaReplay) this.setState({ runEl: el, mon: this.liveMon(feed, t) }); else this.setState({ runEl: el });
       const done = st && !st.running && (st.exitCode !== null || (feed && feed.state === 'DONE'));
       if (done) {
+        this._liveRunId = (st && st.run_id) || (this.state.replayId ? Number(this.state.replayId) : null) || this._liveRunId || null;
         this._liveReplayTried = null;
         if (viaReplay && v && v._replay) { v.replay.stop(); this.setState({ replay: null, replayId: '' }); }
         this.fetchRuns();
@@ -664,8 +665,9 @@ class Component extends DCLogic {
       speed: Number(rl0.feed_scale_mean) || 1.0,
       inband: (result.cells && result.cells.polished) ? Math.min(1, (result.cells.pass || 0) / Math.max(1, result.cells.polished)) : 0,
     } : null;
+    this._simResult = result;
     this.setState({ running: false, mon: null, showEvalModal: true, runSeq: seq, refSeg: ref, rl, qualEp,
-                    evalSaved: false, evalErr: '' }, () => this.push());
+                    evalSaved: false, evalErr: '' }, () => { this.push(); this.evalSave(true); });   // 실제 실행 결과는 자동 등록
   }
   toggleRunDemo() {
     if (this.state.running) {                 // 진행 중 누르면 중단
@@ -913,18 +915,27 @@ class Component extends DCLogic {
   // 일치할 때만 저장한다. 저장은 서버 DB(library_entries)로 간다 —
   // 예전 localStorage 'polytwin_saved' 는 이 브라우저에만 남아서 다른
   // PC 에서는 보이지 않았고 누가 저장했는지도 알 수 없었다.
-  evalSave() {
+  evalSave(auto) {
     const ref = this.state.refSeg, rl = this.state.rl, s = this.state;
-    if (!ref || !rl || this.evalRows().some((r) => !r.ok)) return;
+    const sim = this._simResult || null;                 // 실제 시뮬 결과 요약 (finishLiveRun)
+    if (!rl) return;
+    if (!auto && (!ref || this.evalRows().some((r) => !r.ok))) return;
+    if (auto && !sim) return;
     if (s.evalSaving || s.evalSaved) return;
 
+    const when = new Date();
+    const stamp = when.getFullYear() + '-' + String(when.getMonth() + 1).padStart(2, '0') + '-' + String(when.getDate()).padStart(2, '0')
+                + ' ' + String(when.getHours()).padStart(2, '0') + ':' + String(when.getMinutes()).padStart(2, '0');
     const rec = {
       id: 'rl-' + Date.now(),
-      seg: ref.seg,
-      name: ref.seg + ' · ' + ref.robot + ' 로봇 · RL 검증',
-      env: { robotCount: s.robotCount, tool: s.tool, hasRail: s.hasRail, hasLift: s.hasLift },
+      seg: ref ? ref.seg : 'sim',
+      name: ref ? (ref.seg + ' · ' + ref.robot + ' 로봇 · RL 검증') : ('RL 실행 · ' + stamp + (sim && sim.cells ? ' · 셀 ' + (sim.cells.pass || 0) + '/' + (sim.cells.cells || 0) : '')),
+      env: { robotCount: s.robotCount, tool: s.tool, hasRail: s.hasRail, hasLift: s.hasLift, carLift: s.carLift },
       rl: { force: rl.force, stiffness: rl.stiffness, damping: rl.damping, speed: rl.speed, inband: rl.inband },
-      ref: ref,
+      ref: ref || null,
+      sim: sim ? { quality: sim.quality || null, rl: sim.rl || null, cells: sim.cells || null, recipe: sim.recipe || null,
+                   elapsed_s: sim.elapsed_s || null, tag: sim.tag || null } : null,
+      run_id: this._liveRunId || null,
     };
     // 시각은 서버가 찍는다 — 클라이언트 시계를 믿고 정렬하지 않는다
 
@@ -933,7 +944,7 @@ class Component extends DCLogic {
     try {
       localStorage.setItem('polytwin_preset', JSON.stringify({
         robotCount: s.robotCount, tool: s.tool, hasRail: s.hasRail, hasLift: s.hasLift,
-        seg: ref.seg, force: rl.force, stiffness: rl.stiffness, damping: rl.damping, speed: rl.speed,
+        seg: ref ? ref.seg : 'sim', force: rl.force, stiffness: rl.stiffness, damping: rl.damping, speed: rl.speed,
       }));
     } catch (err) { /* 무시 */ }
 

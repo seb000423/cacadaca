@@ -654,11 +654,14 @@ async function handleApi(req, res, pathname) {
       const name = String(body.name || '').trim();
 
       if (!refId || refId.length > 64) return json(res, 400, { error: '기록 ID가 올바르지 않습니다.' });
-      if (!body.ref || !body.rl) return json(res, 400, { error: '저장할 기록이 비어 있습니다.' });
+      /* ref(숙련공 정답 세그먼트)가 없어도 실제 시뮬 결과(sim)가 있으면 저장한다 — 실행 종료 시 자동 등록 */
+      if (!body.rl || !(body.ref || body.sim)) return json(res, 400, { error: '저장할 기록이 비어 있습니다.' });
       if (name.length > 200) return json(res, 400, { error: '이름이 너무 깁니다.' });
 
-      /* 클라이언트가 보낸 것 중 라이브러리가 실제로 읽는 것만 남긴다 */
-      const payload = JSON.stringify({ env: body.env || null, rl: body.rl, ref: body.ref });
+      /* 클라이언트가 보낸 것 중 라이브러리가 실제로 읽는 것만 남긴다.
+         sim = 시뮬 결과 요약(품질·RL·셀 처분·레시피), run_id = 기록(sim_runs) — 라이브러리에서 재생 링크 */
+      const payload = JSON.stringify({ env: body.env || null, rl: body.rl, ref: body.ref || null,
+                                       sim: body.sim || null, run_id: body.run_id != null ? Number(body.run_id) : null });
       if (payload.length > 200 * 1024) return json(res, 413, { error: '기록이 너무 큽니다.' });
 
       const { entry, created } = await store.createLibraryEntry({
