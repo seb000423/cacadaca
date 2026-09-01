@@ -43,6 +43,18 @@ def cell_time(r):
     if r["outcome"] == "fail_force_overload" and float(r["passes"] or 0) == 0: return a.trip_s
     return a.cell_s * max(1.0, float(r["passes"] or 1))
 
+def cell_normal(r):
+    """셀 법선 근사: 면 분류의 바깥 방향과 tilt(법선-수직 각)로 합성 — CSV 에 법선이 없다."""
+    import math as _m
+    reg = r["region"]; tilt = _m.radians(float(r.get("tilt_deg") or 0.0))
+    out = {"side_left": (-1, 0, 0), "side_right": (1, 0, 0), "front": (0, 1, 0), "rear": (0, -1, 0)}.get(reg)
+    if out is None:   # 윗면: 차 중심에서 바깥으로 살짝 기운 위쪽
+        cx, cy = float(r["center_x_m"]), float(r["center_y_m"]); n = _m.hypot(cx, cy) or 1.0
+        out = (cx / n, cy / n, 0.0)
+    v = [out[0] * _m.sin(tilt), out[1] * _m.sin(tilt), _m.cos(tilt)]
+    n = _m.sqrt(sum(x * x for x in v)) or 1.0
+    return [x / n for x in v]
+
 def base_for(rid, r):
     cx, cy, cz = float(r["center_x_m"]), float(r["center_y_m"]), float(r["center_z_m"]) + CAR_LIFT_Z
     if rid == "C": return [cx, cy, POSE["C"]["z"]]
@@ -81,17 +93,28 @@ while t <= T_END + 1.0:
         t0, t1, state, r, b0, b1 = tl[idx[rid]]
         u = 0.0 if t1 - t0 <= 0 or t1 > 1e8 else max(0.0, min(1.0, (t - t0) / (t1 - t0)))
         base = [b0[i] + (b1[i] - b0[i]) * u for i in range(3)] if state == "SLIDE" else list(b1)
-        if state == "POLISH":
-            q = [POSE[rid]["q"][j] + (0.05 * math.sin(2 * math.pi * 0.3 * t + j) if j in (1, 2, 4) else 0.0) for j in range(6)]
-            force = TARGET[rid] * (1.0 + 0.06 * math.sin(2 * math.pi * 0.7 * t + hash(rid) % 7))
-        elif state in ("APPROACH", "RETRACT"):
-            q = [CARRY_Q[j] + (POSE[rid]["q"][j] - CARRY_Q[j]) * (u if state == "APPROACH" else 1 - u) for j in range(6)]
-            force = 0.0
+        tcp = None; nrm = None; q = None
+        if r is not None and state in ("APPROACH", "POLISH", "RETRACT"):
+            c = [float(r["center_x_m"]), float(r["center_y_m"]), float(r["center_z_m"]) + CAR_LIFT_Z]
+            nrm = cell_normal(r)
+            if state == "POLISH":
+                # 셀 안에서 12 cm 래스터(왕복) — 패드가 셀을 훑는 것처럼
+                ph = (t - t0) / max(1.0, t1 - t0); lane = math.sin(2 * math.pi * 6 * ph) * 0.05
+                side = [-nrm[1], nrm[0], 0.0]; sn = math.sqrt(side[0] ** 2 + side[1] ** 2) or 1.0
+                tcp = [c[i] + side[i] / sn * lane for i in range(3)]
+                force = TARGET[rid] * (1.0 + 0.06 * math.sin(2 * math.pi * 0.7 * t + hash(rid) % 7))
+            else:
+                hover = 0.15 * ((1 - u) if state == "APPROACH" else u)     # 법선 방향으로 내려오고/올라감
+                tcp = [c[i] + nrm[i] * hover for i in range(3)]
+                force = 0.0
         else:
             q = CARRY_Q; force = 0.0
         done_n = sum(1 for k in range(idx[rid]) if tl[k][2] == "RETRACT")
-        robots.append({"id": rid, "force": force, "target": TARGET[rid], "state": state, "progress": done_n / max(1, len(plan[rid])),
-                       "rl_force_scale": 1.0, "rl_feed_scale": 1.0, "q": q, "base": {"pos": base, "quat": POSE[rid]["quat"]}})
+        rob = {"id": rid, "force": force, "target": TARGET[rid], "state": state, "progress": done_n / max(1, len(plan[rid])),
+               "rl_force_scale": 1.0, "rl_feed_scale": 1.0, "base": {"pos": base, "quat": POSE[rid]["quat"]}}
+        if q is not None: rob["q"] = q
+        if tcp is not None: rob["tcp"] = tcp; rob["normal"] = nrm
+        robots.append(rob)
         # 셀 완료 시각(RETRACT 시작) 에 판정 기록
         if state == "RETRACT" and r is not None and r["cell_id"] not in done_ids:
             done_ids.add(r["cell_id"]); done_cells.append(r)

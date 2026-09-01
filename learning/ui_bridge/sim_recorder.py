@@ -14,7 +14,8 @@ UI 는 이 파일(또는 서버에 올린 같은 내용)에서 프레임을 미�
   cells(id INTEGER PK, t REAL, data BLOB)             -- gzip(JSON 셀 판정 스냅샷)
   result(id INTEGER PK, data TEXT)                    -- last_run.json 과 같은 요약
 프레임 = {"t": t_sim, "s": state, "p": progress, "e": elapsed_s,
-          "r": [[id, force, target, state, progress, rl_force_scale, rl_feed_scale, q[6] | null, pos[3] | null, quat[4] | null], ...]}
+          "r": [[id, force, target, state, progress, rl_force_scale, rl_feed_scale, q[6] | null, pos[3] | null, quat[4] | null,
+                 tcp[3] | null, normal[3] | null], ...]}   # tcp/normal 은 결과 리플레이(관절 없음) 용 — 콘솔이 IK 로 패드를 표면에
 """
 from __future__ import annotations
 
@@ -71,7 +72,9 @@ class SimRecorder:
                 round(float(r.get("rl_force_scale", 1.0)), 3), round(float(r.get("rl_feed_scale", 1.0)), 3),
                 [round(float(v), 4) for v in q] if q is not None else None,
                 [round(float(v), 4) for v in b["pos"]] if b.get("pos") is not None else None,
-                [round(float(v), 5) for v in b["quat"]] if b.get("quat") is not None else None]
+                [round(float(v), 5) for v in b["quat"]] if b.get("quat") is not None else None,
+                [round(float(v), 4) for v in r["tcp"]] if r.get("tcp") is not None else None,          # 10: 패드 목표점(선택, 결과 리플레이)
+                [round(float(v), 4) for v in r["normal"]] if r.get("normal") is not None else None]    # 11: 표면 법선(선택)
 
     def frame(self, t: float, state: str, progress: float, elapsed_s: float, robots: list[dict]):
         fr = {"t": round(float(t), 4), "s": state, "p": round(float(progress), 4), "e": round(float(elapsed_s), 3),
