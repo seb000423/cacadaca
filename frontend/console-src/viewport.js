@@ -993,7 +993,11 @@ class PolyTwinViewport extends HTMLElement {
   _layoutCells() {
     if (!this._armParts || !this._model) return;
     const p = this._params;
-    const want = Math.max(1, Math.min(3, p.robotCount || 1));
+    /* 대수 의미는 Isaac 배치와 같다: 1 = 천장(C), 2 = 좌·우(SL/SR), 3 = 천장 + 좌·우.
+       옛 의미(옆면 1~3대 + 리프트 시 천장 추가)는 시뮬과 어긋났다 — 피드/기록의 로봇 id 와 1:1 로 맞춘다. */
+    const total = Math.max(1, Math.min(3, p.robotCount || 1));
+    const ceiling = total === 1 || total === 3;
+    const want = total === 1 ? 0 : 2;
     const sig = [want, !!p.hasRail, !!p.hasLift, p.carLift || 0, this._model.uuid].join('|');
     if (sig === this._cellSig) return;
     this._cellSig = sig;
@@ -1044,11 +1048,7 @@ class PolyTwinViewport extends HTMLElement {
     /* 슬롯 — [폭축 부호, 길이축 위치]. 두 대 이상이면 반드시 반대편에 세우고
        길이 방향으로도 엇갈리게 둔다. 같은 쪽에 나란히 두면 두 팔이
        같은 공간을 지난다. */
-    const SLOTS = [
-      [[-1, 0]],
-      [[-1, -0.19], [1, 0.19]],
-      [[-1, -0.26], [1, 0], [-1, 0.26]],
-    ][want - 1];
+    const SLOTS = want ? [[-1, 0], [1, 0]] : [];     // 좌(SL)·우(SR) — Isaac 측면 레일과 같이 길이축 가운데
 
     for (let i = 0; i < want; i++) {
       const side = SLOTS[i][0];
@@ -1069,6 +1069,7 @@ class PolyTwinViewport extends HTMLElement {
       cell.userData.qHome = cell.userData.q.slice();
 
       cell.userData.side = side;
+      cell.userData.robotId = side < 0 ? 'SL' : 'SR';   // 피드/기록의 로봇 id 와 매칭
       cell.userData.onRail = !!p.hasRail;
       cell.userData.span = [l0, l1];
       cell.userData.home = cell.position[LONG];
@@ -1125,7 +1126,7 @@ class PolyTwinViewport extends HTMLElement {
     }
 
     // 천장 갠트리 — 지붕은 옆에서 못 닿는다. 위에서 한 대가 맡는다.
-    if (p.hasLift && this._railGeo && this._liftGeo) {
+    if (ceiling && this._railGeo && this._liftGeo) {
       const beamY = surfaceY + 1.28;
       const beam = new THREE.Mesh(this._railGeo, this.armMats.rail);
       beam.scale.set(0.55, 1, (l1 - l0) / this._railGeo.userData.size.z);
@@ -1173,12 +1174,13 @@ class PolyTwinViewport extends HTMLElement {
       cell.rotation.x = Math.PI;                     // 팔을 아래로
       cell.userData.armRoot.position.y = 0;
       cell.userData.ceiling = true;
+      cell.userData.robotId = 'C';
       cell.userData.side = 0;                        // 지붕 담당 — 옆면 셀과 구역이 겹치지 않는다
       cell.userData.onRail = false;
       cell.userData.span = [l0, l1];
       cell.userData.home = mid[LONG];
       this.robots.add(cell);
-      this._cells.push(cell);
+      this._cells.unshift(cell);                     // Isaac 피드 순서(C, SL, SR)와 같게 앞에
     }
 
     this.assignWork();
@@ -1345,6 +1347,11 @@ class PolyTwinViewport extends HTMLElement {
     if (had && !this._live) {
       this.raster.visible = true;
       this.clearCells();
+      if (this._modelScale0 && this._model) {        // 차체 크기·배치 원복
+        this._model.scale.copy(this._modelScale0); this._model.updateMatrixWorld(true);
+        this._cellSig = null; this.layoutCells();
+        try { this._field = buildHeightField(this.renderer, this._model); this._sideFields = buildSideFields(this.renderer, this._model); } catch (e) { /* 유지 */ }
+      }
       // 해제: 받침대 다시 보이고 배치 자세로
       for (const cell of this._cells) {
         if (cell.userData.stand) cell.userData.stand.visible = true;
@@ -1363,14 +1370,25 @@ class PolyTwinViewport extends HTMLElement {
     const LONG = (this._axes && this._axes.LONG) || 'z';
     const mn = new THREE.Vector3().fromArray(scene.car_min), mx = new THREE.Vector3().fromArray(scene.car_max);
     const isaacLen = Math.max(1e-3, mx.y - mn.y);
-    const s = THREE.MathUtils.clamp(size[LONG] / isaacLen, 0.5, 2.0);
+    /* 로봇은 실물 크기(미터)로 움직이므로 좌표는 스케일 1 로 옮기고, 대신 콘솔 차체를 Isaac 차(스캔 모델, 길이 ≈3.0 m) 크기로 줄인다.
+       그래야 팔 도달거리·패드 위치가 Isaac 과 같은 비율이 된다. 해제 시 원래 크기로 돌린다. */
+    if (!this._modelScale0) this._modelScale0 = this._model.scale.clone();
+    const carScale = THREE.MathUtils.clamp(isaacLen / size[LONG], 0.3, 3.0);
+    this._model.scale.copy(this._modelScale0).multiplyScalar(carScale);
+    this._model.updateMatrixWorld(true);
+    const b2 = new THREE.Box3().setFromObject(this._model);
+    const mid2 = b2.getCenter(new THREE.Vector3());
+    const s = 1.0;
     const rot = new THREE.Matrix4().setFromMatrix3(_LIVE_M);
     if (LIVE_LONG_FLIP) rot.premultiply(new THREE.Matrix4().makeRotationY(Math.PI));
-    const cIsaac = mn.clone().add(mx).multiplyScalar(0.5 * s).applyMatrix4(rot);
+    const cIsaac = mn.clone().add(mx).multiplyScalar(0.5).applyMatrix4(rot);
     // 높이는 차 바닥끼리 맞춘다(Isaac 차 z_min ↔ 콘솔 차 y_min)
-    const floorIsaac = new THREE.Vector3(0, 0, mn.z * s).applyMatrix4(rot);
-    const t = new THREE.Vector3(mid.x - cIsaac.x, b.min.y - floorIsaac.y, mid.z - cIsaac.z);
-    this._liveXf = { s, rot, t, q: new THREE.Quaternion().setFromRotationMatrix(rot) };
+    const floorIsaac = new THREE.Vector3(0, 0, mn.z).applyMatrix4(rot);
+    const t = new THREE.Vector3(mid2.x - cIsaac.x, b2.min.y - floorIsaac.y, mid2.z - cIsaac.z);
+    this._liveXf = { s, rot, t, q: new THREE.Quaternion().setFromRotationMatrix(rot), carScale };
+    // 줄어든 차체에 맞춰 레일·갠트리·연마 텍스처 좌표를 다시 잡는다
+    this._cellSig = null; this.layoutCells();
+    try { this._field = buildHeightField(this.renderer, this._model); this._sideFields = buildSideFields(this.renderer, this._model); } catch (e) { /* 유지 */ }
   }
 
   _driveLive(dt) {
@@ -1380,7 +1398,8 @@ class PolyTwinViewport extends HTMLElement {
     const _p = new THREE.Vector3(), _qi = new THREE.Quaternion(), _v = new THREE.Vector3();
     for (let ci = 0; ci < this._cells.length; ci++) {
       const cell = this._cells[ci];
-      const r = robots[ci]; if (!r || !Array.isArray(r.q)) continue;
+      const rid = cell.userData.robotId;
+      const r = (rid && robots.find((x) => x.id === rid)) || robots[ci]; if (!r || !Array.isArray(r.q)) continue;
       // 관절: 오프셋·부호 보정 후 속도 제한으로 따라붙기
       const tgt = cell.userData.liveQ || (cell.userData.liveQ = cell.userData.q.slice());
       for (let j = 0; j < 6; j++) tgt[j] = LIVE_Q_SIGN[j] * ((Number(r.q[j]) || 0) - LIVE_Q_OFFSET[j]);

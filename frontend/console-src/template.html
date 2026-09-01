@@ -525,6 +525,9 @@ function lcg(seed) {
   return () => (x = (Math.imul(x, 1664525) + 1013904223) >>> 0) / 4294967296;
 }
 const mmss = (sec) => `${String(Math.floor(sec / 60)).padStart(2, '0')}:${String(sec % 60).padStart(2, '0')}`;
+// 시뮬 시각(수 시간)용: h:mm:ss
+const hhmm = (sec) => { sec = Math.max(0, Math.round(sec)); const h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60), x = sec % 60;
+  return (h ? h + ':' : '') + String(m).padStart(2, '0') + ':' + String(x).padStart(2, '0'); };
 
 class Component extends DCLogic {
   state = {
@@ -646,10 +649,12 @@ class Component extends DCLogic {
           if (pr.tool && TOOLS && TOOLS[pr.tool]) env.tool = pr.tool;
           if (pr.carLift !== undefined) env.carLift = Number(pr.carLift) || 0;
           if (pr.recipe) env.recipe = String(pr.recipe);
-          this.setState(env, () => this.push());
+          const meta0 = (run && run.meta) || {};
+          this.setState(env, () => { this.push(); this._noteSimCond({ recipe: meta0.recipe_values || null, robots: (meta0.robots || []).map((r) => r.id), params: meta0.params || null }); });
+        } else {
+          const meta = (run && run.meta) || {};
+          this._noteSimCond({ recipe: meta.recipe_values || null, robots: (meta.robots || []).map((r) => r.id), params: meta.params || null });
         }
-        const meta = (run && run.meta) || {};
-        this._noteSimCond({ recipe: meta.recipe_values || null, robots: (meta.robots || []).map((r) => r.id), params: meta.params || null });
         pl.play(); this.push();
       }).catch((e) => console.warn('기록 로드 실패', e));
     });
@@ -680,7 +685,11 @@ class Component extends DCLogic {
     const s = this.state, c = s.simCond; if (!c) return;
     const t = toolOf(s.tool), rows = [];
     const add = (name, sim, ui) => { if (sim !== undefined && sim !== null && String(sim) !== String(ui)) rows.push({ name, sim: String(sim), ui: String(ui) }); };
-    if (c.robots && c.robots.length) add('로봇 대수', c.robots.length + '대 (' + c.robots.join('/') + ')', s.robotCount + '대');
+    const uiSet = ({ 1: ['C'], 2: ['SL', 'SR'], 3: ['C', 'SL', 'SR'] })[s.robotCount] || [];
+    if (c.robots && c.robots.length) {
+      const simSet = c.robots.slice().sort().join('/'), mine = uiSet.slice().sort().join('/');
+      if (simSet !== mine) rows.push({ name: '로봇 구성', sim: c.robots.length + '대 (' + c.robots.join('/') + ')', ui: s.robotCount + '대 (' + uiSet.join('/') + ')' });
+    }
     if (c.recipe && c.recipe.pad_radius_m) add('패드 지름', Math.round(c.recipe.pad_radius_m * 2000) + ' mm', t.pad + ' mm');
     if (c.params) {
       if (c.params.hasRail !== undefined) add('이동 레일', c.params.hasRail ? '있음' : '없음', s.hasRail ? '있음' : '없음');
@@ -698,7 +707,10 @@ class Component extends DCLogic {
       if (c.params.hasRail !== undefined) env.hasRail = !!c.params.hasRail;
       if (c.params.hasLift !== undefined) env.hasLift = !!c.params.hasLift;
       if (c.params.tool) env.tool = c.params.tool;
-    } else if (c.robots && c.robots.length) env.robotCount = Math.max(1, Math.min(3, c.robots.length));
+    } else if (c.robots && c.robots.length) {
+      const set = c.robots.slice().sort().join('/');
+      env.robotCount = set === 'C' ? 1 : set === 'SL/SR' ? 2 : 3;
+    }
     this._condShown = null;
     this.setState({ ...env, showCondModal: false, condRows: [] }, () => { this.push(); this.checkSimCond(); });
   }
@@ -948,9 +960,9 @@ class Component extends DCLogic {
       running: true, idle: false, panelTitle: rp ? (rp.follow ? '공정 모니터링 · 지연 재생' : '기록 재생') : (m.starting ? '공정 모니터링 · Isaac 기동 중 (약 1분)' : '공정 모니터링'),
       monPct: pct.toFixed(1),
       monBarW: pct.toFixed(1) + '%',
-      monElapsed: mmss(elSec),
-      monLeft: mmss(leftSec),
-      monTotal: mmss(rp ? Math.round(rp.duration) : Math.round(s.runMs / 1000)),
+      monElapsed: rp ? hhmm(elSec) : mmss(elSec),
+      monLeft: rp ? hhmm(leftSec) : mmss(leftSec),
+      monTotal: rp ? hhmm(rp.duration) : mmss(Math.round(s.runMs / 1000)),
       monForce: m.force.toFixed(2),
       monTarget: m.target.toFixed(1),
       monDev: (m.force >= m.target ? '+' : '–') + m.dev.toFixed(2),
@@ -1141,7 +1153,7 @@ class Component extends DCLogic {
     const passes = rc && rc.n_passes ? rc.n_passes : Math.round(1850 / spacing);
     const m0 = s.mon;
     const simEta = m0 && m0.live && m0.prog > 0.02 && this.state.runEl ? Math.max(0, Math.round((this.state.runEl / 1000) * (1 - m0.prog) / m0.prog)) : null;
-    const rpEta = s.replay && s.replay.active ? Math.max(0, Math.round(s.replay.duration - s.replay.t)) : null;
+    const rpEta = s.replay && s.replay.active ? Math.max(0, Math.round((s.replay.duration - s.replay.t) / Math.max(0.01, s.replay.speed))) : null;   // 배속 반영 실제 남은 시간
     return {
       vehicles: CARS.map((c) => ({
         name: c.name, swatch: c.swatch,
@@ -1157,7 +1169,7 @@ class Component extends DCLogic {
         pick: () => this.pickView(id),
       })),
       robotCounts: [1, 2, 3].map(n => ({
-        label: `${n}대`,
+        label: ({ 1: '1대 · 천장', 2: '2대 · 좌·우', 3: '3대 · 천장+좌·우' })[n],   // Isaac 배치와 같은 의미
         border: s.robotCount === n ? 'var(--accent)' : 'var(--line)',
         bg: s.robotCount === n ? 'rgb(var(--accent-ch) / 0.06)' : 'transparent',
         color: s.robotCount === n ? 'var(--text-hi)' : 'var(--text-mid)',
@@ -1200,7 +1212,7 @@ class Component extends DCLogic {
       replayId: s.replayId,
       monitorHref: s.replayId ? ('monitor.html?run=' + s.replayId + '&speed=' + (s.replay ? s.replay.speed : 1)) : 'monitor.html',
       replayPos: s.replay && s.replay.duration > 0 ? String(Math.round(1000 * s.replay.t / s.replay.duration)) : '0',
-      replayTime: s.replay ? (mmss(Math.round(s.replay.t)) + ' / ' + mmss(Math.round(s.replay.duration)) + (s.replay.follow ? ' · LIVE' : '')) : '',
+      replayTime: s.replay ? (hhmm(s.replay.t) + ' / ' + hhmm(s.replay.duration) + (s.replay.follow ? ' · LIVE' : (' · ' + s.replay.speed + 'x → 남은 실제 ' + mmss(Math.max(0, Math.round((s.replay.duration - s.replay.t) / Math.max(0.01, s.replay.speed))))))) : '',
       replayBtn: s.replay && s.replay.playing ? '일시정지' : '재생',
       cellsOn: !!s.cellsOn,
       cellsLabel: s.cellsOn ? '셀 판정 표시: 켬' : '셀 판정 표시: 끔',
