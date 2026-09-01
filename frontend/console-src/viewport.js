@@ -1166,6 +1166,7 @@ class PolyTwinViewport extends HTMLElement {
       hang.position[CROSS] = mid[CROSS];
       hang.position[LONG] = mid[LONG];
       this.props.add(hang);
+      this._hang = hang; this._beamY = beamY;        // 라이브/재생 때 천장 로봇 베이스를 따라 옮기고 늘인다
 
       const cell = robotCell(this._armParts, this.armMats);
       cell.position.set(0, shoulderY, 0);
@@ -1295,6 +1296,25 @@ class PolyTwinViewport extends HTMLElement {
 
   /** ③ 셀 판정 지도 — snapshot = {total, pass, rework, repaint, not_reached, items:[[x,y,z,disposition,gu],...]} (Isaac 월드).
       Isaac→콘솔 변환(_liveXf)이 있어야 한다(피드/기록의 scene). 처분별 색: 합격 초록·재도장 검토 주황·재작업 빨강. */
+  /** 측면 로봇 받침 기둥을 바닥에서 h 까지 — 리프트가 켜져 있으면 텔레스코픽 기둥, 아니면 원통 */
+  _setStandHeight(cell, h) {
+    const stand = cell.userData.stand; if (!stand) return;
+    h = Math.max(0.05, h);
+    if (Math.abs((cell.userData.standH || 0) - h) < 0.01) return;
+    cell.userData.standH = h;
+    while (stand.children.length) stand.remove(stand.children[0]);
+    let m;
+    if (this._params.hasLift && this._liftGeo) {
+      m = new THREE.Mesh(this._liftGeo, this.armMats.lift);
+      m.scale.set(0.62, h / this._liftGeo.userData.size.y, 0.62);
+    } else {
+      m = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.17, 1, 20), this.armMats.dark);
+      m.scale.y = h; m.position.y = h / 2;
+    }
+    m.castShadow = true; m.receiveShadow = true;
+    stand.add(m);
+  }
+
   /** 셀 판정 지도 표시 on/off (기본 off — 팔 동작만 보고 싶을 때 화면을 어지럽히지 않게) */
   setCellsVisible(on) {
     this._cellsEnabled = !!on;
@@ -1339,7 +1359,7 @@ class PolyTwinViewport extends HTMLElement {
   /** 시뮬 피드(/api/monitor 의 feed) 를 넣으면 팔이 Isaac 관절을 그대로 따른다. null 이면 해제. */
   setLive(feed, snap = false) {
     const had = !!this._live;
-    this._live = feed && feed.robots && feed.robots.some((r) => Array.isArray(r.q)) ? feed : null;
+    this._live = feed && feed.robots && feed.robots.some((r) => Array.isArray(r.q) || r.tcp) ? feed : null;
     this._liveSnap = !!snap;
     if (this._live && this._live.scene && !this._liveXf) this._buildLiveXform(this._live.scene);
     if (this._live && this._cellsEnabled && this._live.cells && Array.isArray(this._live.cells.items)) this.setCells(this._live.cells, this._live.scene);   // 실시간 피드의 셀 스냅샷(옵션)
@@ -1399,26 +1419,54 @@ class PolyTwinViewport extends HTMLElement {
     for (let ci = 0; ci < this._cells.length; ci++) {
       const cell = this._cells[ci];
       const rid = cell.userData.robotId;
-      const r = (rid && robots.find((x) => x.id === rid)) || robots[ci]; if (!r || !Array.isArray(r.q)) continue;
-      // 관절: 오프셋·부호 보정 후 속도 제한으로 따라붙기
-      const tgt = cell.userData.liveQ || (cell.userData.liveQ = cell.userData.q.slice());
-      for (let j = 0; j < 6; j++) tgt[j] = LIVE_Q_SIGN[j] * ((Number(r.q[j]) || 0) - LIVE_Q_OFFSET[j]);
-      const q = cell.userData.q, step = this._liveSnap ? 1e9 : LIVE_JOINT_RATE * dt;
-      for (let j = 0; j < 6; j++) q[j] += THREE.MathUtils.clamp(tgt[j] - q[j], -step, step);
-      setCellQ(cell, q);
-      // 베이스 자세: 피드에 있으면 Isaac 위치·자세를 그대로(레일 이동·리프트 포함)
+      const r = (rid && robots.find((x) => x.id === rid)) || robots[ci]; if (!r || (!Array.isArray(r.q) && !r.tcp)) continue;
+      // 관절: 오프셋·부호 보정 후 속도 제한으로 따라붙기 (결과 리플레이는 아래 IK 가 대신한다)
+      const useIK = r.tcp && (!Array.isArray(r.q) || feed.kind === 'result_replay');
+      if (!useIK && Array.isArray(r.q)) {
+        const tgt = cell.userData.liveQ || (cell.userData.liveQ = cell.userData.q.slice());
+        for (let j = 0; j < 6; j++) tgt[j] = LIVE_Q_SIGN[j] * ((Number(r.q[j]) || 0) - LIVE_Q_OFFSET[j]);
+        const q = cell.userData.q, step = this._liveSnap ? 1e9 : LIVE_JOINT_RATE * dt;
+        for (let j = 0; j < 6; j++) q[j] += THREE.MathUtils.clamp(tgt[j] - q[j], -step, step);
+        setCellQ(cell, q);
+      }
+      // 베이스 자세: 피드에 있으면 Isaac 위치·자세를 그대로(레일 이동·리프트 포함).
+      // 셀 원점은 바닥(또는 갠트리 보)에 두고 팔 뿌리(armRoot)를 베이스 높이로 올린다 → 기둥이 바닥~베이스를 잇는다.
       if (r.base && r.base.pos && xf) {
         _p.fromArray(r.base.pos).multiplyScalar(xf.s).applyMatrix4(xf.rot).add(xf.t);
-        cell.position.copy(_p);
         if (r.base.quat) {
           // 거울상 변환: 축은 M·n, 각도는 반전 → (w, −M·v)
           _v.set(r.base.quat[1], r.base.quat[2], r.base.quat[3]).applyMatrix3(_LIVE_M).negate();
           _qi.set(_v.x, _v.y, _v.z, r.base.quat[0]);
           if (LIVE_LONG_FLIP) _qi.premultiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI));
-          cell.quaternion.copy(_qi);
+        } else _qi.identity();
+        const root = cell.userData.armRoot;
+        if (cell.userData.ceiling) {
+          const beamY = this._beamY || (_p.y + 1.0);
+          cell.position.set(_p.x, beamY, _p.z); cell.quaternion.identity();
+          root.position.set(0, _p.y - beamY, 0); root.quaternion.copy(_qi);
+          if (this._hang && this._liftGeo) {           // 매달린 텔레스코픽 기둥: 보에서 베이스까지
+            this._hang.position.set(_p.x, beamY, _p.z);
+            this._hang.scale.y = Math.max(0.05, beamY - _p.y) / this._liftGeo.userData.size.y;
+          }
+          if (cell.userData.stand) cell.userData.stand.visible = false;
+        } else {
+          cell.position.set(_p.x, 0, _p.z); cell.quaternion.identity();
+          root.position.set(0, _p.y, 0); root.quaternion.copy(_qi);
+          this._setStandHeight(cell, _p.y);            // 측면 텔레리프트 기둥: 바닥에서 베이스까지
+          if (cell.userData.stand) cell.userData.stand.visible = true;
         }
-        cell.userData.armRoot.position.y = 0;
-        if (cell.userData.stand) cell.userData.stand.visible = false;   // 천장 로봇은 받침대가 없다
+        cell.updateMatrixWorld(true);
+      }
+      // 결과 리플레이(관절 없이 셀 목표점만 있는 프레임): 콘솔 IK 로 패드를 표면에 붙인다 — 관통 없이 자연스러운 접근
+      if (r.tcp && xf && (!Array.isArray(r.q) || feed.kind === 'result_replay')) {
+        const pad = new THREE.Vector3().fromArray(r.tcp).multiplyScalar(xf.s).applyMatrix4(xf.rot).add(xf.t);
+        const nrm = new THREE.Vector3().fromArray(r.normal || [0, 0, 1]).applyMatrix3(_LIVE_M);
+        if (LIVE_LONG_FLIP) nrm.applyAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI);
+        nrm.normalize();
+        const back = pad.clone().addScaledVector(nrm, 0.12);
+        solveIK(cell, pad, back, 12);
+        const q0 = cell.userData.q, step = this._liveSnap ? 1e9 : LIVE_JOINT_RATE * dt;
+        setCellQ(cell, q0);
       }
       // 패드 자전·연마 자국 — 접촉 중(POLISH)일 때만. 자국은 패드가 3 mm 이상 움직였을 때만 찍는다
       // (매 프레임 찍으면 텍스처 재업로드가 프레임마다 일어난다).
@@ -1726,6 +1774,7 @@ class ReplayPlayer {
     this.run = r.run; this.frames = []; this.loadedTo = -1; this.t = 0;
     this.follow = this.run.status === 'recording';
     this.scene = (this.run.meta && this.run.meta.scene) || null;
+    ReplayPlayer._kind = (this.run.meta && this.run.meta.kind) || '';
     this.cellSnaps = []; this._cellAfter = 0; this._cellApplied = -1;
     await this._loadCells();
     await this._ensure(0);
@@ -1829,6 +1878,8 @@ class ReplayPlayer {
       const r = { id: ra[0], force: L(ra[1], rb[1]), target: L(ra[2], rb[2]), state: ra[3], progress: L(ra[4], rb[4]),
                   rl_force_scale: L(ra[5], rb[5]), rl_feed_scale: L(ra[6], rb[6]) };
       if (ra[7] && rb[7]) r.q = ra[7].map((v, j) => L(v, rb[7][j])); else if (ra[7]) r.q = ra[7].slice();
+      if (ra[10]) r.tcp = rb[10] ? ra[10].map((v, j) => L(v, rb[10][j])) : ra[10].slice();
+      if (ra[11]) r.normal = ra[11].slice();
       if (ra[8]) {
         const pos = rb[8] ? ra[8].map((v, j) => L(v, rb[8][j])) : ra[8].slice();
         let quat = ra[9];
@@ -1841,7 +1892,7 @@ class ReplayPlayer {
       }
       return r;
     });
-    return { ts: Date.now() / 1000, state: a.s, progress: L(a.p, b.p), elapsed_s: L(a.e, b.e), robots, scene, t_sim: L(a.t, b.t) };
+    return { ts: Date.now() / 1000, state: a.s, progress: L(a.p, b.p), elapsed_s: L(a.e, b.e), robots, scene, t_sim: L(a.t, b.t), kind: ReplayPlayer._kind || '' };
   }
 }
 
