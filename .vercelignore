@@ -15,6 +15,8 @@ backend/data/
 
 # 원본 보관본 (비교용 — CLAUDE.md '배포 제외')
 frontend/assets/models/_orig/
+# 제조사 로고 원본 (흰 바탕 원색). 배포에는 누끼본만 간다
+frontend/assets/icons/_orig/
 
 # 배포되는 화면 중 아무도 로드하지 않는다 (appendix/tools/asset-check.html 전용).
 # 1.66MB 로 3D 예산 3MB 의 절반을 혼자 먹고 있었다.

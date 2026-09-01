@@ -54,7 +54,12 @@
     --crit-ch:    232 35 42;
 
     --f-sans: "Pretendard", "Pretendard Full", -apple-system, BlinkMacSystemFont, "Malgun Gothic", sans-serif;
-    --f-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    /* 2026-09-01 — mono 를 버리고 Pretendard 로 일원화했다.
+       IBM Plex Mono 는 선언만 있고 woff2 가 없어서 Consolas 로 떨어졌고,
+       Consolas 에 한글이 없어 한글은 다시 OS 기본꼴로 떨어졌다.
+       한 줄 안에서 글꼴이 셋으로 갈렸다. 자릿수 정렬은 body 의
+       font-variant-numeric: tabular-nums 가 이어받는다. */
+    --f-mono: "Pretendard", "Pretendard Full", -apple-system, BlinkMacSystemFont, "Malgun Gothic", sans-serif;
 
     --r-sm: 2px;
     --r-md: 4px;
@@ -89,6 +94,17 @@
 
   /* 3D 가 계속 도는 화면이다. 모션을 줄여 달라고 하면 전환은 멈춘다.
      (뷰포트 렌더 루프 자체는 공정 표시라 남긴다) */
+  /* 차종 제조사 마크 — assets/icons/*.png (회색조+알파).
+     원색을 그대로 두면 DESIGN.md 액센트 1개 원칙이 깨진다. 회색조로 눕히고
+     선택 상태만 불투명도로 올린다. 어떤 로고가 너무 어둡게 나오면
+     brightness 를 올리거나 그 파일만 invert(1) 을 더해라. */
+  .veh-mark {
+    width: 26px; height: 26px; object-fit: contain;
+    /* 회색조·톤 정규화는 파일에 구워져 있다 (scripts/logo-mono.py).
+       여기서 filter 를 또 걸면 두 번 밝아진다 — 선택 상태만 불투명도로 준다. */
+    transition: opacity 200ms cubic-bezier(0.4,0,0.2,1);
+  }
+
   @media (prefers-reduced-motion: reduce) {
     *, *::before, *::after {
       animation-duration: 1ms !important;
@@ -97,37 +113,30 @@
     }
   }
 </style>
+<link rel="stylesheet" href="assets/css/pt-header.css?v=2026-09-01e">
 <script type="module" src="79b1de60-ed4e-4e8e-88e9-89de853dfefc"></script>
 </helmet>
-<div style="position: fixed; inset: 0; display: grid; grid-template-columns: 72px 1fr clamp(380px, 29vw, 430px); background: var(--bg-void); color: var(--text-hi)">
+<div style="position: fixed; inset: 0; display: grid; grid-template-columns: 1fr clamp(380px, 29vw, 430px); grid-template-rows: 64px 1fr; background: var(--bg-void); color: var(--text-hi)">
 
-  <aside style="border-right: 1px solid var(--bg-panel); display: flex; flex-direction: column; align-items: center; padding: 18px 0; gap: 22px">
-    <div style="font-family: var(--f-mono); font-size: 12px; letter-spacing: 0.18em; color: var(--text-lo)">PT</div>
-    <div style="display: flex; flex-direction: column; gap: 12px">
-      <sc-for list="{{ vehicles }}" as="v" hint-placeholder-count="3">
-        <div sc-camel-on-click="{{ v.pick }}" title="{{ v.name }}" style="width: 44px; height: 44px; border: 1px solid {{ v.border }}; background: {{ v.bg }}; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: background-color 200ms cubic-bezier(0.4,0,0.2,1), border-color 200ms cubic-bezier(0.4,0,0.2,1), color 200ms cubic-bezier(0.4,0,0.2,1)">
-          <div style="width: 26px; height: 9px; border-radius: 5px 6px 3px 3px; background: {{ v.swatch }}"></div>
-        </div>
-      </sc-for>
+  <header class="pt-hdr" style="grid-column: 1 / -1">
+    <div class="pt-hdr__in">
+      <div class="pt-hdr__start">
+        <div class="pt-hdr__sub">차량 3D · 파라미터 설정</div>
+      </div>
+      <a class="pt-hdr__mark" href="index.html" aria-label="PolyTwin 홈">
+        <svg class="pt-hdr__sig" viewBox="0 0 130 78" aria-hidden="true" focusable="false">
+          <path class="a" d="M29.1 4.25Q33 2 36.9 4.25L62.4 19Q65 20.5 62.76 22.49C53.5 30.5 53.5 47.5 62.76 55.51Q65 57.5 62.4 59L36.9 73.75Q33 76 29.1 73.75L4.9 59.75Q1 57.5 1 53L1 25Q1 20.5 4.9 18.25Z"/>
+          <path class="b" d="M100.9 4.25Q97 2 93.1 4.25L67.6 19Q65 20.5 67.24 22.49C76.5 30.5 76.5 47.5 67.24 55.51Q65 57.5 67.6 59L93.1 73.75Q97 76 100.9 73.75L125.1 59.75Q129 57.5 129 53L129 25Q129 20.5 125.1 18.25Z"/>
+        </svg>
+        <span>POLY<b>TWIN</b></span>
+      </a>
+      <div class="pt-hdr__end">
+        <div class="pt-hdr__stat">{{ vehicleName }}</div>
+      </div>
     </div>
-    <div style="flex: 1"></div>
-    <div style="font-family: var(--f-mono); font-size: 12px; letter-spacing: 0.14em; color: var(--line); writing-mode: vertical-rl">01 SETUP</div>
-  </aside>
+  </header>
 
   <main style="position: relative; overflow: hidden">
-    <header style="position: absolute; top: 0; left: 0; right: 0; z-index: 10; display: flex; align-items: baseline; gap: 20px; padding: 22px 26px; pointer-events: none">
-      <div style="display: inline-flex; align-items: center; gap: 9px; font-size: 16px; font-weight: 300; letter-spacing: 0.3em">
-        <svg viewBox="0 0 130 78" width="28" height="16.8" aria-hidden="true" focusable="false" style="flex: none">
-          <path style="fill: currentColor" d="M29.1 4.25Q33 2 36.9 4.25L62.4 19Q65 20.5 62.76 22.49C53.5 30.5 53.5 47.5 62.76 55.51Q65 57.5 62.4 59L36.9 73.75Q33 76 29.1 73.75L4.9 59.75Q1 57.5 1 53L1 25Q1 20.5 4.9 18.25Z"/>
-          <path style="fill: var(--accent)" d="M100.9 4.25Q97 2 93.1 4.25L67.6 19Q65 20.5 67.24 22.49C76.5 30.5 76.5 47.5 67.24 55.51Q65 57.5 67.6 59L93.1 73.75Q97 76 100.9 73.75L125.1 59.75Q129 57.5 129 53L129 25Q129 20.5 125.1 18.25Z"/>
-        </svg>
-        <span>POLY<span style="color: var(--accent)">TWIN</span></span>
-      </div>
-      <div style="font-size: 15px; color: var(--text-lo)">차량 3D · 파라미터 설정</div>
-      <div style="flex: 1"></div>
-      <div style="font-family: var(--f-mono); font-size: 15px; color: var(--text-mid)">{{ vehicleName }}</div>
-    </header>
-
     <polytwin-viewport style="position: absolute; inset: 0"></polytwin-viewport>
 
     <div style="position: absolute; left: 26px; bottom: 22px; z-index: 10; display: flex; gap: 26px; font-family: var(--f-mono); font-size: 16px; color: var(--text-lo); pointer-events: none">
@@ -138,19 +147,30 @@
 
     <div style="position: absolute; right: 26px; bottom: 22px; z-index: 10; display: flex; gap: 6px">
       <sc-for list="{{ views }}" as="v" hint-placeholder-count="4">
-        <div sc-camel-on-click="{{ v.pick }}" style="padding: 8px 14px; border: 1px solid {{ v.border }}; font-size: 14px; letter-spacing: 0.08em; color: {{ v.color }}; cursor: pointer; transition: background-color 200ms cubic-bezier(0.4,0,0.2,1), border-color 200ms cubic-bezier(0.4,0,0.2,1), color 200ms cubic-bezier(0.4,0,0.2,1)">{{ v.label }}</div>
+        <div sc-camel-on-click="{{ v.pick }}" style="padding: 8px 14px; border: 1px solid {{ v.border }}; font-size: 15px; letter-spacing: 0.08em; color: {{ v.color }}; cursor: pointer; transition: background-color 200ms cubic-bezier(0.4,0,0.2,1), border-color 200ms cubic-bezier(0.4,0,0.2,1), color 200ms cubic-bezier(0.4,0,0.2,1)">{{ v.label }}</div>
       </sc-for>
     </div>
   </main>
 
   <aside style="border-left: 1px solid var(--bg-panel); background: rgb(var(--bg-base-ch) / 0.72); backdrop-filter: blur(14px); display: flex; flex-direction: column; overflow: hidden">
-    <div style="padding: 22px 22px 16px; border-bottom: 1px solid var(--bg-panel); display: flex; align-items: center; gap: 10px">
+    <div style="padding: 18px 22px 16px; border-bottom: 1px solid var(--bg-panel)">
+      <div style="font-size: 15px; font-weight: 500; letter-spacing: 0.12em; text-transform: uppercase; color: var(--text-lo); margin-bottom: 11px">차종(Vehicle)</div>
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px">
+        <sc-for list="{{ vehicles }}" as="v" hint-placeholder-count="4">
+          <div sc-camel-on-click="{{ v.pick }}" title="{{ v.name }}" style="padding: 10px 6px 9px; border: 1px solid {{ v.border }}; background: {{ v.bg }}; display: flex; flex-direction: column; align-items: center; gap: 8px; cursor: pointer; transition: background-color 200ms cubic-bezier(0.4,0,0.2,1), border-color 200ms cubic-bezier(0.4,0,0.2,1), color 200ms cubic-bezier(0.4,0,0.2,1)">
+            <img class="veh-mark" src="{{ v.mark }}" alt="" style="opacity: {{ v.markOpacity }}">
+            <div style="font-size: 16px; color: {{ v.color }}; text-align: center; word-break: keep-all; line-height: 1.3">{{ v.name }}</div>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+    <div style="padding: 18px 22px 16px; border-bottom: 1px solid var(--bg-panel); display: flex; align-items: center; gap: 10px">
       <div style="font-size: 16px; font-weight: 500; letter-spacing: 0.14em; text-transform: uppercase; color: var(--text-lo)">{{ panelTitle }}</div>
       <div style="flex: 1"></div>
       <sc-if value="{{ running }}" hint-placeholder-val="{{ false }}">
         <div style="display: flex; align-items: center; gap: 7px">
           <div class="pt-live" style="width: 6px; height: 6px; border-radius: 50%; background: var(--accent)"></div>
-          <div style="font-family: var(--f-mono); font-size: 13px; letter-spacing: 0.14em; color: var(--accent)">RUNNING</div>
+          <div style="font-family: var(--f-mono); font-size: 15px; letter-spacing: 0.14em; color: var(--accent)">RUNNING</div>
         </div>
       </sc-if>
     </div>
@@ -160,14 +180,14 @@
       <section style="border: 1px solid var(--bg-panel); padding: 16px; display: flex; flex-direction: column; gap: 24px">
         <div>
           <div style="display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 12px">
-            <div style="font-size: 14px; font-weight: 500; letter-spacing: 0.12em; text-transform: uppercase; color: var(--text-lo)">차체 리프트(Car Lift)</div>
+            <div style="font-size: 15px; font-weight: 500; letter-spacing: 0.12em; text-transform: uppercase; color: var(--text-lo)">차체 리프트(Car Lift)</div>
             <div style="font-family: var(--f-mono); font-size: 16px; color: {{ carLiftColor }}; font-variant-numeric: tabular-nums">{{ carLiftLabel }}</div>
           </div>
           <input type="range" min="0" max="800" step="50" value="{{ carLift }}" sc-camel-on-input="{{ setCarLift }}" aria-label="차체 리프트 높이">
           <div style="font-size: 16px; color: var(--text-mid); line-height: 1.5; margin-top: 10px; word-break: keep-all">{{ carLiftNote }}</div>
         </div>
         <div>
-          <div style="font-size: 14px; font-weight: 500; letter-spacing: 0.12em; text-transform: uppercase; color: var(--text-lo); margin-bottom: 12px">로봇 팔(Robot Arms) 대수</div>
+          <div style="font-size: 15px; font-weight: 500; letter-spacing: 0.12em; text-transform: uppercase; color: var(--text-lo); margin-bottom: 12px">로봇 팔(Robot Arms) 대수</div>
           <div style="display: flex; gap: 8px">
             <sc-for list="{{ robotCounts }}" as="rc" hint-placeholder-count="3">
               <div sc-camel-on-click="{{ rc.pick }}" style="flex: 1; padding: 10px 0; border: 1px solid {{ rc.border }}; background: {{ rc.bg }}; font-size: 15px; color: {{ rc.color }}; text-align: center; cursor: pointer; transition: background-color 200ms ease, border-color 200ms ease, color 200ms ease">{{ rc.label }}</div>
@@ -175,7 +195,7 @@
           </div>
         </div>
         <div>
-          <div style="font-size: 14px; font-weight: 500; letter-spacing: 0.12em; text-transform: uppercase; color: var(--text-lo); margin-bottom: 12px">폴리셔(Polisher) 종류</div>
+          <div style="font-size: 15px; font-weight: 500; letter-spacing: 0.12em; text-transform: uppercase; color: var(--text-lo); margin-bottom: 12px">폴리셔(Polisher) 종류</div>
           <div style="display: flex; gap: 8px">
             <sc-for list="{{ tools }}" as="t" hint-placeholder-count="2">
               <div sc-camel-on-click="{{ t.pick }}" style="flex: 1; padding: 10px 0; border: 1px solid {{ t.border }}; background: {{ t.bg }}; font-size: 15px; color: {{ t.color }}; text-align: center; cursor: pointer; transition: background-color 200ms ease, border-color 200ms ease, color 200ms ease">{{ t.label }}</div>
@@ -185,7 +205,7 @@
         </div>
         <div>
           <div style="display: flex; align-items: center; justify-content: space-between">
-            <div style="font-size: 14px; font-weight: 500; letter-spacing: 0.12em; text-transform: uppercase; color: var(--text-lo)">이동 레일(Rail) 추가</div>
+            <div style="font-size: 15px; font-weight: 500; letter-spacing: 0.12em; text-transform: uppercase; color: var(--text-lo)">이동 레일(Rail) 추가</div>
             <div sc-camel-on-click="{{ toggleRail }}" style="width: 40px; height: 22px; border-radius: 11px; background: {{ railBg }}; position: relative; cursor: pointer; transition: background 200ms ease">
               <div style="position: absolute; top: 2px; left: {{ railDotLeft }}; width: 18px; height: 18px; border-radius: 50%; background: var(--text-hi); transition: left 200ms ease"></div>
             </div>
@@ -193,7 +213,7 @@
         </div>
         <div>
           <div style="display: flex; align-items: center; justify-content: space-between">
-            <div style="font-size: 14px; font-weight: 500; letter-spacing: 0.12em; text-transform: uppercase; color: var(--text-lo)">작업용 리프트(Lift) 추가</div>
+            <div style="font-size: 15px; font-weight: 500; letter-spacing: 0.12em; text-transform: uppercase; color: var(--text-lo)">작업용 리프트(Lift) 추가</div>
             <div sc-camel-on-click="{{ toggleLift }}" style="width: 40px; height: 22px; border-radius: 11px; background: {{ liftBg }}; position: relative; cursor: pointer; transition: background 200ms ease">
               <div style="position: absolute; top: 2px; left: {{ liftDotLeft }}; width: 18px; height: 18px; border-radius: 50%; background: var(--text-hi); transition: left 200ms ease"></div>
             </div>
@@ -217,7 +237,7 @@
           <div style="font-family: var(--f-mono); font-size: 34px; font-weight: 300; color: var(--text-hi); line-height: 1; font-variant-numeric: tabular-nums">{{ monPct }}</div>
           <div style="font-size: 16px; color: var(--text-lo)">%</div>
           <div style="flex: 1"></div>
-          <div style="font-size: 14px; color: {{ monStateColor }}">{{ monStateLabel }}</div>
+          <div style="font-size: 15px; color: {{ monStateColor }}">{{ monStateLabel }}</div>
         </div>
         <div style="margin-top: 12px; height: 4px; background: var(--bg-panel); border-radius: var(--r-sm); overflow: hidden">
           <div style="width: {{ monBarW }}; height: 100%; background: var(--accent)"></div>
@@ -231,10 +251,10 @@
 
       <section style="border: 1px solid var(--bg-panel); padding: 15px 16px 13px">
         <div style="display: flex; align-items: baseline; gap: 8px">
-          <div style="font-size: 14px; font-weight: 500; letter-spacing: 0.12em; text-transform: uppercase; color: var(--text-lo)">접촉력</div>
+          <div style="font-size: 15px; font-weight: 500; letter-spacing: 0.12em; text-transform: uppercase; color: var(--text-lo)">접촉력</div>
           <div style="flex: 1"></div>
           <div style="font-family: var(--f-mono); font-size: 20px; color: {{ monStateColor }}; font-variant-numeric: tabular-nums">{{ monForce }}</div>
-          <div style="font-size: 14px; color: var(--text-lo)">N</div>
+          <div style="font-size: 15px; color: var(--text-lo)">N</div>
         </div>
         <div style="margin-top: 12px; position: relative; height: 62px; display: flex; align-items: stretch; gap: 2px">
           <div style="position: absolute; left: 0; right: 0; top: 50%; height: 1px; background: var(--line-hi)"></div>
@@ -253,32 +273,32 @@
 
       <section style="display: grid; grid-template-columns: 1fr 1fr; gap: 1px; background: var(--bg-panel); border: 1px solid var(--bg-panel)">
         <div style="background: var(--bg-base); padding: 13px 14px">
-          <div style="font-size: 14px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-lo)">패드 회전</div>
-          <div style="margin-top: 6px"><span style="font-family: var(--f-mono); font-size: 19px; color: var(--text-hi); font-variant-numeric: tabular-nums">{{ monRpm }}</span> <span style="font-size: 14px; color: var(--text-lo)">rpm</span></div>
+          <div style="font-size: 15px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-lo)">패드 회전</div>
+          <div style="margin-top: 6px"><span style="font-family: var(--f-mono); font-size: 19px; color: var(--text-hi); font-variant-numeric: tabular-nums">{{ monRpm }}</span> <span style="font-size: 15px; color: var(--text-lo)">rpm</span></div>
         </div>
         <div style="background: var(--bg-base); padding: 13px 14px">
-          <div style="font-size: 14px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-lo)">이송 속도</div>
-          <div style="margin-top: 6px"><span style="font-family: var(--f-mono); font-size: 19px; color: var(--text-hi); font-variant-numeric: tabular-nums">{{ monFeed }}</span> <span style="font-size: 14px; color: var(--text-lo)">mm/s</span></div>
+          <div style="font-size: 15px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-lo)">이송 속도</div>
+          <div style="margin-top: 6px"><span style="font-family: var(--f-mono); font-size: 19px; color: var(--text-hi); font-variant-numeric: tabular-nums">{{ monFeed }}</span> <span style="font-size: 15px; color: var(--text-lo)">mm/s</span></div>
         </div>
         <div style="background: var(--bg-base); padding: 13px 14px">
-          <div style="font-size: 14px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-lo)">커버리지</div>
-          <div style="margin-top: 6px"><span style="font-family: var(--f-mono); font-size: 19px; color: var(--accent); font-variant-numeric: tabular-nums">{{ monCov }}</span> <span style="font-size: 14px; color: var(--text-lo)">%</span></div>
+          <div style="font-size: 15px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-lo)">커버리지</div>
+          <div style="margin-top: 6px"><span style="font-family: var(--f-mono); font-size: 19px; color: var(--accent); font-variant-numeric: tabular-nums">{{ monCov }}</span> <span style="font-size: 15px; color: var(--text-lo)">%</span></div>
         </div>
         <div style="background: var(--bg-base); padding: 13px 14px">
-          <div style="font-size: 14px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-lo)">도달률</div>
-          <div style="margin-top: 6px"><span style="font-family: var(--f-mono); font-size: 19px; color: var(--text-hi); font-variant-numeric: tabular-nums">{{ monReach }}</span> <span style="font-size: 14px; color: var(--text-lo)">%</span></div>
+          <div style="font-size: 15px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-lo)">도달률</div>
+          <div style="margin-top: 6px"><span style="font-family: var(--f-mono); font-size: 19px; color: var(--text-hi); font-variant-numeric: tabular-nums">{{ monReach }}</span> <span style="font-size: 15px; color: var(--text-lo)">%</span></div>
         </div>
       </section>
       <div style="margin-top: -12px; font-size: 16px; color: var(--text-lo); line-height: 1.5; word-break: keep-all; font-variant-numeric: tabular-nums">{{ monReachNote }}</div>
 
       <section>
-        <div style="font-size: 14px; font-weight: 500; letter-spacing: 0.12em; text-transform: uppercase; color: var(--text-lo); margin-bottom: 11px">로봇별 진행</div>
+        <div style="font-size: 15px; font-weight: 500; letter-spacing: 0.12em; text-transform: uppercase; color: var(--text-lo); margin-bottom: 11px">로봇별 진행</div>
         <div style="display: flex; flex-direction: column; gap: 10px">
           <sc-for list="{{ monRobots }}" as="r" hint-placeholder-count="3">
             <div>
               <div style="display: flex; align-items: baseline; gap: 8px; font-size: 16px">
                 <div style="font-family: var(--f-mono); color: var(--text-mid)">{{ r.label }}</div>
-                <div style="color: {{ r.railColor }}; font-size: 14px">{{ r.rail }}</div>
+                <div style="color: {{ r.railColor }}; font-size: 15px">{{ r.rail }}</div>
                 <div style="flex: 1"></div>
                 <div style="font-family: var(--f-mono); color: var(--text-lo)">{{ r.pts }}</div>
                 <div style="font-family: var(--f-mono); color: var(--text-mid); width: 38px; text-align: right; font-variant-numeric: tabular-nums">{{ r.lap }}</div>
@@ -296,13 +316,13 @@
     </div>
     <div style="border-top: 1px solid var(--bg-panel); padding: 16px 22px 22px; display: flex; flex-direction: column; gap: 10px">
       <sc-if value="{{ idle }}" hint-placeholder-val="{{ true }}">
-      <div sc-camel-on-click="{{ loadPreset }}" tabindex="0" style="padding: 11px 0; border: 1px solid var(--line); font-size: 14px; letter-spacing: 0.06em; color: {{ presetColor }}; text-align: center; cursor: {{ presetCursor }}; transition: border-color 200ms cubic-bezier(0.4,0,0.2,1), color 200ms cubic-bezier(0.4,0,0.2,1)" style-hover="border-color: var(--text-lo)">{{ presetLabel }}</div>
+      <div sc-camel-on-click="{{ loadPreset }}" tabindex="0" style="padding: 11px 0; border: 1px solid var(--line); font-size: 15px; letter-spacing: 0.06em; color: {{ presetColor }}; text-align: center; cursor: {{ presetCursor }}; transition: border-color 200ms cubic-bezier(0.4,0,0.2,1), color 200ms cubic-bezier(0.4,0,0.2,1)" style-hover="border-color: var(--text-lo)">{{ presetLabel }}</div>
       </sc-if>
       <div sc-camel-on-click="{{ toggleRun }}" style="padding: 17px 0; border: 1px solid {{ runBorder }}; background: {{ runBg }}; font-size: 16px; font-weight: 500; letter-spacing: 0.18em; text-transform: uppercase; color: var(--text-hi); text-align: center; cursor: pointer; transition: background-color 220ms cubic-bezier(0.4,0,0.2,1), border-color 220ms cubic-bezier(0.4,0,0.2,1), color 220ms cubic-bezier(0.4,0,0.2,1)">{{ runLabel }}</div>
       <div style="display: flex; gap: 10px">
-        <a href="monitor.html" style="flex: 1; padding: 10px 0; font-size: 14px; letter-spacing: 0.06em; color: var(--text-lo); text-align: center; transition: color var(--t-base) var(--e-out); word-break: keep-all">② 공정 감시 →</a>
-        <a href="PolyTwin%20Save.html" style="flex: 1; padding: 10px 0; font-size: 14px; letter-spacing: 0.06em; text-align: center; color: var(--text-lo); transition: color var(--t-base) var(--e-out); word-break: keep-all" style-hover="color: var(--text-mid)">③ 결과 저장 →</a>
-        <div sc-camel-on-click="{{ goLibrary }}" tabindex="0" style="flex: 1; padding: 10px 0; font-size: 14px; letter-spacing: 0.06em; color: var(--text-lo); text-align: center; cursor: pointer; transition: color var(--t-base) var(--e-out); word-break: keep-all" style-hover="color: var(--text-mid)">④ 라이브러리 →</div>
+        <a href="monitor.html" style="flex: 1; padding: 10px 0; font-size: 15px; letter-spacing: 0.06em; color: var(--text-lo); text-align: center; transition: color var(--t-base) var(--e-out); word-break: keep-all">② 공정 감시 →</a>
+        <a href="PolyTwin%20Save.html" style="flex: 1; padding: 10px 0; font-size: 15px; letter-spacing: 0.06em; text-align: center; color: var(--text-lo); transition: color var(--t-base) var(--e-out); word-break: keep-all" style-hover="color: var(--text-mid)">③ 결과 저장 →</a>
+        <div sc-camel-on-click="{{ goLibrary }}" tabindex="0" style="flex: 1; padding: 10px 0; font-size: 15px; letter-spacing: 0.06em; color: var(--text-lo); text-align: center; cursor: pointer; transition: color var(--t-base) var(--e-out); word-break: keep-all" style-hover="color: var(--text-mid)">④ 라이브러리 →</div>
       </div>
     </div>
   </aside>
@@ -402,10 +422,26 @@
 </div>
 </x-dc>
 <script type="text/x-dc" data-dc-script="" data-props="{&quot;$preview&quot;:{&quot;width&quot;:1440,&quot;height&quot;:900}}">
+/* 고른 차종은 ② 공정 감시와 공유한다. monitor.html 이 같은 키를 읽는다 —
+   프리셋(polytwin_preset)은 RL 검증을 저장해야 생기므로 이 용도로는 못 쓴다. */
+const VEHICLE_KEY = 'polytwin_vehicle';
+const readVehicle = () => {
+  try {
+    const id = localStorage.getItem(VEHICLE_KEY);
+    return CARS.some((c) => c.id === id) ? id : 'z4';
+  } catch (err) { return 'z4'; }
+};
+
+/* mark 는 assets/icons/ 의 제조사 마크다. 회색조·톤 정규화가 파일에 구워져 있다 —
+   브랜드 원색을 그대로 쓰면 이 패널에만 색 체계가 넷 더 생긴다.
+   흰 배경은 빼 뒀다(누끼) — 어두운 패널에 그대로 얹힌다.
+   파일이 없으면 alt="" 라 빈칸으로 떨어진다(깨진 이미지 아이콘 안 뜬다).
+   누끼·톤 정규화 재현은 scripts/logo-mono.py, 원본은 assets/icons/_orig/. */
 const CARS = [
-  { id: 'z4', name: 'BMW Z4', swatch: '#6E7681' },
-  { id: 'coupe', name: '벤츠 쿠페', swatch: '#4A5058' },
-  { id: 'sf90', name: '페라리 SF90', swatch: '#7A3238' },
+  { id: 'z4', name: 'BMW Z4', mark: 'assets/icons/bmw.png' },
+  { id: 'coupe', name: '벤츠 쿠페', mark: 'assets/icons/benz.png' },
+  { id: 'sf90', name: '페라리 SF90', mark: 'assets/icons/ferrari.png' },
+  { id: 'sonata', name: '현대 쏘나타', mark: 'assets/icons/hyundai.png' },
 ];
 
 // 광택기 두 종류 — 「자동차 광택」 2. 광택의 종류.
@@ -450,7 +486,7 @@ const mmss = (sec) => `${String(Math.floor(sec / 60)).padStart(2, '0')}:${String
 
 class Component extends DCLogic {
   state = {
-    vehicle: 'z4',
+    vehicle: readVehicle(),
     tool: 'dual',
     view: 'free',
     running: false,
@@ -501,6 +537,10 @@ class Component extends DCLogic {
     v.setParams({ pad: t.pad, overlap: t.overlap, feed: t.feed, force: t.force, rpm: t.rpm,
                   robotCount: s.robotCount, hasRail: s.hasRail, hasLift: s.hasLift,
                   carLift: s.carLift / 1000, running: s.running });
+    /* 뷰포트는 attribute 가 없으면 z4 로 뜬다. 저장된 차종으로 열 때는 패널만
+       그 차를 가리키고 3D 는 Z4 인 상태가 된다 — 여기서 맞춘다.
+       setVehicle 은 같은 id 면 즉시 돌아오므로 매 push 마다 불러도 된다. */
+    if (v.setVehicle) v.setVehicle(s.vehicle);
   }
 
   pickVehicle(id) {
@@ -508,6 +548,8 @@ class Component extends DCLogic {
     this.setState({ vehicle: id });
     const v = this.vp();
     if (v && v.setVehicle) v.setVehicle(id);
+    // ② 공정 감시가 같은 차를 띄우게 한다. 사파리 프라이빗에서는 던지므로 감싼다
+    try { localStorage.setItem(VEHICLE_KEY, id); } catch (err) { /* 무시 */ }
   }
 
   pickView(id) {
@@ -839,9 +881,13 @@ class Component extends DCLogic {
     const passes = Math.round(1850 / spacing);
     return {
       vehicles: CARS.map((c) => ({
-        name: c.name, swatch: c.swatch,
+        name: c.name, mark: c.mark,
+        // 2026-09-01 0.45 -> 0.62. 파일 톤을 0.55->0.80 으로 올렸어도
+        // 곱해지면 미선택 마크가 다시 배경에 묻혔다. 선택 대비는 남는다
+        markOpacity: s.vehicle === c.id ? '1' : '0.62',
         border: s.vehicle === c.id ? 'var(--accent)' : 'var(--line)',
         bg: s.vehicle === c.id ? 'rgb(var(--accent-ch) / 0.06)' : 'transparent',
+        color: s.vehicle === c.id ? 'var(--text-hi)' : 'var(--text-lo)',
         pick: () => this.pickVehicle(c.id),
       })),
       vehicleName: (CARS.find((c) => c.id === s.vehicle) || CARS[0]).name,
@@ -950,6 +996,6 @@ class Component extends DCLogic {
 
 <!-- 언어 전환 — 번들에도 같은 두 줄이 들어가야 한다.
      scripts/i18n-bundle-patch.py --check 로 확인한다. -->
-<script src="assets/js/i18n-app.js?v=2026-09-01b"></script>
+<script src="assets/js/i18n-app.js?v=2026-09-01d"></script>
 <script src="assets/js/i18n.js"></script>
 </body></html>

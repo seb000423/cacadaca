@@ -34,7 +34,7 @@
 이 목록은 "AI가 만든 티"의 원인이다. 예외 없다.
 
 - 보라/인디고 그라디언트 (`#6366F1` → `#A855F7` 계열)
-- **Inter, Space Grotesk** — 이 프로젝트의 폰트는 Pretendard + IBM Plex Mono다
+- **Inter, Space Grotesk** — 이 프로젝트의 폰트는 Pretendard 하나다 (2026-09-01 mono 폐기, `DESIGN.md` 참고)
 - 이모지 아이콘 (✨🚀⚡)
 - 3열 균등 피처 카드 그리드
 - `transition: all` — 속성을 명시하라

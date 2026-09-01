@@ -493,7 +493,15 @@ const RAIL_URL = asset('assets/models/rail.opt.glb');   // 직선 레일, 원본
 const MESHOPT_URL = asset('assets/vendor/meshopt_decoder.mjs');
 // 차체는 디스크의 압축본을 쓴다. 번들에 박아 두면 HTML 하나가 6MB 가 된다 —
 // CLAUDE.md 성능 예산과 '자산을 base64 로 박지 마라' 규칙 그대로다.
-const CAR_URL = asset('assets/models/car.opt.glb');
+/* 차종 3개. 예전에는 셋이 Z4 하나를 색만 바꿔 쓰고 있었다 — 2026-09-01 에
+   벤츠·페라리 실제 스캔을 넣었다. 감축 과정은 ASSETS.md 「차종 3종」 참고.
+   tint 는 도장색이다. 세 모델 모두 재질이 하나뿐이라 원본 색이 의미가 없다. */
+const CAR_MODELS = {
+  z4:    { url: asset('assets/models/car.opt.glb'),     tint: 0x2f343b },
+  coupe: { url: asset('assets/models/benz.opt.glb'),    tint: 0x3a3f47 },
+  sf90:  { url: asset('assets/models/ferrari.opt.glb'), tint: 0x353a42 },
+  sonata:{ url: asset('assets/models/sonata.opt.glb'),  tint: 0x3f444c },
+};
 
 const RIG = {
   j1: { p: [0.000000, 0.134500, 0.000000], a: [0.000000, 1.000000, 0.000000] },
@@ -881,22 +889,24 @@ class PolyTwinViewport extends HTMLElement {
       this._showVehicle(id);
       return;
     }
-    // only the Z4 has a real model; the other two are the same body restyled,
-    // standing in until their own scans arrive
-    const tint = { z4: 0x2f343b, coupe: 0x3a3f47, sf90: 0x4a2226 }[id] || 0x2f343b;
-    // one parse of the 8 MB file, then share geometry between vehicles
-    this._basePromise = this._basePromise || loadCar(CAR_URL);
-    const base = await this._basePromise;
-    const model = this._models.size === 0 ? base : new THREE.Group();
-    if (model !== base) {
-      base.children.forEach((c) => {
-        const m = new THREE.Mesh(c.geometry, c.material.clone());
-        m.castShadow = true; m.receiveShadow = true;
-        model.add(m);
-      });
+    /* 차종마다 자기 모델을 받는다. 처음 고른 것만 내려받는다 —
+       셋을 미리 다 받으면 첫 화면이 1.5MB 무거워진다. */
+    const car = CAR_MODELS[id] || CAR_MODELS.z4;
+    // 같은 차종을 연타해도 파스는 한 번만
+    this._carLoads = this._carLoads || new Map();
+    if (!this._carLoads.has(id)) this._carLoads.set(id, loadCar(car.url));
+    let model;
+    try {
+      model = await this._carLoads.get(id);
+    } catch (err) {
+      this._carLoads.delete(id);
+      console.error('차체 모델을 불러오지 못했다: ' + car.url, err);
+      return;
     }
-    model.traverse((o) => { if (o.isMesh) o.material.color.setHex(tint); });
+    model.traverse((o) => { if (o.isMesh) o.material.color.setHex(car.tint); });
     this._models.set(id, model);
+    // 받는 사이에 다른 차종으로 넘어갔으면 늦게 온 응답이 화면을 덮지 않게 한다
+    if (this._vehicle !== id) return;
     this._showVehicle(id);
   }
 

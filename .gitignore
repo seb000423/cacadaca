@@ -30,3 +30,10 @@ appendix/sourcecode/
 .vercel
 .env*
 scripts/__pycache__/
+
+# 3D 원본 중 OBJ/대용량 GLB — _orig/ 자체는 커밋하지만(car.glb 등 30MB)
+# 2026-09-01 에 들어온 벤츠·페라리 원본은 셋이 1.6GB 라 git 에 넣을 수 없다.
+# 배포에는 어차피 안 들어간다(.vercelignore 의 _orig/). 감축본만 커밋한다.
+frontend/assets/models/_orig/*.obj
+frontend/assets/models/_orig/ferrari.glb
+frontend/assets/models/_orig/2015-hyundai-sonata/

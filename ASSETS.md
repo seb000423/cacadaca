@@ -201,6 +201,163 @@ python -m http.server 8000
 
 ---
 
+## 차종 4종 — 벤츠·페라리·쏘나타 실모델 (2026-09-01)
+
+① 사전 설정의 차종 선택기는 **셋이 Z4 하나를 색만 바꿔 쓰고 있었다.**
+`setVehicle` 이 `car.opt.glb` 를 한 번 파스해 지오메트리를 공유하고 tint 만
+갈아 끼웠다. 원본이 들어오는 대로 실모델로 바꿨고 넷이 됐다.
+
+| 차종 | id | 자산 | 원본 | 삼각형 | 크기 |
+|---|---|---|---|---|---|
+| BMW Z4 | `z4` | `car.opt.glb` | `_orig/car.glb` 4.00 MB | 81,818 | **0.26 MB** |
+| 벤츠 쿠페 | `coupe` | `benz.opt.glb` | `_orig/benz.obj` 13.9 MB | 90,074 | **0.35 MB** |
+| 페라리 SF90 | `sf90` | `ferrari.opt.glb` | `_orig/ferrari_sf90_v146.obj` 553 MB | 90,461 | **0.35 MB** |
+| 현대 쏘나타 | `sonata` | `sonata.opt.glb` | `_orig/2015-hyundai-sonata/` 75 MB | 89,893 | **0.41 MB** |
+
+배포되는 모델 합계 **2.86 MB** — 3 MB 예산 안이다(`robot_sl.opt.glb` 는
+`.vercelignore` 로 제외). 네 차종을 한꺼번에 받지는 않는다. `setVehicle` 이
+고른 차종만 `loadCar` 하고 `_carLoads` 에 캐시하므로 **첫 화면은 z4 의
+0.26 MB 만** 내려받는다.
+
+> 처음에는 벤츠 176k · 페라리 155k 로 구웠다. 차가 넷이 되면서 예산을
+> 넘어(3.49 MB) **셋 다 Z4 밀도(82k)로 다시 내렸다.** 육안 차이가 없다 —
+> 뷰포트 안에서 차체가 1000px 을 넘지 않아 90k 면 실루엣이 남는다.
+> 밀도를 차마다 다르게 두면 같은 화면에서 한 대만 각져 보이므로,
+> **새 차를 넣을 때도 90k 내외로 맞춰라.**
+
+### ① 에서 고른 차가 ② 로 넘어간다
+
+`localStorage.polytwin_vehicle` 한 칸이다. ① 이 차종을 누를 때 쓰고,
+② `monitor.html` 이 뜰 때 읽는다. `?vehicle=z4|coupe|sf90` 이 있으면
+그게 이긴다 — 링크로 특정 차종을 열 때.
+
+- **`polytwin_preset` 을 쓰지 않는다.** 그건 RL 검증을 저장해야 생기므로
+  차종만 바꾸고 넘어가면 비어 있다.
+- ① 은 다시 들어와도 마지막 차로 연다. `<polytwin-viewport>` 에는 `vehicle`
+  attribute 가 없어 3D 는 항상 z4 로 뜨므로, `push()` 가 매번 `setVehicle` 을
+  불러 맞춘다 (같은 id 면 즉시 돌아온다).
+- **② 는 축을 스스로 맞춰야 한다.** 배치 코드가 'Z 가 전장, X 가 폭' 을
+  전제하는데 페라리 원본은 X 가 전장이다. `carSize.x > carSize.z` 면 Y 로
+  90도 돌린다 — ① 의 `loadCar` 가 하는 것과 같은 규칙이다.
+- 하단 요약 줄에 차종을 적었다. 토막이 「차종 / · 셀 / · 로봇 / …」 로 끊기므로
+  `i18n-app.js` 에 `차종` · `· 셀` 을 더했다(첫 토막이 `셀` 에서 `· 셀` 로 바뀐다).
+  화면 글을 건드렸으면 `python scripts/i18n-app-check.py` 를 돌려라.
+
+랜딩(`index.html`)의 히어로는 Z4 고정이다. 로그인 전 화면이라 차종 선택
+맥락이 없고, 브랜드 인상이 브라우저에 남은 값에 따라 달라지면 안 된다.
+
+### 재현 — OBJ 는 obj2gltf 로 들어오지 않는다
+
+두 원본 모두 trimesh 가 뽑은 OBJ 다. 법선도 UV 도 없고 재질은 `mat_0` 하나뿐인데
+`material.mtl` 은 같이 오지 않았다(경고만 나고 기본 재질로 진행된다).
+
+벤츠(13.9 MB)는 `obj2gltf` 로 들어온다.
+
+```bash
+npx --yes obj2gltf -i _orig/benz.obj -o benz_raw.glb
+```
+
+**페라리(553 MB · 정점 6,940,401 · 삼각형 12,930,305)는 obj2gltf 로 못 연다.**
+숫자를 전부 JS 배열에 담아서 힙을 넘긴다. `scripts/obj2glb.mjs` 가 파일을
+줄 단위로 흘리면서 타입드 배열에 바로 쌓는다 — 553 MB 를 **9.5 초**에 읽는다.
+검증은 벤츠를 두 방법으로 굽고 정점·삼각형·바운딩 박스가 일치하는 걸로 했다.
+
+```bash
+node --max-old-space-size=14336 scripts/obj2glb.mjs \n     frontend/assets/models/_orig/ferrari_sf90_v146.obj ferrari_raw.glb
+```
+
+### 감축 — 비율은 차마다 다르다
+
+목표는 삼각형 **9만 내외**다. 기준선은 Z4(원본 163,636 → 81,818)이고,
+원본 밀도가 네 자릿수 넘게 차이나므로 `--ratio` 를 그대로 쓰면 안 된다.
+**비율이 아니라 결과 삼각형 수를 맞춰라.**
+
+```bash
+GT="npx --yes @gltf-transform/cli"
+$GT weld benz_raw.glb b1.glb                              # 벤츠     353,236 tri
+$GT simplify b1.glb bx.glb --ratio 0.255 --error 0.003
+# 페라리 12,930,305 tri — 0.007 까지 내려야 9만이 된다. error 도 0.006 으로
+# 풀어야 감축기가 오차 한계에 걸려 중간에 멈추지 않는다
+$GT simplify f1.glb fx.glb --ratio 0.007 --error 0.006
+$GT simplify s5.glb sx.glb --ratio 0.368 --error 0.003   # 쏘나타   244,341 tri
+```
+
+### 쏘나타는 텍스처와 실내가 들어 있었다
+
+앞의 둘과 종류가 다른 자산이다 — BeamNG 계열 GLB 로 **48 MB 중 44 MB 가
+텍스처**이고, 메시 210개·재질 35개에 엔진룸·시트·대시보드까지 들어 있다.
+
+- **텍스처는 한 바이트도 안 쓰인다.** ①의 `loadCar` 도 ②도 재질을 자기
+  `MeshPhysicalMaterial` 로 갈아 끼운다. 텍스처·UV·탄젠트를 떼면 48 MB → 4.05 MB.
+- **실내·엔진은 뺀다.** 남겨도 차체 안에 갇혀 안 보이는데 삼각형의 44%(194,184)를
+  먹는다. 그만큼을 외부 셸에 쓰는 게 낫다. 어느 재질을 뺄지는 **이름이 아니라
+  재질별 바운딩 박스**로 골랐다 — 차체 밖까지 뻗는 `vehicle_dark_kg`(범퍼·몰딩)와
+  `sonatablack` 은 이름만 보면 실내 같지만 남겨야 한다.
+
+| 뺀 재질 | 삼각형 | 근거 (바운딩 박스) |
+|---|---|---|
+| `sunburst_engine.003` | 62,311 | z 0.61…1.73 — 보닛 아래 |
+| `intlight` | 54,636 | x 0.20…0.79 · z 0.05…0.42 — 캐빈 안 |
+| `aluminium` | 26,598 | 엔진·서스펜션 |
+| `etk800_seats…beige` | 22,553 | 시트 |
+| `torpedo_leather` | 13,101 | 대시보드·리어 선반 |
+| `sunburst_main` | 8,921 | 섀시·플로어 |
+| `midsize_mechanical.004` | 6,014 | 언더바디 |
+| 스크린 3종 | 50 | 계기판·내비 |
+
+떼고 나면 재질이 전부 같아진다 → `dedup` 이 하나로 합치고 `join` 이 메시
+210개를 한 덩이로 묶는다. **드로우 콜 210 → 1.** `loadCar` 는 소스 메시마다
+`THREE.Mesh` 를 하나씩 만들므로 이걸 안 하면 차 한 대가 210 드로우 콜이다.
+
+```bash
+node prep-sonata.mjs "2015 Hyundai Sonata.glb" s0.glb   # 실내 제거 + 텍스처/UV 제거
+$GT prune s0.glb s1.glb && $GT dedup s1.glb s2.glb
+$GT flatten s2.glb s3.glb && $GT join s3.glb s4.glb
+$GT weld s4.glb s5.glb
+```
+
+### 법선은 감축 뒤에 굽는다
+
+OBJ 에 `vn` 이 하나도 없다. 감축 **전에** 법선을 넣으면 감축기가 그 값을
+보간해 뭉갠 법선이 남는다. 그래서 `scripts/bake-normals.mjs` 로 감축 결과에
+면적 가중 스무스 법선을 새로 굽는다 — 외적을 정규화하지 않고 더하면
+큰 면이 셰이딩을 지배해 도장면이 매끄럽게 읽힌다.
+
+```bash
+node scripts/bake-normals.mjs b2.glb b3.glb
+$GT meshopt b3.glb benz.opt.glb --level high
+```
+
+법선을 굽지 않으면 파일이 100 KB 작아지고 `loadCar` 의
+`if (!g.attributes.normal) g.computeVertexNormals()` 가 같은 값을 런타임에
+만든다. 그래도 굽는 쪽을 골랐다 — `asset-check.html` 처럼 그 폴백이 없는
+뷰어에서도 같은 형상이 나와야 한다.
+
+### 축 — 손댈 것이 없었다
+
+둘 다 Y-up 이다. 길이축만 다르다(벤츠 Z, 페라리 X). `loadCar` 가
+`sz.x > sz.z` 일 때 Y 로 90도 돌리고 `CAR_LENGTH`(4.35 m)에 맞춰 스케일한 뒤
+바닥 중앙으로 옮기므로 **자산 쪽에서 축을 맞출 필요가 없다.**
+
+| | 원본 바운딩 박스 (m) | 길이축 |
+|---|---|---|
+| 벤츠 | 0.263 x 0.170 x 0.652 | Z (스케일 없음) |
+| 페라리 | 4.719 x 1.166 x 1.989 | X (실척) |
+| 쏘나타 | 1.890 x 1.381 x 4.373 | Z (실척) |
+
+### 원본은 커밋하지 않는다
+
+`_orig/` 는 원래 커밋하는 자리지만(car.glb 등 30 MB), 이번 원본들은
+**1.7 GB** 다. `.gitignore` 에 `_orig/*.obj` · `_orig/ferrari.glb` ·
+`_orig/2015-hyundai-sonata/` 를 넣었다.
+배포에는 `_orig/` 전체가 이미 `.vercelignore` 로 빠진다.
+
+> `frontend/assets/models/ferrari.glb`(1.04 GB · 페라리 원본을 그대로 구운 것)가
+> **배포 루트에** 있었다. `_orig/` 로 옮겼다. 감축 안 된 모델을 `models/` 에
+> 두면 `.vercelignore` 가 못 잡는다.
+
+---
+
 ## 영상 (2026-08-31 실측)
 
 | 파일 | 크기 | 쓰는 곳 |
@@ -598,3 +755,62 @@ python scripts/i18n-app-check.py --phrases  # 다른 문장 속을 파고드는 
 | 번들 두 개 | +196 B 씩 | — |
 
 `i18n-app.js` 는 앱 화면에서만 받는다. 랜딩 첫 로드에는 안 들어간다.
+
+---
+
+## 제조사 마크 — ① 차종 선택 (2026-09-01)
+
+차종 카드 위에 있던 회색 알약(`swatch`, `#6E7681` 계열 리터럴 4개)은 아무
+정보도 주지 않았다. 제조사 마크로 바꿨다.
+
+### 넣을 파일
+
+`frontend/assets/icons/` 에 아래 이름으로 둔다. 경로는 `console-src/template.html`
+의 `CARS[].mark` 에 박혀 있다.
+
+| 파일 | 차종 | 원본 |
+|---|---|---|
+| `bmw.png` | BMW Z4 | `_orig/bmw.png` |
+| `benz.png` | 벤츠 쿠페 | `_orig/Benz.jpg` |
+| `ferrari.png` | 페라리 SF90 | `_orig/ferrari.png` |
+| `hyundai.png` | 현대 쏘나타 | `_orig/hyundai.png` |
+
+원본은 흰 바탕에 원색이라 그대로 못 얹는다. Benz 는 JPG 라 알파가 아예
+없고, 현대는 남색이라 배경에 묻히고, 페라리는 노란 방패가 패널에서 제일
+밝은 덩어리가 되고, 현대에는 「HYUNDAI」 워드마크까지 붙어 있었다.
+
+### 누끼 · 톤 정규화
+
+`python scripts/logo-mono.py` 로 재현한다. `_orig/` 를 읽어 같은 이름으로
+덮어쓴다.
+
+1. **흰 배경 → 알파.** 채도가 있으면 잉크, 무채색은 밝기로 부드럽게 깎아
+   가장자리를 살린다. BMW 흰 사분면처럼 로고 *안쪽* 흰색도 같이 뚫린다 —
+   어두운 배경에서는 그게 맞다. BMW 공식 다크 로고가 그 모양이다.
+2. **회색조.** 원색을 그대로 두면 이 패널에만 색 체계가 넷 더 생기고
+   DESIGN.md 「액센트 1개」 원칙이 깨진다.
+3. **잉크 평균 밝기를 0.55 로 감마 보정.** 잉크가 어두운 페라리·현대는
+   먼저 반전한다. 페라리는 반전하면 방패 바닥이 배경으로 가라앉고
+   윤곽·말·SF 만 남아 26px 에서 더 잘 읽힌다.
+4. **광학 크기 균형.** 바운딩박스가 아니라 눈에 보이는 덩어리로 맞춘다.
+   넓은 타원(현대 0.90)은 같은 폭이면 커 보이고, 세로형(페라리 1.06)은
+   작아 보인다.
+
+결과는 LA(회색조+알파) PNG 128px, 넷 합쳐 **35 KB**.
+
+```css
+.veh-mark { width: 26px; height: 26px; object-fit: contain; }
+```
+
+**CSS 에서 `filter` 를 걸지 마라.** 톤은 파일에 구워져 있다 — 또 걸면
+두 번 밝아진다. 선택 상태만 불투명도로 준다 (0.45 → 1).
+
+마스크(`mask-image`)로 단색 실루엣을 만드는 방법은 쓰지 않았다. BMW
+사분면·페라리 말처럼 안쪽이 분할된 마크는 알파만 남아 통짜 덩어리가 된다.
+
+`_orig/` 는 `.vercelignore` 로 배포에서 뺀다.
+
+### 파일이 없을 때
+
+`alt=""` 라 브라우저가 깨진 이미지 아이콘을 그리지 않는다. 빈칸으로
+떨어지고 아래 차종 이름은 그대로 보인다.

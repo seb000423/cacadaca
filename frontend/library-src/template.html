@@ -50,7 +50,12 @@
     --crit-ch:    232 35 42;
 
     --f-sans: "Pretendard", "Pretendard Full", -apple-system, BlinkMacSystemFont, "Malgun Gothic", sans-serif;
-    --f-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    /* 2026-09-01 — mono 를 버리고 Pretendard 로 일원화했다.
+       IBM Plex Mono 는 선언만 있고 woff2 가 없어서 Consolas 로 떨어졌고,
+       Consolas 에 한글이 없어 한글은 다시 OS 기본꼴로 떨어졌다.
+       한 줄 안에서 글꼴이 셋으로 갈렸다. 자릿수 정렬은 body 의
+       font-variant-numeric: tabular-nums 가 이어받는다. */
+    --f-mono: "Pretendard", "Pretendard Full", -apple-system, BlinkMacSystemFont, "Malgun Gothic", sans-serif;
 
     --r-sm: 2px;
     --r-md: 4px;
@@ -91,41 +96,43 @@
     }
   }
 </style>
+<link rel="stylesheet" href="assets/css/pt-header.css?v=2026-09-01e">
 
 </helmet>
-<div style="position: fixed; inset: 0; display: grid; grid-template-columns: 48px 1fr; background: var(--bg-void); color: var(--text-hi)">
-
-  <aside style="border-right: 1px solid var(--line); display: flex; flex-direction: column; align-items: center; padding: 18px 0">
-    <div style="font-family: var(--f-mono); font-size: 12px; letter-spacing: 0.18em; color: var(--text-lo)">PT</div>
-    <div style="flex: 1"></div>
-    <div style="font-family: var(--f-mono); font-size: 12px; letter-spacing: 0.14em; color: var(--line); writing-mode: vertical-rl">04 LIBRARY</div>
-  </aside>
+<div style="position: fixed; inset: 0; display: grid; grid-template-columns: 1fr; background: var(--bg-void); color: var(--text-hi)">
 
   <main style="position: relative; overflow: hidden">
 
     <div data-screen-label="04 Library" style="position: absolute; inset: 0; display: flex; flex-direction: column">
 
-      <div style="flex: none; padding: 22px 30px 16px; border-bottom: 1px solid var(--line)">
-        <div style="display: flex; align-items: baseline; gap: 18px; margin-bottom: 18px">
-          <div style="display: inline-flex; align-items: center; gap: 9px; font-size: 16px; font-weight: 300; letter-spacing: 0.3em">
-            <svg viewBox="0 0 130 78" width="28" height="16.8" aria-hidden="true" focusable="false" style="flex: none">
-              <path style="fill: currentColor" d="M29.1 4.25Q33 2 36.9 4.25L62.4 19Q65 20.5 62.76 22.49C53.5 30.5 53.5 47.5 62.76 55.51Q65 57.5 62.4 59L36.9 73.75Q33 76 29.1 73.75L4.9 59.75Q1 57.5 1 53L1 25Q1 20.5 4.9 18.25Z"/>
-              <path style="fill: var(--accent)" d="M100.9 4.25Q97 2 93.1 4.25L67.6 19Q65 20.5 67.24 22.49C76.5 30.5 76.5 47.5 67.24 55.51Q65 57.5 67.6 59L93.1 73.75Q97 76 100.9 73.75L125.1 59.75Q129 57.5 129 53L129 25Q129 20.5 125.1 18.25Z"/>
-            </svg>
-            <span>POLY<span style="color: var(--accent)">TWIN</span></span>
+      <header class="pt-hdr">
+        <div class="pt-hdr__in">
+          <div class="pt-hdr__start">
+            <div class="pt-hdr__sub">숙련공 정답 데이터</div>
           </div>
-          <div style="font-size: 15px; color: var(--text-lo)">숙련공 정답 데이터</div>
-          <div style="flex: 1"></div>
-          <!-- 여기 링크가 없어서 ④ 는 막다른 화면이었다 -->
-          <nav style="display: flex; align-items: baseline; gap: 18px">
-            <a href="PolyTwin%20Console.html" style="font-size: 14px; color: var(--text-lo); transition: color var(--t-base) var(--e-out); word-break: keep-all" style-hover="color: var(--text-mid)">① 설정</a>
-            <a href="monitor.html" style="font-size: 14px; color: var(--text-lo); transition: color var(--t-base) var(--e-out); word-break: keep-all" style-hover="color: var(--text-mid)">② 공정 감시</a>
-            <a href="PolyTwin%20Save.html" style="font-size: 14px; color: var(--text-lo); transition: color var(--t-base) var(--e-out); word-break: keep-all" style-hover="color: var(--text-mid)">③ 결과 저장</a>
-            </nav>
-          <div style="width: 1px; height: 12px; background: var(--line)"></div>
-          <div style="font-family: var(--f-mono); font-size: 15px; color: var(--text-lo); font-variant-numeric: tabular-nums">{{ shownCount }} / {{ totalCount }}건</div>
-        </div>
 
+          <a class="pt-hdr__mark" href="index.html" aria-label="PolyTwin 홈">
+            <svg class="pt-hdr__sig" viewBox="0 0 130 78" aria-hidden="true" focusable="false">
+              <path class="a" d="M29.1 4.25Q33 2 36.9 4.25L62.4 19Q65 20.5 62.76 22.49C53.5 30.5 53.5 47.5 62.76 55.51Q65 57.5 62.4 59L36.9 73.75Q33 76 29.1 73.75L4.9 59.75Q1 57.5 1 53L1 25Q1 20.5 4.9 18.25Z"/>
+              <path class="b" d="M100.9 4.25Q97 2 93.1 4.25L67.6 19Q65 20.5 67.24 22.49C76.5 30.5 76.5 47.5 67.24 55.51Q65 57.5 67.6 59L93.1 73.75Q97 76 100.9 73.75L125.1 59.75Q129 57.5 129 53L129 25Q129 20.5 125.1 18.25Z"/>
+            </svg>
+            <span>POLY<b>TWIN</b></span>
+          </a>
+
+          <div class="pt-hdr__end">
+            <!-- 여기 링크가 없어서 ④ 는 막다른 화면이었다 -->
+            <nav class="pt-hdr__nav" aria-label="화면">
+              <a href="PolyTwin%20Console.html">① 설정</a>
+              <a href="monitor.html">② 공정 감시</a>
+              <a href="PolyTwin%20Save.html">③ 결과 저장</a>
+            </nav>
+            <div class="pt-hdr__sep"></div>
+            <div class="pt-hdr__stat">{{ shownCount }} / {{ totalCount }}건</div>
+          </div>
+        </div>
+      </header>
+
+      <div style="flex: none; padding: 16px 30px; border-bottom: 1px solid var(--line)">
         <div style="display: flex; flex-direction: column; gap: 14px">
           <div style="display: flex; align-items: center; gap: 12px">
             <input type="text" value="{{ query }}" sc-camel-on-input="{{ setQuery }}" placeholder="세그먼트 검색" style="flex: 1; max-width: 320px; padding: 10px 14px; font-size: 16px; background: var(--bg-base)">
@@ -923,6 +930,6 @@ class Component extends DCLogic {
 
 <!-- 언어 전환 — 번들에도 같은 두 줄이 들어가야 한다.
      scripts/i18n-bundle-patch.py --check 로 확인한다. -->
-<script src="assets/js/i18n-app.js?v=2026-09-01b"></script>
+<script src="assets/js/i18n-app.js?v=2026-09-01d"></script>
 <script src="assets/js/i18n.js"></script>
 </body></html>

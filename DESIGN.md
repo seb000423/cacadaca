@@ -123,9 +123,19 @@
 ### 확정
 
 ```css
---f-sans: Pretendard, -apple-system, BlinkMacSystemFont, "Malgun Gothic", sans-serif;
---f-mono: "IBM Plex Mono", ui-monospace, Consolas, monospace;
+--f-sans: Pretendard, "Pretendard Full", -apple-system, BlinkMacSystemFont, "Malgun Gothic", sans-serif;
+--f-mono: Pretendard, "Pretendard Full", -apple-system, BlinkMacSystemFont, "Malgun Gothic", sans-serif;
 ```
+
+**2026-09-01 — 글꼴은 Pretendard 하나다. mono 를 버렸다.**
+`--f-mono` 는 `"IBM Plex Mono"` 로 시작하는데 그 woff2 를 실은 적이 없다.
+윈도우에서 스택이 Consolas 까지 떨어지고, Consolas 에 한글 글리프가 없어
+한글은 다시 OS 기본꼴(맑은 고딕)로 한 번 더 떨어졌다. 그래서 헤더의
+`벤츠 쿠페`(`.pt-hdr__stat`)와 그 옆 `KR · EN` 이 서로 다른 글꼴로 나왔다.
+
+토큰 이름은 남겼다 — 사용처가 60곳이라 일괄 치환이 더 위험하다.
+**값만 Pretendard 다.** 자릿수 정렬은 `body { font-variant-numeric: tabular-nums }`
+가 이어받는다. mono 가 하던 일 중 실제로 필요했던 건 그것뿐이었다.
 
 **웨이트는 3개만 싣는다: 300 / 500 / 700.** 9개를 다 쓰고 있지 않다.
 **`.woff`는 전부 버린다.** woff2를 못 읽는 브라우저는 2016년 이전 것뿐이다. (−9.6 MB)
@@ -136,6 +146,12 @@
 
 +1px 은 인지되지 않는다(13→14 는 7.7%). 한 번에 **13 → 16px** 로 갔다.
 
+2026-09-01 2차 — ① 콘솔의 잔글씨 층(13·14px)이 16px 본문 옆에서 다시
+작아 보였다. **13·14 를 15px 한 층으로 합쳤다.** 층이 둘로 갈려 있을
+이유가 없었다 — 14px 는 대문자 라벨, 13px 는 차종 카드 이름이었는데
+둘 다 그냥 잔글씨다. 차종 카드 이름만 본문 층(16px)으로 올렸다.
+그건 잔글씨가 아니라 그 카드가 무엇인지 말하는 유일한 글자다.
+
 | 역할 | 크기 | 웨이트 | 자간 | 행간 |
 |---|---|---|---|---|
 | 랜딩 워드마크 | 72–96px | 300 | `0.35em` | 1.0 |
@@ -145,8 +161,8 @@
 | 콘솔 본문 | **16px** | 400 | `0` | 1.5 |
 | 수치 (대형) | 32–40px | 300 | `-0.03em` | 1.0 |
 | 수치 (표) | **16px** | 400 | `0` | 1.4 |
-| 라벨·단위 | 14px | 500 | `0.12em` 대문자 | 1.3 |
-| 마이크로 (칩·모노 식별자) | 12–13px | 500 | `0.06–0.18em` | 1.3 |
+| 라벨·단위 | 15px | 500 | `0.12em` 대문자 | 1.3 |
+| 마이크로 (칩·식별자) | 15px | 500 | `0.06–0.18em` | 1.3 |
 
 본문이 커진 만큼 패널 폭도 같이 넓혔다 — 콘솔 우측 `clamp(380px, 29vw, 430px)`,
 모니터링 우측 `400px`. 폭을 그대로 두면 16px 글자가 두 줄로 접힌다.
@@ -154,7 +170,9 @@
 **철칙**
 - 숫자가 세로로 정렬되는 모든 곳에 `font-variant-numeric: tabular-nums`.
   실시간으로 바뀌는 수치에서 자릿수가 흔들리면 그 하나로 아마추어가 된다.
-- 수치와 단위는 폰트를 나눈다. 값은 mono, 단위는 sans에 `--text-lo`.
+- 수치와 단위는 **크기와 색**으로 가른다 — 값은 19px `--text-hi`,
+  단위는 15px `--text-lo`. (2026-09-01 이전에는 폰트로 갈랐다. mono 를
+  버렸으니 그 구분은 이제 없다.)
 - 한글 본문은 자간 `0`. 영문 대문자 라벨에만 자간을 준다.
 - `word-break: keep-all` — 한글이 단어 중간에서 끊기지 않게.
 

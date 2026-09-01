@@ -230,9 +230,7 @@ def covered(s, keys, phrases, rx):
 # 언어 상자를 끼울 자리. i18n-app.js 의 ANCHORS 와 같은 순서여야 한다.
 # 여기서는 그 선택자가 각 화면에 실제로 있는지만 본다 — 없으면 상자가 안 뜬다.
 ANCHOR_SIGN = [
-    ('.bar', re.compile(r'class="[^"]*\bbar\b')),
-    ('main nav', re.compile(r'<main\b[\s\S]*?<nav\b')),
-    ('main > header', re.compile(r'<main\b[^>]*>\s*<header\b')),
+    ('.pt-hdr__end', re.compile(r'class="pt-hdr__end"')),
 ]
 
 
