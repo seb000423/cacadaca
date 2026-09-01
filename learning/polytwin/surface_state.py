@@ -165,7 +165,7 @@ def make_curved_patch(kind: str = "cylinder",
                       seed: int = 0,
                       n_scratches: int | None = None,
                       target_ra_um: float = C.RA_TARGET_UM,
-                      with_scratches: bool = True) -> SurfaceState:
+                      with_scratches: bool = True, quad_coeffs=None) -> SurfaceState:
     """곡면 patch — nominal 형상과 법선만 곡면으로 바꾸고 미세층(거칠기·스크래치·
     clearcoat·열)은 평면과 동일 절차로 생성한다.
 
@@ -178,8 +178,8 @@ def make_curved_patch(kind: str = "cylinder",
       · 곡률 sagitta 는 patch 대비 작아야 한다 (0.12 m patch, R≥0.3 m → sag ≤ 6 mm).
     ⚠ SYNTHETIC — 실측 차체 곡률 아님. 실차 맵은 Gate 7 이후.
     """
-    if kind not in ("cylinder", "sphere", "freeform"):
-        raise ValueError(f"kind must be cylinder|sphere|freeform, got {kind}")
+    if kind not in ("cylinder", "sphere", "freeform", "quad"):
+        raise ValueError(f"kind must be cylinder|sphere|freeform|quad, got {kind}")
     st = make_flat_patch(patch_size_m, resolution_m, seed=seed,
                          n_scratches=n_scratches, target_ra_um=target_ra_um,
                          with_scratches=with_scratches)
@@ -189,14 +189,14 @@ def make_curved_patch(kind: str = "cylinder",
     cv = yy - patch_size_m[1] / 2.0
     R = float(curvature_radius_m)
 
-    if kind == "freeform":
+    if kind in ("freeform", "quad"):
         nx, ny = st.shape
         h = np.zeros((nx, ny)); nrm = np.zeros((nx, ny, 3))
         for i in range(nx):
             for j in range(ny):
-                hh, nn = curve_height_normal("freeform", curvature_radius_m, patch_size_m,
+                hh, nn = curve_height_normal(kind, curvature_radius_m, patch_size_m,
                                              float(xx[i, j]), float(yy[i, j]),
-                                             freeform_seed=seed)
+                                             freeform_seed=seed, quad_coeffs=quad_coeffs)
                 h[i, j] = hh; nrm[i, j] = nn
         st.nominal_surface_xyz_m[..., 2] = h
         st.normal_xyz = nrm
@@ -233,7 +233,7 @@ def _freeform_params(seed: int, patch_size_m):
 
 
 def curve_height_normal(kind: str, radius_m: float, patch_size_m, u: float, v: float,
-                        freeform_seed: int = 0):
+                        freeform_seed: int = 0, quad_coeffs=None):
     """(u,v) 에서의 곡면 높이 h(중심=0, 가장자리 음수)와 단위 법선. flat 이면 (0, +z).
 
     make_curved_patch 의 nominal 과 동일 규약 — env 의 IK 목표·힘 투영이 이 식을 쓴다.
@@ -242,6 +242,14 @@ def curve_height_normal(kind: str, radius_m: float, patch_size_m, u: float, v: f
         return 0.0, np.array([0.0, 0.0, 1.0])
     cu = u - patch_size_m[0] / 2.0
     cv = v - patch_size_m[1] / 2.0
+    if kind == "quad":
+        # 실차 스캔 셀의 국소 2차곡면 (car_cells_robot: 셀 점군 최소제곱). 계수 6개, 중심 기준.
+        c = quad_coeffs if quad_coeffs is not None else (0.0,) * 6
+        h = c[0] + c[1] * cu + c[2] * cv + c[3] * cu * cu + c[4] * cu * cv + c[5] * cv * cv
+        du = c[1] + 2.0 * c[3] * cu + c[4] * cv
+        dv = c[2] + c[4] * cu + 2.0 * c[5] * cv
+        n = np.array([-du, -dv, 1.0])
+        return float(h), n / np.linalg.norm(n)
     R = float(radius_m)
     if kind == "cylinder":
         under = max(R * R - cu * cu, 1e-12)

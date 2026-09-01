@@ -84,6 +84,10 @@ class PolishEnv(DirectRLEnv):
         n_side = int(round(E * cfg.side_env_ratio))
         if n_side > 0:                      # 앞쪽 n_side 개 env 를 side 접촉으로 (결정적 배정)
             self._is_side[:n_side] = True
+        if getattr(cfg, "carcell_is_side", None):
+            self._is_side[:] = torch.tensor([bool(v) for v in cfg.carcell_is_side][:E],
+                                            dtype=torch.bool, device=self.device)
+            print(f"[PolishEnv] 차 셀 모드 side env {int(self._is_side.sum())}/{E}")
             print(f"[PolishEnv] side 접촉 env {n_side}/{E} (side_env_ratio={cfg.side_env_ratio})")
 
         # 품질 모델 (numpy, env 별)
@@ -371,6 +375,35 @@ class PolishEnv(DirectRLEnv):
         time_out = self.episode_length_buf >= self.max_episode_length - 1
         return died | done_path, time_out
 
+    def _quad_coeffs(self, i: int):
+        q = getattr(self.cfg, "carcell_quads", None)
+        return (q[i] if q is not None and i < len(q) else None)
+
+    def _make_quad_surface(self, i: int, seed: int):
+        """차 셀 모드: 셀 2차곡면 + 셀 초기 상태(ra·scratch·n_scr·clearcoat) — 판정 파이프라인의
+        synthesize_cell_patch 와 같은 스케일링을 곡면 패치에 적용."""
+        init = (self.cfg.carcell_init[i] if getattr(self.cfg, "carcell_init", None) else None)
+        ra = float(init["ra"]) if init else None
+        n_scr = int(init["n_scr"]) if init and init.get("n_scr") is not None else None
+        kw = {"target_ra_um": ra} if ra is not None else {}
+        st = make_curved_patch("quad", 0.0, self.cfg.patch_size_m, self.cfg.patch_resolution_m,
+                               seed=int(init["seed"]) if init and init.get("seed") is not None else seed,
+                               n_scratches=n_scr, with_scratches=True,
+                               quad_coeffs=self._quad_coeffs(i), **kw)
+        if init:
+            scr = float(init["scratch"]); cc = float(init["clearcoat"])
+            if scr > 0.0 and st.initial_scratch_depth_um.max() > 1e-9:
+                k = scr / float(st.initial_scratch_depth_um.max())
+                st.micro_height_um += (1.0 - k) * st.initial_scratch_depth_um
+                st.initial_micro_height_um = st.micro_height_um.copy()
+                st.initial_scratch_depth_um *= k
+                st.residual_scratch_depth_um = st.initial_scratch_depth_um.copy()
+                st.defect_mask = st.initial_scratch_depth_um > (0.5 * PC.SCRATCH_DEPTH_MIN_UM)
+                st.healthy_mask = ~st.defect_mask
+            st.clearcoat_remaining_um += cc - float(st.clearcoat_remaining_um.mean())
+            st.initial_clearcoat_um = st.clearcoat_remaining_um.copy()
+        return st
+
     def _reset_idx(self, env_ids: Sequence[int] | None):
         if env_ids is None:
             env_ids = torch.arange(self.num_envs, device=self.device)
@@ -396,6 +429,8 @@ class PolishEnv(DirectRLEnv):
                 self._surfaces[i] = make_flat_patch(
                     self.cfg.patch_size_m, self.cfg.patch_resolution_m,
                     seed=seed, with_scratches=True)
+            elif self.cfg.surface_kind == "quad":
+                self._surfaces[i] = self._make_quad_surface(i, seed)
             else:
                 self._surfaces[i] = make_curved_patch(
                     self.cfg.surface_kind, self.cfg.curvature_radius_m,

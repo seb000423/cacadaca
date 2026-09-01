@@ -834,3 +834,15 @@ v5 의 접촉 상태기계(스파이크 소프트 리트랙트·암 가드·크�
 안 됨 — 원 팀이 실접촉을 포기한 지점과 동일. 판단 필요: (A) v5 상태기계를 물리 접촉용으로
 재튜닝(수 시간~1일, 불확실) vs (B) 지속 접촉이 검증된 로봇 트랙 env 로 차 셀을 순회
 (`robot_polish_env` 곡면 작업면 = 스캔 셀 메쉬, 셀별 에피소드·판정).
+
+### 9.34 경로 B — 로봇 트랙(PhysX 실접촉) env 로 차 전체 셀 순회 (2026-09-01)
+
+사용자 결정: v5 상태기계 재튜닝(A) 대신 지속 접촉이 검증된 로봇 트랙 env 로 차 셀을 순회(B).
+- **트윈**: `curve_height_normal`/`make_curved_patch` 에 `kind="quad"` 추가 — 셀 로컬 2차곡면
+  h = c0 + c1u + c2v + c3u² + c4uv + c5v² (중심 기준), 해석 법선.
+- **로봇 env**: `carcell_quads/carcell_init/carcell_is_side` cfg — env 마다 다른 셀 곡면(깊은 복사
+  clone 후 env_i 작업면 점군 덮어쓰기), 셀 초기 상태(ra·scratch·n_scr·clearcoat, 판정 파이프라인과
+  동일 스케일링), 셀 자세(tilt>45° → side 접촉 상수). IK 높이·법선 투영은 env 별 `_chn(i,u,v)`.
+- **오케스트레이터** `car_cells_robot.py`: 점군 → CellRegistry(491셀) → 셀 점군 최소제곱 quad
+  (실측 rms 1~5 mm, sagitta 최대 ±19 mm) → 배치(num_envs)로 env 스폰 → 로봇 트랙 챔피언
+  `model_ppo_curved.pt` + 재폴리싱 상태기계 → 5종 판정·보증·처분 CSV. `run_car_cells.sh` 로 순차 배치.

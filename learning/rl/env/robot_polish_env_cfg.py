@@ -51,6 +51,10 @@ class RobotPolishEnvCfg(PolishEnvCfg):
     )
 
     work_top_m: float = 0.40
+    # ── 차 셀 모드 (surface_kind="quad", car_cells_robot.py) — env 별 2차곡면 계수·초기 상태·자세 ──
+    carcell_quads: list | None = None      # [[c0..c5], ...] env 개수만큼 (셀 로컬, 중심 기준)
+    carcell_init: list | None = None       # [{"ra","scratch","n_scr","clearcoat","seed"}, ...]
+    carcell_is_side: list | None = None    # [bool, ...] tilt > 45°
     patch_center_xy_m: tuple[float, float] = (0.45, 0.0)
     pad_contact_gate_m: float = 0.020
     pad_outside_margin_m: float = 0.055

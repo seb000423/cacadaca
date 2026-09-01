@@ -144,7 +144,13 @@ class RobotPolishEnv(PolishEnv):
             self._spawn_curved_workpiece()
 
         spawn_ground_plane(prim_path="/World/ground", cfg=GroundPlaneCfg())
-        self.scene.clone_environments(copy_from_source=False)
+        if self.cfg.surface_kind == "quad" and getattr(self.cfg, "carcell_quads", None):
+            # 차 셀 모드: env 마다 다른 셀 → 깊은 복사 후 env_i 작업면 점군을 각 셀 곡면으로 덮어쓴다
+            self.scene.clone_environments(copy_from_source=True)
+            for i in range(1, self.num_envs):
+                self._overwrite_workpiece_points(i)
+        else:
+            self.scene.clone_environments(copy_from_source=False)
         if self.device == "cpu":
             self.scene.filter_collisions(global_prim_paths=[])
         self.scene.articulations["robot"] = self.robot
@@ -166,6 +172,35 @@ class RobotPolishEnv(PolishEnv):
         light = sim_utils.DomeLightCfg(intensity=3000.0, color=(0.85, 0.87, 0.9))
         light.func("/World/Light", light)
 
+    def _chn(self, i: int, u: float, v: float):
+        """env i 의 작업면 높이·법선 (quad 는 env 별 계수)."""
+        return curve_height_normal(self.cfg.surface_kind, self.cfg.curvature_radius_m,
+                                   self.cfg.patch_size_m, float(u), float(v),
+                                   freeform_seed=self.cfg.freeform_seed,
+                                   quad_coeffs=self._quad_coeffs(i))
+
+    def _workpiece_points(self, i: int, n: int = 41):
+        from pxr import Gf
+        cx, cy = self.cfg.patch_center_xy_m
+        us = np.linspace(-0.02, self.cfg.patch_size_m[0] + 0.02, n)
+        vs = np.linspace(-0.02, self.cfg.patch_size_m[1] + 0.02, n)
+        pts = []
+        for u in us:
+            for v in vs:
+                h, _ = self._chn(i, float(u), float(v))
+                pts.append(Gf.Vec3f(cx - self.cfg.patch_size_m[0] / 2 + float(u),
+                                    cy - self.cfg.patch_size_m[1] / 2 + float(v),
+                                    self.cfg.work_top_m + h))
+        return pts
+
+    def _overwrite_workpiece_points(self, i: int):
+        import omni.usd
+        from pxr import UsdGeom
+        stage = omni.usd.get_context().get_stage()
+        mesh = UsdGeom.Mesh(stage.GetPrimAtPath(f"/World/envs/env_{i}/Workpiece"))
+        if mesh:
+            mesh.GetPointsAttr().Set(self._workpiece_points(i))
+
     def _spawn_curved_workpiece(self):
         """곡면 nominal 격자 → UsdGeom.Mesh (+Collision/kinematic RigidBody)."""
         import omni.usd
@@ -181,10 +216,7 @@ class RobotPolishEnv(PolishEnv):
         pts, idx = [], []
         for i, u in enumerate(us):
             for j, v in enumerate(vs):
-                h, _ = curve_height_normal(self.cfg.surface_kind,
-                                           self.cfg.curvature_radius_m,
-                                           self.cfg.patch_size_m, float(u), float(v),
-                                           freeform_seed=self.cfg.freeform_seed)
+                h, _ = self._chn(0, float(u), float(v))
                 pts.append(Gf.Vec3f(cx - self.cfg.patch_size_m[0] / 2 + float(u),
                                     cy - self.cfg.patch_size_m[1] / 2 + float(v),
                                     self.cfg.work_top_m + h))
@@ -342,11 +374,7 @@ class RobotPolishEnv(PolishEnv):
                 raw = net[:, 2].abs()
             else:
                 # 곡면: F_normal = |F · n(uv)| — 실측 패드 위치의 국소 법선으로 투영
-                nrm = np.stack([curve_height_normal(
-                    self.cfg.surface_kind, self.cfg.curvature_radius_m,
-                    self.cfg.patch_size_m,
-                    float(self._pad_uv_actual[i, 0]), float(self._pad_uv_actual[i, 1]),
-                    freeform_seed=self.cfg.freeform_seed)[1]
+                nrm = np.stack([self._chn(i, float(self._pad_uv_actual[i, 0]), float(self._pad_uv_actual[i, 1]))[1]
                     for i in range(self.num_envs)])
                 nrm_t = torch.as_tensor(nrm, dtype=net.dtype, device=net.device)
                 raw = (net * nrm_t).sum(dim=-1).abs()
@@ -439,11 +467,7 @@ class RobotPolishEnv(PolishEnv):
             self._prev_uv[i] = uv
             targets[i, 0] = float(uv[0]) - self.cfg.patch_size_m[0] / 2 + self.cfg.patch_center_xy_m[0]
             targets[i, 1] = float(uv[1]) - self.cfg.patch_size_m[1] / 2 + self.cfg.patch_center_xy_m[1]
-            h_curve, _ = curve_height_normal(self.cfg.surface_kind,
-                                             self.cfg.curvature_radius_m,
-                                             self.cfg.patch_size_m,
-                                             float(uv[0]), float(uv[1]),
-                                             freeform_seed=self.cfg.freeform_seed)
+            h_curve, _ = self._chn(i, float(uv[0]), float(uv[1]))
             targets[i, 2] = (self.cfg.work_top_m + h_curve
                              + float(self.contact.command_clearance[i].clamp(-0.003, 0.08)))
 
