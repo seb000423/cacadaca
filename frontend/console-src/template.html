@@ -499,6 +499,11 @@ class Component extends DCLogic {
   componentDidMount() {
     this.push();
     this.fetchRuns();
+    /* PolyTwin Console.html?run=<id> — 라이브러리/모니터에서 온 재생 링크 */
+    try {
+      const rid = Number(new URLSearchParams(location.search).get('run'));
+      if (rid) setTimeout(() => this.loadReplay(rid), 800);
+    } catch (e) { /* 무시 */ }
     this._runsTimer = setInterval(() => { if (!this.state.running && !(this.state.replay && this.state.replay.active)) this.fetchRuns(); }, 10000);
     /* credentials 를 빼면 세션 쿠키가 안 실려 401 이 온다 */
     fetch(SEED_URL, { credentials: 'same-origin' })
