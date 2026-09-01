@@ -18,6 +18,7 @@ export POLISH_MONITOR_FEED=${POLISH_MONITOR_FEED:-learning/ui_bridge/out/monitor
 export POLISH_PHYSICAL_CONTACT=${POLISH_PHYSICAL_CONTACT:-0}   # 0 = 가상 접촉(안정), 1 = PhysX 패드 접촉(실험)
 export POLISH_ROS_PUBLISH=0 POLISH_ROS_CAMERAS=0     # ROS 불필요
 export POLISH_RENDER_EVERY=${POLISH_RENDER_EVERY:-1} # 1 = 매 스텝 렌더(보기용). 빠르게 돌리려면 4~10
+export POLISH_RENDERER=${POLISH_RENDERER:-RaytracedLighting}  # RTX Real-Time(가벼움). 6.0 기본 RealTimePathTracing 은 무거움
 export POLISH_SPEED_SCALE=${POLISH_SPEED_SCALE:-3.0} # 접촉 중 이송 배속(검증된 상한 3.0)
 export POLISH_EXIT_WHEN_DONE=${POLISH_EXIT_WHEN_DONE:-0}       # 1 이면 완료 시 자동 종료
 PY=${ISAAC_PY:-$HOME/isaacsim/python.sh}

@@ -45,7 +45,12 @@ def run_from_cli(argv=None):
 
     from isaacsim import SimulationApp
 
-    simulation_app = SimulationApp({"headless": bool(args.headless)})
+    # 렌더러: Isaac Sim 6.0 의 SimulationApp 기본값은 RealTimePathTracing(무거움). 보기/녹화용은
+    # RTX Real-Time(RaytracedLighting) 이 훨씬 가볍다. POLISH_RENDERER 로 교체
+    # (RaytracedLighting | RealTimePathTracing | PathTracing | MinimalRendering).
+    _renderer = os.environ.get("POLISH_RENDERER", "RaytracedLighting")
+    simulation_app = SimulationApp({"headless": bool(args.headless), "renderer": _renderer})
+    print(f"[bootstrap] renderer={_renderer} headless={bool(args.headless)}", flush=True)
     try:
         from isaacsim.core.utils.extensions import enable_extension
 
