@@ -1396,7 +1396,7 @@ class PolyTwinViewport extends HTMLElement {
       if (this._modelScale0 && this._model) {        // 차체 크기·배치 원복
         this._model.scale.copy(this._modelScale0); this._model.updateMatrixWorld(true);
         this._cellSig = null; this.layoutCells();
-        try { this._field = buildHeightField(this.renderer, this._model); this._sideFields = buildSideFields(this.renderer, this._model); } catch (e) { /* 유지 */ }
+        try { this._buildFields(); this.initPolish(); } catch (e) { /* 유지 */ }
       }
       // 해제: 받침대 다시 보이고 배치 자세로
       for (const cell of this._cells) {
@@ -1437,9 +1437,9 @@ class PolyTwinViewport extends HTMLElement {
     // 높이는 바닥끼리(Isaac z=0 ↔ 콘솔 y=0); 콘솔 차 바닥이 mn.z 에 오도록 리프트했으므로 잔차만 보정
     const t = new THREE.Vector3(mid2.x - cIsaac.x, b2.min.y - mn.z, mid2.z - cIsaac.z);
     this._liveXf = { s, rot, t, q: new THREE.Quaternion().setFromRotationMatrix(rot), carScale };
-    // 줄어든 차체에 맞춰 레일·갠트리·연마 텍스처 좌표를 다시 잡는다
+    // 줄어든·올라간 차체에 맞춰 레일·갠트리·연마 텍스처 좌표를 다시 잡는다 (initPolish 가 마스크 격자·유니폼을 새 필드로 갱신)
     this._cellSig = null; this.layoutCells();
-    try { this._field = buildHeightField(this.renderer, this._model); this._sideFields = buildSideFields(this.renderer, this._model); } catch (e) { /* 유지 */ }
+    try { this._buildFields(); this.initPolish(); } catch (e) { console.warn('필드 재구성 실패', e); }
   }
 
   _driveLive(dt) {
@@ -1496,11 +1496,26 @@ class PolyTwinViewport extends HTMLElement {
         const nrm = new THREE.Vector3().fromArray(r.normal || [0, 0, 1]).applyMatrix3(_LIVE_M);
         if (LIVE_LONG_FLIP) nrm.applyAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI);
         nrm.normalize();
-        const back = pad.clone().addScaledVector(nrm, 0.2);
+        let back = pad.clone().addScaledVector(nrm, 0.2);
         // 이전 자세를 기억해 두고 풀어서, 셀이 바뀔 때도 관절이 실물 속도(JOINT_RATE)로만 움직이게 — 순간이동 없이
         const prev = cell.userData.ikPrev || (cell.userData.ikPrev = cell.userData.q.slice());
         for (let j = 0; j < 6; j++) prev[j] = cell.userData.q[j];
+        // 시드: 피드에 실린 실제 Isaac 폴리싱 자세(q) 쪽으로 20 % 당긴 뒤 푼다 → 팔꿈치가 뒤집히는 기괴한 해를 피한다
+        if (Array.isArray(r.q)) {
+          const qs = cell.userData.q;
+          for (let j = 0; j < 6; j++) { const seed = LIVE_Q_SIGN[j] * ((Number(r.q[j]) || 0) - LIVE_Q_OFFSET[j]); qs[j] += (seed - qs[j]) * 0.2; }
+          setCellQ(cell, qs);
+        }
         solveIK(cell, pad, back, 12);
+        // 팔꿈치(관절 3)·손목(관절 5)이 차체 상자 안이면 목표를 법선 바깥으로 더 세워 다시 푼다 (관통 방지)
+        if (this._model) {
+          const bb = this._carBox || (this._carBox = new THREE.Box3());
+          bb.setFromObject(this._model).expandByScalar(-0.03);
+          const jp = new THREE.Vector3();
+          let inside = false;
+          for (const ji of [2, 3, 4]) { cell.userData.joints[ji].getWorldPosition(jp); if (bb.containsPoint(jp)) { inside = true; break; } }
+          if (inside) { back = pad.clone().addScaledVector(nrm, 0.45); solveIK(cell, pad, back, 16); }
+        }
         const maxStep = JOINT_RATE * dt * (feed.state === 'SLIDE' ? 1.0 : 1.4);
         let clamped = false;
         for (let j = 0; j < 6; j++) {
