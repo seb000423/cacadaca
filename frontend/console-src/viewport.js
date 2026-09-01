@@ -1392,6 +1392,7 @@ class PolyTwinViewport extends HTMLElement {
       this.clearCells();
       this._liveScene = null;
       if (this._vehicleBefore && this._vehicleBefore !== 'scan') { const vb = this._vehicleBefore; this._vehicleBefore = null; this.setVehicle(vb).catch(() => {}); }
+      if (this._liveLift0 !== undefined) { this._params.carLift = this._liveLift0; this._liveLift0 = undefined; this._applyCarLift(); }
       if (this._modelScale0 && this._model) {        // 차체 크기·배치 원복
         this._model.scale.copy(this._modelScale0); this._model.updateMatrixWorld(true);
         this._cellSig = null; this.layoutCells();
@@ -1421,6 +1422,11 @@ class PolyTwinViewport extends HTMLElement {
     if (!this._modelScale0) this._modelScale0 = this._model.scale.clone();
     const carScale = THREE.MathUtils.clamp(isaacLen / size[LONG], 0.3, 3.0);
     this._model.scale.copy(this._modelScale0).multiplyScalar(carScale);
+    /* Isaac 에서는 차가 리프트 위(바닥 z = car_min.z ≈ 1.0 m)에 떠 있다. 콘솔도 차량 리프트로 같은 높이에 올리고
+       바닥↔바닥(z=0 ↔ y=0)으로 맞춘다 — 그래야 갠트리·레일·로봇 높이가 절대값 그대로 맞는다. */
+    if (this._liveLift0 === undefined) this._liveLift0 = this._params.carLift || 0;
+    this._params.carLift = Math.max(0, mn.z);
+    this._applyCarLift();
     this._model.updateMatrixWorld(true);
     const b2 = new THREE.Box3().setFromObject(this._model);
     const mid2 = b2.getCenter(new THREE.Vector3());
@@ -1428,9 +1434,8 @@ class PolyTwinViewport extends HTMLElement {
     const rot = new THREE.Matrix4().setFromMatrix3(_LIVE_M);
     if (LIVE_LONG_FLIP) rot.premultiply(new THREE.Matrix4().makeRotationY(Math.PI));
     const cIsaac = mn.clone().add(mx).multiplyScalar(0.5).applyMatrix4(rot);
-    // 높이는 차 바닥끼리 맞춘다(Isaac 차 z_min ↔ 콘솔 차 y_min)
-    const floorIsaac = new THREE.Vector3(0, 0, mn.z).applyMatrix4(rot);
-    const t = new THREE.Vector3(mid2.x - cIsaac.x, b2.min.y - floorIsaac.y, mid2.z - cIsaac.z);
+    // 높이는 바닥끼리(Isaac z=0 ↔ 콘솔 y=0); 콘솔 차 바닥이 mn.z 에 오도록 리프트했으므로 잔차만 보정
+    const t = new THREE.Vector3(mid2.x - cIsaac.x, b2.min.y - mn.z, mid2.z - cIsaac.z);
     this._liveXf = { s, rot, t, q: new THREE.Quaternion().setFromRotationMatrix(rot), carScale };
     // 줄어든 차체에 맞춰 레일·갠트리·연마 텍스처 좌표를 다시 잡는다
     this._cellSig = null; this.layoutCells();
@@ -1518,7 +1523,8 @@ class PolyTwinViewport extends HTMLElement {
     const f = THREE.MathUtils.clamp((this._params.force - 3) / 9, 0, 1);
     this.raster.material.opacity = 0.34 + f * 0.5;
     this.raster.material.color.setHSL(0.543, 0.40 + f * 0.22, 0.42 + f * 0.16);
-    if (p.carLift !== undefined && p.carLift !== prev.carLift) {
+    if (this._live && p.carLift !== undefined) { this._params.carLift = prev.carLift; }   // 시뮬을 따르는 동안은 리프트 높이를 시뮬 값으로 고정
+    if (!this._live && p.carLift !== undefined && p.carLift !== prev.carLift) {
       // 차를 올리면 표면 좌표가 통째로 바뀐다 — 필드부터 다시 굽는다
       this._applyCarLift();
       this._buildFields();
