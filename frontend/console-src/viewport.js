@@ -1802,6 +1802,7 @@ class PolyTwinViewport extends HTMLElement {
       // 차를 올리면 표면 좌표가 통째로 바뀐다 — 필드부터 다시 굽는다
       this._applyCarLift();
       this._buildFields();
+      this.initPolish();                // 차체가 움직이면 마스크 기준 상자도 다시
       this.rebuildPath();
       this.layoutCells();
     } else if (spacingChanged) {
