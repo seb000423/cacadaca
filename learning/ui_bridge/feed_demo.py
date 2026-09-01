@@ -2,6 +2,7 @@
     python3 learning/ui_bridge/feed_demo.py [초] [경로]
 실제 피드는 v5 러너(POLISH_MONITOR_FEED) 가 쓴다; 이 스크립트는 연결 확인용이다.
 """
+import json
 import math
 import os
 import sys
