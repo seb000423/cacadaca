@@ -1293,7 +1293,14 @@ class PolyTwinViewport extends HTMLElement {
 
   /** ③ 셀 판정 지도 — snapshot = {total, pass, rework, repaint, not_reached, items:[[x,y,z,disposition,gu],...]} (Isaac 월드).
       Isaac→콘솔 변환(_liveXf)이 있어야 한다(피드/기록의 scene). 처분별 색: 합격 초록·재도장 검토 주황·재작업 빨강. */
+  /** 셀 판정 지도 표시 on/off (기본 off — 팔 동작만 보고 싶을 때 화면을 어지럽히지 않게) */
+  setCellsVisible(on) {
+    this._cellsEnabled = !!on;
+    if (!on) this.clearCells();
+    else if (this._live && this._live.cells) this.setCells(this._live.cells, this._live.scene);
+  }
   setCells(snapshot, scene) {
+    if (!this._cellsEnabled) return;
     const items = snapshot && Array.isArray(snapshot.items) ? snapshot.items.filter((it) => it && it[3] && it[3] !== 'not_reached') : [];
     if (!this._liveXf && scene) this._buildLiveXform(scene);
     const xf = this._liveXf;
@@ -1333,8 +1340,10 @@ class PolyTwinViewport extends HTMLElement {
     this._live = feed && feed.robots && feed.robots.some((r) => Array.isArray(r.q)) ? feed : null;
     this._liveSnap = !!snap;
     if (this._live && this._live.scene && !this._liveXf) this._buildLiveXform(this._live.scene);
-    if (this._live && this._live.cells && Array.isArray(this._live.cells.items)) this.setCells(this._live.cells, this._live.scene);   // 실시간 피드의 셀 스냅샷
+    if (this._live && this._cellsEnabled && this._live.cells && Array.isArray(this._live.cells.items)) this.setCells(this._live.cells, this._live.scene);   // 실시간 피드의 셀 스냅샷(옵션)
+    if (this._live) { this.raster.visible = false; this.head.visible = false; }   // 시뮬을 따를 땐 데모 경로선은 의미가 없다
     if (had && !this._live) {
+      this.raster.visible = true;
       this.clearCells();
       // 해제: 받침대 다시 보이고 배치 자세로
       for (const cell of this._cells) {

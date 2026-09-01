@@ -346,6 +346,7 @@
         <input type="range" min="0" max="1000" value="{{ replayPos }}" sc-camel-on-input="{{ replaySeek }}" aria-label="재생 위치" style="width: 100%">
         <div style="display: flex; gap: 8px">
           <div sc-camel-on-click="{{ replayToggle }}" tabindex="0" style="flex: 1; padding: 9px 0; border: 1px solid var(--line); text-align: center; font-size: 14px; letter-spacing: 0.06em; color: var(--text-mid); cursor: pointer">{{ replayBtn }}</div>
+          <div sc-camel-on-click="{{ toggleCells }}" tabindex="0" style="padding: 9px 10px; border: 1px solid var(--line); text-align: center; font-size: 13px; color: var(--text-lo); cursor: pointer; white-space: nowrap">{{ cellsLabel }}</div>
           <select sc-camel-on-input="{{ replaySpeed }}" aria-label="재생 속도" style="width: 88px; padding: 8px 10px; border: 1px solid var(--line); background: var(--bg-void); color: var(--text-mid); font-size: 14px; border-radius: var(--r-sm)">
             <option value="0.5">0.5x</option><option value="1" selected>1x</option><option value="2">2x</option><option value="4">4x</option><option value="8">8x</option><option value="16">16x</option><option value="32">32x</option><option value="64">64x</option><option value="128">128x</option>
           </select>
@@ -530,6 +531,7 @@ class Component extends DCLogic {
     workerOnline: null,  // 큐 모드 워커 하트비트 (null = 로컬 모드/미상)
     runs: [],            // 서버에 저장된 시뮬 기록 목록 (/api/runs)
     replayId: '',        // 재생 중인 기록 id
+    cellsOn: false,      // 3D 셀 판정 지도 표시 (기본 끔)
     replay: null,        // 재생기 상태 {t, duration, playing, speed, follow, status, active}
   };
 
@@ -1116,6 +1118,9 @@ class Component extends DCLogic {
       replayPos: s.replay && s.replay.duration > 0 ? String(Math.round(1000 * s.replay.t / s.replay.duration)) : '0',
       replayTime: s.replay ? (mmss(Math.round(s.replay.t)) + ' / ' + mmss(Math.round(s.replay.duration)) + (s.replay.follow ? ' · LIVE' : '')) : '',
       replayBtn: s.replay && s.replay.playing ? '일시정지' : '재생',
+      cellsOn: !!s.cellsOn,
+      cellsLabel: s.cellsOn ? '셀 판정 표시: 켬' : '셀 판정 표시: 끔',
+      toggleCells: () => this.setState({ cellsOn: !s.cellsOn }, () => { const v = this.vp(); if (v && v.setCellsVisible) v.setCellsVisible(this.state.cellsOn); }),
       replaySpeedVal: String(s.replay ? s.replay.speed : 1),
       pickRun: (e) => this.pickRun(e),
       replayToggle: () => this.replayToggle(),
