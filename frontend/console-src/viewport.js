@@ -920,8 +920,8 @@ class PolyTwinViewport extends HTMLElement {
     const tint = { z4: 0x2f343b, coupe: 0x3a3f47, sf90: 0x4a2226, scan: 0x2f343b }[id] || 0x2f343b;
     if (id === 'scan') {
       // Isaac 과 같은 스캔 메시 — 시뮬 피드/기록을 따를 때 자동 선택된다 (크기·형상이 시뮬과 동일)
-      const scan = await loadCar(SCAN_CAR_URL);
-      scan.traverse((o) => { if (o.isMesh) { o.material = new THREE.MeshPhysicalMaterial({ color: tint, metalness: 0.75, roughness: 0.32, clearcoat: 1.0, clearcoatRoughness: 0.08 }); o.castShadow = true; o.receiveShadow = true; } });
+      const scan = await loadCar(SCAN_CAR_URL);   // loadCar 가 연마 마스크(attachPolish) 재질을 붙인다 — 교체하지 말고 색만
+      scan.traverse((o) => { if (o.isMesh) { o.material.color.setHex(tint); o.castShadow = true; o.receiveShadow = true; } });
       this._models.set(id, scan);
       this._showVehicle(id);
       return;
@@ -1496,10 +1496,18 @@ class PolyTwinViewport extends HTMLElement {
         const nrm = new THREE.Vector3().fromArray(r.normal || [0, 0, 1]).applyMatrix3(_LIVE_M);
         if (LIVE_LONG_FLIP) nrm.applyAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI);
         nrm.normalize();
-        const back = pad.clone().addScaledVector(nrm, 0.12);
+        const back = pad.clone().addScaledVector(nrm, 0.2);
+        // 이전 자세를 기억해 두고 풀어서, 셀이 바뀔 때도 관절이 실물 속도(JOINT_RATE)로만 움직이게 — 순간이동 없이
+        const prev = cell.userData.ikPrev || (cell.userData.ikPrev = cell.userData.q.slice());
+        for (let j = 0; j < 6; j++) prev[j] = cell.userData.q[j];
         solveIK(cell, pad, back, 12);
-        const q0 = cell.userData.q, step = this._liveSnap ? 1e9 : LIVE_JOINT_RATE * dt;
-        setCellQ(cell, q0);
+        const maxStep = JOINT_RATE * dt * (feed.state === 'SLIDE' ? 1.0 : 1.4);
+        let clamped = false;
+        for (let j = 0; j < 6; j++) {
+          const d = cell.userData.q[j] - prev[j];
+          if (Math.abs(d) > maxStep) { prev[j] += Math.sign(d) * maxStep; clamped = true; } else prev[j] = cell.userData.q[j];
+        }
+        if (clamped) setCellQ(cell, prev);
       }
       // 패드 자전·연마 자국 — 접촉 중(POLISH)일 때만. 자국은 패드가 3 mm 이상 움직였을 때만 찍는다
       // (매 프레임 찍으면 텍스처 재업로드가 프레임마다 일어난다).

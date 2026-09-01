@@ -1200,7 +1200,7 @@ class Component extends DCLogic {
       liftDotLeft: s.hasLift ? '20px' : '2px',
       spacing: String(spacing),
       passes: String(passes),
-      eta: rpEta !== null ? mmss(rpEta) : simEta !== null ? mmss(simEta) : mmss(Math.round(passes * 8)),
+      eta: rpEta !== null ? hhmm(rpEta) : simEta !== null ? hhmm(simEta) : mmss(Math.round(passes * 8)),
       showCondModal: s.showCondModal,
       condRows: s.condRows,
       condApply: () => this.condApply(),
