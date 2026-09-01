@@ -1101,3 +1101,12 @@ DB 에서 프레임을 미리 받아 **보간하며 재생**한다(속도 0.5~16
 `run_v5_rl_view.sh` 는 기본으로 `learning/ui_bridge/out/run_view_<ts>.sqlite` 에 기록하고 watch 명령을 출력한다.
 콘솔은 대기 중 10 s 마다 기록 목록을 갱신(기록 중인 런이 '기록 중' 으로 뜸 → 선택하면 3 s 지연으로 따라감).
 검증: 합성 25 s 기록을 watch → recording(6.6 s → 12 s → 19 s) → done 248 프레임, 테일러 경고 0. (UI2 커밋 d827253, 시뮬 fd3841a)
+
+### 9.44 ③ 셀 판정 지도 — 콘솔 3D (UI 동기화 5단계) (2026-09-01 20:35)
+
+시뮬 피드/기록의 셀 스냅샷(`cells.items = [[x,y,z,disposition,gu],…]`, Isaac 월드, v5 `_feed_tick` 이 판정 갱신 시 실음;
+기록엔 ~10 s 마다)을 콘솔 3D 차체 위에 InstancedMesh 구슬(r 32 mm)로 찍는다 — 합격 초록·재도장 검토 주황·재작업 빨강
+(`viewport.setCells(snapshot, scene)`, Isaac→콘솔 변환은 팔 동기화와 같은 `_liveXf`). 재생 중엔 시뮬 시각 ≤ t 인 최신
+스냅샷을 적용(`ReplayPlayer._applyCells`), 기록 중 런은 5 s 마다 새 스냅샷을 더 받는다. 실시간 피드도 `setLive` 에서 적용.
+`feed_demo.py` 는 합성 격자(윗면 15×29 + 옆면)를 진행률에 따라 판정해 2 s 마다 스냅샷을 남긴다(검증용).
+(UI2 커밋 5e1512b, 시뮬 9494145). 남은 것: 과부하 트립 셀 표식(파란 테두리 — 지도 PNG 와 통일), 셀 클릭 시 수치 표시.
