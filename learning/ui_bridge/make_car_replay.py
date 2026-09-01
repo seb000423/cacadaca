@@ -38,8 +38,33 @@ def robot_of(r):
     if reg == "side_right": return "SR"
     return "SL" if x < 0 else "SR"          # 전·후면은 가까운 쪽 측면 로봇
 plan = {"C": [], "SL": [], "SR": []}
-for r in sorted(rows, key=lambda r: int(r["cell_id"])):
+for r in rows:
     plan[robot_of(r)].append(r)
+
+def boustrophedon(cells, band_key, sweep_key, band_w):
+    """면을 띠(band)로 나눠 한 띠씩 왕복하며 훑는 순서 — Isaac 경로 생성기(레인 래스터)와 같은 진행 모양."""
+    bands = {}
+    for c in cells:
+        bands.setdefault(round(band_key(c) / band_w), []).append(c)
+    out = []
+    for i, k in enumerate(sorted(bands)):
+        seg = sorted(bands[k], key=sweep_key)
+        out.extend(seg if i % 2 == 0 else seg[::-1])
+    return out
+
+def order_for(rid, cells):
+    y = lambda c: float(c["center_y_m"]); x = lambda c: float(c["center_x_m"]); z = lambda c: float(c["center_z_m"])
+    if rid == "C":   # 윗면: 앞→뒤 띠(0.24 m)마다 x 왕복
+        return boustrophedon(cells, y, x, 0.24)[::-1]
+    side = [c for c in cells if c["region"] in ("side_left", "side_right")]
+    ends = [c for c in cells if c["region"] in ("front", "rear")]
+    front = sorted([c for c in ends if c["region"] == "front"], key=lambda c: (round(z(c) / 0.24), x(c)))
+    rear = sorted([c for c in ends if c["region"] == "rear"], key=lambda c: (round(z(c) / 0.24), -x(c)))
+    # 앞면 → 옆면(앞→뒤, 높이 띠마다 y 왕복) → 뒷면 : 레일을 한 방향으로 훑는다
+    return front + boustrophedon(side, z, y, 0.24) + rear
+
+for rid in plan:
+    plan[rid] = order_for(rid, plan[rid])
 
 def cell_time(r):
     if r["outcome"] == "fail_force_overload" and float(r["passes"] or 0) == 0: return a.trip_s
@@ -70,7 +95,7 @@ def base_for(rid, r):
     cx, cy, cz = float(r["center_x_m"]), float(r["center_y_m"]), float(r["center_z_m"]) + CAR_LIFT_Z
     if rid == "C": return [0.0, cy, max(2.05, min(2.85, cz + 0.75))]   # 천장 로봇: 갠트리 중앙(x=0) y 이동, 높이는 셀 위 0.75 m (팔이 접혀 차를 뚫지 않게; Isaac 승강 범위 2.05~2.85)
     y = cy - 0.35 if r["region"] == "front" else cy + 0.35 if r["region"] == "rear" else cy
-    return [POSE[rid]["x"], max(-1.9, min(1.9, y)), max(1.05, min(1.6, cz + 0.15))]
+    return [POSE[rid]["x"], max(-1.9, min(1.9, y)), max(1.05, min(1.6, cz - 0.05))]   # 베이스를 셀 높이 근처에 — 팔이 수평으로 뻗어 차를 뚫지 않게
 
 # 로봇별 타임라인: [(t0, t1, state, cell or None, base_from, base_to)]
 timelines = {}
