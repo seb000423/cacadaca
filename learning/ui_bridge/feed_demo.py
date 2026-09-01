@@ -22,9 +22,24 @@ if rec_path:
                                           "hz": 10.0, "robots": [{"id": "C", "name": "천장"}, {"id": "SL", "name": "좌측"}, {"id": "SR", "name": "우측"}],
                                           "recipe": {"synthetic": True}, "rl": False, "physical_contact": False})
 feed.event("C", "합성 피드 시작 (feed_demo.py)", "info", 0.0)
-t0 = time.time(); n = 0
-while time.time() - t0 < dur:
-    t = time.time() - t0; n += 1
+ctl_path = os.environ.get("POLISH_CONTROL", "")
+ctl = {"pause": False, "force_scale": 1.0, "feed_scale": 1.0}; _ctl_m = 0.0
+t0 = time.time(); n = 0; t = 0.0; paused_total = 0.0; _last = time.time()
+while t < dur:
+    now = time.time(); _dt = now - _last; _last = now
+    if ctl_path and os.path.exists(ctl_path):
+        try:
+            _m = os.path.getmtime(ctl_path)
+            if _m != _ctl_m:
+                _ctl_m = _m; ctl.update(json.load(open(ctl_path)) or {})
+                feed.event("C", f"컨트롤 반영: {'일시정지' if ctl.get('pause') else '진행'} · 힘×{float(ctl.get('force_scale', 1)):.2f} · 이송×{float(ctl.get('feed_scale', 1)):.2f}", "info", t)
+        except Exception: pass
+    if ctl.get("pause"):
+        robots = [{"id": rid, "force": 0.0, "target": tgt, "state": "HOLD", "progress": min(1.0, t / dur), "rl_force_scale": 1.0, "rl_feed_scale": 1.0}
+                  for rid, tgt in (("C", 6.69), ("SL", 8.30), ("SR", 8.30))]
+        feed.update("HOLD", min(1.0, t / dur), robots, elapsed_s=t, cells=globals().get("cells", {}))
+        time.sleep(0.2); continue
+    t += _dt * float(ctl.get("feed_scale", 1.0)); n += 1     # 이송 배율만큼 공정이 빨리/느리게 진행
     prog = min(1.0, t / dur)
     robots = []
     # 합성 관절/베이스: Isaac HOME (0,-1.05,1.45,0,1.15,0) 주변에서 천천히 흔들리고 레일(y)을 따라 왕복
@@ -33,7 +48,7 @@ while time.time() - t0 < dur:
              "SL": ((-1.55, 0.0, 0.45), (0.7071, 0.0, 0.0, -0.7071)),    # 좌측 레일, yaw −90°
              "SR": ((1.55, 0.0, 0.45), (0.7071, 0.0, 0.0, -0.7071))}
     for i, (rid, tgt) in enumerate((("C", 6.69), ("SL", 8.30), ("SR", 8.30))):
-        f = tgt + 0.6 * math.sin(0.7 * t + i) + (1.5 if (n + i) % 37 == 0 else 0.0)
+        f = (tgt + 0.6 * math.sin(0.7 * t + i) + (1.5 if (n + i) % 37 == 0 else 0.0)) * float(ctl.get("force_scale", 1.0))
         q = [HOME[j] + (0.35 if j in (0, 1, 2, 4) else 0.1) * math.sin(0.5 * t + 0.9 * j + i) for j in range(6)]
         pos, quat = BASES[rid]; pos = [pos[0], 1.4 * math.sin(0.15 * t + i), pos[2]]
         robots.append({"id": rid, "force": f, "target": tgt, "state": "POLISH", "progress": prog,

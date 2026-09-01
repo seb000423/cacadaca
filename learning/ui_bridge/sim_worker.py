@@ -40,20 +40,34 @@ def api(server: str, token: str, path: str, body=None, method: str | None = None
         return json.loads(r.read().decode("utf-8") or "{}")
 
 
+RECIPE_PRESETS = {   # 콘솔 프리셋 → 레시피 JSON (learning/polytwin/outputs/recipes/)
+    "base": "bo_best_recipe_top.json",
+    "fast": "recipes/feed1.5_f1.15_top.json",      # 이송 ×1.5·힘 ×1.15 — 147/150 유지, −43 % (WORKLOG 9.36-b)
+    "quality": "recipes/feed1.3_f1.0_top.json",    # 이송 ×1.3 — 148/150, −25 %
+}
+
+
 def write_recipe(params: dict) -> str:
-    base_path = os.path.join(_REPO, "learning", "polytwin", "outputs", "bo_best_recipe_top.json")
+    preset = str(params.get("recipe") or "base")
+    base_path = os.path.join(_REPO, "learning", "polytwin", "outputs", RECIPE_PRESETS.get(preset, RECIPE_PRESETS["base"]))
     try:
         recipe = json.load(open(base_path, encoding="utf-8"))
     except Exception:
         recipe = {}
-    recipe.update({
-        "recipe_id": "ui_queue_job", "source": "PolyTwin console (queue)",
-        "target_contact_force_n": float(params.get("force", 5.6)),
-        "rpm": float(params.get("rpm", 3000)),
-        "feed_speed_mm_s": float(params.get("feed_mm_s", 5.65)),
-        "step_over_spacing_ratio": max(0.05, min(1.0, 1.0 - float(params.get("overlap", 40)) / 100.0)),
-        "n_passes": int(recipe.get("n_passes", 2)),
-    })
+    if preset in ("fast", "quality") and recipe:
+        # 프리셋을 골랐으면 힘·이송은 프리셋 값(검증된 조합)을 쓰고 rpm·겹침만 콘솔 값
+        recipe.update({"recipe_id": f"ui_{preset}", "source": f"PolyTwin console preset {preset}",
+                       "rpm": float(params.get("rpm", recipe.get("rpm", 3000))),
+                       "step_over_spacing_ratio": max(0.05, min(1.0, 1.0 - float(params.get("overlap", 40)) / 100.0))})
+    else:
+        recipe.update({
+            "recipe_id": "ui_queue_job", "source": "PolyTwin console (queue)",
+            "target_contact_force_n": float(params.get("force", 5.6)),
+            "rpm": float(params.get("rpm", 3000)),
+            "feed_speed_mm_s": float(params.get("feed_mm_s", 5.65)),
+            "step_over_spacing_ratio": max(0.05, min(1.0, 1.0 - float(params.get("overlap", 40)) / 100.0)),
+            "n_passes": int(recipe.get("n_passes", 2)),
+        })
     os.makedirs(OUT, exist_ok=True)
     p = os.path.join(OUT, "ui_recipe.json")
     json.dump(recipe, open(p, "w", encoding="utf-8"), indent=1)
@@ -81,20 +95,28 @@ def launch(params: dict, feed_path: str, fake: bool, isaac_py: str) -> subproces
         except FileNotFoundError: pass
     log = open(os.path.join(OUT, "sim_run.log"), "w")
     rec_path = params.get("_record_path") or ""
+    ctl_path = os.path.join(OUT, "control.json")
+    try: os.remove(ctl_path)
+    except FileNotFoundError: pass
     if fake:
         cmd = [sys.executable, os.path.join(_HERE, "feed_demo.py"), str(params.get("fake_seconds", 40)), feed_path]   # 합성 길이(s) — --fake_seconds
         if rec_path: cmd.append(rec_path)
-        return subprocess.Popen(cmd, stdout=log, stderr=subprocess.STDOUT, start_new_session=True)
+        fenv = dict(os.environ); fenv["POLISH_CONTROL"] = ctl_path
+        return subprocess.Popen(cmd, stdout=log, stderr=subprocess.STDOUT, start_new_session=True, env=fenv)
     recipe = write_recipe(params)
+    preset = str(params.get("recipe") or "base")
+    side = os.path.join(_REPO, "learning", "polytwin", "outputs", RECIPE_PRESETS.get(preset, "").replace("_top.json", "_side.json")) \
+        if preset in ("fast", "quality") else recipe
     env = dict(os.environ)
     env.update({
         "POLISH_RL": "1", "POLISH_MONITOR_FEED": feed_path, "POLISH_RL_RECIPE_TOP": recipe,
-        "POLISH_RL_RECIPE_SIDE": recipe, "POLISH_RL_OUT": os.path.join(OUT, "ui_cells.csv"),
+        "POLISH_RL_RECIPE_SIDE": side if os.path.exists(side) else recipe, "POLISH_RL_OUT": os.path.join(OUT, "ui_cells.csv"),
         "POLISH_RENDER_EVERY": "10", "POLISH_ROS_PUBLISH": "0", "POLISH_ROS_CAMERAS": "0",
         "MAX_SIM_STEPS": str(int(params.get("max_steps", 6000))), "POLISH_EXIT_WHEN_DONE": "1",
         "POLISH_PHYSICAL_CONTACT": "1" if params.get("physical") else "0",
     })
     if rec_path: env["POLISH_RECORD"] = rec_path
+    env["POLISH_CONTROL"] = os.path.join(OUT, "control.json")     # 웹 실행 중 컨트롤(일시정지·배율)
     env.update(layout_env(params))
     return subprocess.Popen([isaac_py, "polishing_v5.py", "--obj_name", "car", "--headless"],
                             cwd=os.path.join(_REPO, "scripts"), env=env, stdout=log, stderr=subprocess.STDOUT,
@@ -164,7 +186,7 @@ def run_job(job: dict, args) -> None:
     print(f"[worker] job {jid} 시작 params={params}", flush=True)
     proc = launch(params, feed_path, args.fake, args.isaac)
     uploader = RunUploader(args, jid, rec_path)
-    stop = False; last_ts = None; last_up = 0.0
+    stop = False; last_ts = None; last_up = 0.0; last_ctl = None
     while True:
         code = proc.poll()
         if time.time() - last_up >= args.upload_interval:
@@ -176,6 +198,13 @@ def run_job(job: dict, args) -> None:
             if feed.get("ts") != last_ts:
                 last_ts = feed.get("ts")
                 r = api(args.server, args.token, f"/api/sim/jobs/{jid}/feed", {"feed": feed})
+                ctl = r.get("control")
+                if ctl and ctl != last_ctl:
+                    last_ctl = ctl
+                    try:
+                        _tmp = os.path.join(OUT, "control.json.tmp")
+                        json.dump(ctl, open(_tmp, "w")); os.replace(_tmp, os.path.join(OUT, "control.json"))
+                    except Exception as exc: print(f"[worker] 제어 파일 쓰기 실패: {exc}", flush=True)
                 if r.get("stopRequested") and not stop:
                     stop = True
                     print(f"[worker] job {jid} 정지 요청 → 프로세스 종료", flush=True)

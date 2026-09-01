@@ -1,4 +1,5 @@
 """Scene setup and main loop for polishing_v5."""
+import json
 import os
 import time
 import sys
@@ -530,7 +531,7 @@ def main(simulation_app, obj_name="car"):
                                     r["disposition"], float(r["gu_proxy_after"])] for r in rows if r["visits"] > 0]}
             except Exception as exc:
                 cells = {"error": str(exc)[:80]}
-        overall_state = "DONE" if all(a.done for a in agents) else robots[0]["state"] if robots else "POLISH"
+        overall_state = "DONE" if all(a.done for a in agents) else ("HOLD" if _ctl.get("pause") else (robots[0]["state"] if robots else "POLISH"))
         if recorder is not None:
             try:
                 recorder.frame(sim_step / 60.0, overall_state, cov, sim_step / 60.0, robots)
@@ -591,6 +592,7 @@ def main(simulation_app, obj_name="car"):
     #   POLISH_EXIT_WHEN_DONE=1  → 모든 로봇 완료 + 리프트 하강 완료 시 루프 종료
     max_sim_steps = int(os.environ.get("MAX_SIM_STEPS", "0") or 0)
     exit_when_done = os.environ.get("POLISH_EXIT_WHEN_DONE", "0") == "1"
+    _ctl_path = os.environ.get("POLISH_CONTROL", ""); _ctl_mtime = [None]; _ctl = {"pause": False}
     sim_step = 0
     while simulation_app.is_running():
         do_render = (render_idx % render_every == 0)
@@ -704,8 +706,25 @@ def main(simulation_app, obj_name="car"):
                 break
             continue
 
-        for agent in agents:
-            agent.step(stage)
+        # 웹 콘솔 실행 중 컨트롤(POLISH_CONTROL=<json>): {"pause": bool, "force_scale": x, "feed_scale": y} — 30 스텝마다 mtime 확인
+        if _ctl_path and sim_step % 30 == 0:
+            try:
+                _m = os.path.getmtime(_ctl_path) if os.path.exists(_ctl_path) else None
+                if _m is not None and _m != _ctl_mtime[0]:
+                    _ctl_mtime[0] = _m
+                    _c = json.load(open(_ctl_path)) or {}
+                    _ctl["pause"] = bool(_c.get("pause", False))
+                    _fs = max(0.3, min(2.0, float(_c.get("force_scale", 1.0)))); _fd = max(0.2, min(3.0, float(_c.get("feed_scale", 1.0))))
+                    for agent in agents:
+                        agent._ui_force_scale = _fs; agent._ui_feed_scale = _fd
+                    print(f"[main] 컨트롤: pause={_ctl['pause']} force×{_fs:.2f} feed×{_fd:.2f}", flush=True)
+                    if monitor_feed is not None:
+                        monitor_feed.event("C", f"콘솔 컨트롤: {'일시정지' if _ctl['pause'] else '진행'} · 힘×{_fs:.2f} · 이송×{_fd:.2f}", "info", sim_step / 60.0)
+            except Exception as _exc:
+                print(f"[main] ⚠ 컨트롤 파일 읽기 실패: {_exc}", flush=True)
+        if not _ctl["pause"]:
+            for agent in agents:
+                agent.step(stage)
         if (monitor_feed is not None or recorder is not None) and sim_step % _FEED_EVERY == 0:
             _feed_tick()
         if rl_registry is not None and sim_step % 3000 == 0:      # ~50 s 마다 중간 판정 저장

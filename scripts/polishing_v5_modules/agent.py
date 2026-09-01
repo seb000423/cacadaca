@@ -187,6 +187,8 @@ class RailRobotAgent:
         self.rl_bridge = None
         self._rl_force_scale = 1.0
         self._rl_feed_scale = 1.0
+        self._ui_force_scale = 1.0     # 웹 콘솔 실행 중 조정(정책 배율 위에 곱함, POLISH_CONTROL)
+        self._ui_feed_scale = 1.0
         self._last_step_advance_wp = 0.0
         self._wp_spacing_cache = (None, 0.0)
         self._completed_segs: set = set()  # 이미 완료(RETRACT까지 진행)한 구간 인덱스
@@ -1724,7 +1726,7 @@ class RailRobotAgent:
                 mode="side" if self.is_side else "top",
             )
             # ★ 잔차 정책: 목표 힘 × (1 + a0·0.30) — 직전 20 Hz 제어 스텝의 출력 (rl_bridge)
-            self._target_force *= self._rl_force_scale
+            self._target_force *= self._rl_force_scale * self._ui_force_scale
 
             # 측면은 디스크가 더 일찍(zoff↑) 물리적으로 닿음 → 가상 접촉거리를 그에 맞춰
             # (안 맞추면 가상이 접촉을 못 보고 계속 밀어 N↑→원위치)
@@ -2195,7 +2197,7 @@ class RailRobotAgent:
                     step_advance = (
                         PATH_ADVANCE_PER_CONTACT_STEP_SIDE if self.is_side
                         else PATH_ADVANCE_PER_CONTACT_STEP_TOP
-                    ) * self._rl_feed_scale          # ★ 잔차 정책: 이송 × (1 + a1·0.50)
+                    ) * self._rl_feed_scale * self._ui_feed_scale   # ★ 잔차 정책: 이송 × (1 + a1·0.50) × UI 배율
                     self.current_path_idx_float += step_advance
                     self._last_step_advance_wp = step_advance
                 else:
