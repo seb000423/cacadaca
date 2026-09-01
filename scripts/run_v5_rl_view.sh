@@ -21,6 +21,13 @@ export POLISH_RENDER_EVERY=${POLISH_RENDER_EVERY:-1} # 1 = 매 스텝 렌더(보
 export POLISH_RENDERER=${POLISH_RENDERER:-RaytracedLighting}  # RTX Real-Time(가벼움). 6.0 기본 RealTimePathTracing 은 무거움
 export POLISH_SPEED_SCALE=${POLISH_SPEED_SCALE:-3.0} # 접촉 중 이송 배속(검증된 상한 3.0)
 export POLISH_EXIT_WHEN_DONE=${POLISH_EXIT_WHEN_DONE:-0}       # 1 이면 완료 시 자동 종료
+export POLISH_RECORD=${POLISH_RECORD:-learning/ui_bridge/out/run_view_$(date +%Y%m%d_%H%M%S).sqlite}   # 기록(콘솔 재생용). 0 이면 끔
+[ "$POLISH_RECORD" = "0" ] && unset POLISH_RECORD
 PY=${ISAAC_PY:-$HOME/isaacsim/python.sh}
 echo "[v5-rl-view] 레시피 top=$POLISH_RL_RECIPE_TOP side=$POLISH_RL_RECIPE_SIDE, 접촉=${POLISH_PHYSICAL_CONTACT}, 피드=$POLISH_MONITOR_FEED"
+if [ -n "${POLISH_RECORD:-}" ]; then
+  echo "[v5-rl-view] 기록 → $POLISH_RECORD"
+  echo "[v5-rl-view] 콘솔에서 실시간(지연 3 s) 으로 따라가려면 (로컬 서버, 로그인 쿠키):"
+  echo "  curl -s -b /tmp/pt.cookie -H 'Content-Type: application/json' -d '{\"path\":\"$PWD/$POLISH_RECORD\",\"name\":\"GUI run\"}' http://127.0.0.1:8000/api/runs/watch"
+fi
 cd scripts && exec "$PY" polishing_v5.py --obj_name car "$@"
