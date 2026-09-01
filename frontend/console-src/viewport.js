@@ -1108,9 +1108,11 @@ class PolyTwinViewport extends HTMLElement {
     }
 
     // 바닥 레일 — 셀이 올라타 차체 길이 방향으로 이동한다
+    this._rails = {};                                // 로봇 id → 레일 메시 (라이브/재생 때 피드의 베이스 x 로 옮긴다)
     if (p.hasRail && this._railGeo) {
       const seen = new Set();
       for (const cell of this._cells) {
+        if (cell.userData.ceiling) continue;
         const c = cell.position[CROSS].toFixed(3);
         if (seen.has(c)) continue;
         seen.add(c);
@@ -1122,6 +1124,7 @@ class PolyTwinViewport extends HTMLElement {
         r.position[LONG] = (l0 + l1) / 2;
         r.receiveShadow = true;
         this.props.add(r);
+        if (cell.userData.robotId) this._rails[cell.userData.robotId] = r;
       }
     }
 
@@ -1454,6 +1457,8 @@ class PolyTwinViewport extends HTMLElement {
           root.position.set(0, _p.y, 0); root.quaternion.copy(_qi);
           this._setStandHeight(cell, _p.y);            // 측면 텔레리프트 기둥: 바닥에서 베이스까지
           if (cell.userData.stand) cell.userData.stand.visible = true;
+          const rail = this._rails && this._rails[cell.userData.robotId];   // 레일도 Isaac 의 rail_x 자리로
+          if (rail) { const CROSS = (this._axes && this._axes.CROSS) || 'x'; rail.position[CROSS] = _p[CROSS]; }
         }
         cell.updateMatrixWorld(true);
       }
