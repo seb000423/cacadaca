@@ -11,7 +11,10 @@ UI2 백엔드 `GET /api/monitor` 가 이 JSON 파일을 읽어 그대로 돌려�
   "progress": 0.42,              # 0~1 전체 진행(커버리지 기준)
   "elapsed_s": 812.3,
   "robots": [ {"id": "C", "name": "천장", "force": 5.61, "target": 5.6, "state": "POLISH",
-               "progress": 0.5, "rl_force_scale": 1.12, "rl_feed_scale": 0.93}, ... ],
+               "progress": 0.5, "rl_force_scale": 1.12, "rl_feed_scale": 0.93,
+               "q": [0.0, -1.05, 1.45, 0.0, 1.15, 0.0],                      # 팔 관절각(rad, 선택)
+               "base": {"pos": [x, y, z], "quat": [w, x, y, z]}}, ... ],        # 베이스 자세(Isaac 월드, 선택)
+  "scene": {"up": "z", "long": "y", "car_min": [...], "car_max": [...]},   # 콘솔 좌표 정렬 기준(선택)
   "metrics": {"cv": 6.1, "band": 92.3, "keep": 97.0, "cov": 42.0, "unif": 88.0, "over": 1},
   "events": [ {"robot": "C", "msg": "...", "level": "info|warn|crit", "t": 812.3}, ... ],
   "cells": {"total": 491, "pass": 120, "rework": 30, "repaint": 40, "not_reached": 301,
@@ -46,7 +49,7 @@ class MonitorFeed:
             self._over += 1
 
     def update(self, state: str, progress: float, robots: list[dict], elapsed_s: float | None = None,
-               cells: dict | None = None):
+               cells: dict | None = None, scene: dict | None = None):
         """robots: [{id, name, force, target, state, progress, rl_force_scale, rl_feed_scale}]"""
         self._n += 1
         forces_all = []
@@ -71,12 +74,17 @@ class MonitorFeed:
                         "target": round(float(r.get("target", 0.0)), 3), "state": r.get("state", state),
                         "progress": round(float(r.get("progress", 0.0)), 4),
                         "rl_force_scale": round(float(r.get("rl_force_scale", 1.0)), 3),
-                        "rl_feed_scale": round(float(r.get("rl_feed_scale", 1.0)), 3)} for r in robots],
+                        "rl_feed_scale": round(float(r.get("rl_feed_scale", 1.0)), 3),
+                        # 콘솔 3D 팔 동기화(선택): q = 관절각 6개(rad), base = {pos[3], quat[w,x,y,z]} (Isaac 월드)
+                        **({"q": [round(float(v), 4) for v in r["q"]]} if r.get("q") is not None else {}),
+                        **({"base": r["base"]} if r.get("base") is not None else {})} for r in robots],
             "metrics": {"cv": round(cv, 2), "band": round(band, 2), "keep": round(keep, 2),
                         "cov": round(100.0 * progress, 2),
                         "unif": round(100.0 - min(cv, 100.0) * 0.5, 2), "over": int(self._over)},
             "events": list(self.events)[-20:],
             "cells": cells or {},
+            # 장면 기준(선택): {"up": "z", "long": "y", "car_min": [x,y,z], "car_max": [x,y,z]} — 콘솔 좌표 정렬용
+            **({"scene": scene} if scene else {}),
         }
         tmp = self.path + ".tmp"
         with open(tmp, "w", encoding="utf-8") as f:

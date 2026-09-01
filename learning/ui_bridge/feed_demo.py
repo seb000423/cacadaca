@@ -20,16 +20,25 @@ while time.time() - t0 < dur:
     t = time.time() - t0; n += 1
     prog = min(1.0, t / dur)
     robots = []
+    # 합성 관절/베이스: Isaac HOME (0,-1.05,1.45,0,1.15,0) 주변에서 천천히 흔들리고 레일(y)을 따라 왕복
+    HOME = (0.0, -1.05, 1.45, 0.0, 1.15, 0.0)
+    BASES = {"C": ((0.0, 0.0, 2.35), (0.0, 0.7071, 0.7071, 0.0)),        # 천장: 거꾸로(x 180°)·yaw −90° → w,x,y,z 근사
+             "SL": ((-1.55, 0.0, 0.45), (0.7071, 0.0, 0.0, -0.7071)),    # 좌측 레일, yaw −90°
+             "SR": ((1.55, 0.0, 0.45), (0.7071, 0.0, 0.0, -0.7071))}
     for i, (rid, tgt) in enumerate((("C", 6.69), ("SL", 8.30), ("SR", 8.30))):
         f = tgt + 0.6 * math.sin(0.7 * t + i) + (1.5 if (n + i) % 37 == 0 else 0.0)
+        q = [HOME[j] + (0.35 if j in (0, 1, 2, 4) else 0.1) * math.sin(0.5 * t + 0.9 * j + i) for j in range(6)]
+        pos, quat = BASES[rid]; pos = [pos[0], 1.4 * math.sin(0.15 * t + i), pos[2]]
         robots.append({"id": rid, "force": f, "target": tgt, "state": "POLISH", "progress": prog,
-                       "rl_force_scale": 1.0 + 0.2 * math.sin(0.3 * t + i), "rl_feed_scale": 1.0 - 0.1 * math.cos(0.2 * t)})
+                       "rl_force_scale": 1.0 + 0.2 * math.sin(0.3 * t + i), "rl_feed_scale": 1.0 - 0.1 * math.cos(0.2 * t),
+                       "q": q, "base": {"pos": pos, "quat": list(quat)}})
     if n % 40 == 0:
         feed.event("SL", f"셀 {n // 40} 판정 통과 — GU {71 + (n % 5) * 0.4:.1f}", "info", t)
     cells = {"total": 491, "pass": int(prog * 300), "rework": int(prog * 60), "repaint": int(prog * 80),
              "not_reached": 491 - int(prog * 440), "items": []}
-    feed.update("POLISH" if prog < 1.0 else "DONE", prog, robots, elapsed_s=t, cells=cells)
-    time.sleep(0.5)
+    scene = {"up": "z", "long": "y", "car_min": [-0.92, -2.3, 0.05], "car_max": [0.92, 2.3, 1.45]}
+    feed.update("POLISH" if prog < 1.0 else "DONE", prog, robots, elapsed_s=t, cells=cells, scene=scene)
+    time.sleep(0.1)   # 10 Hz — 팔 동기화 확인용
 # 연결 검증용 결과 요약(last_run.json) — 실제 러너의 _rl_flush 와 같은 자리에 같은 모양으로
 import json as _json
 _res = {"ts": time.time(), "tag": "feed_demo", "sim_step": n * 30, "elapsed_s": dur,

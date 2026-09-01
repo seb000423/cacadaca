@@ -1028,3 +1028,25 @@ bash scripts/run_v5_rl_view.sh --headless   # 창 없이(검증)
 - 3대 기준 차 1대 소요(483셀, 셀당 공정시간 + 이동 30% 가정): 기준 ≈ 18 h → ×1.5/1.15 ≈ 10.3 h, ×1.3/1.0 ≈ 13.5 h.
 - 주의: 해석식 판정(CPU) 결과이며 PhysX 실접촉(9.34)에서는 과부하 트립이 별도 병목 — 새 레시피의 PhysX 순회는
   과부하 재실행 결과를 본 뒤 결정.
+
+### 9.40 콘솔 3D 팔 ↔ Isaac 관절 동기화 (A안, 코드 완료·Isaac 실측 보정 대기) (2026-09-01 19:15~19:35)
+
+**피드 확장 (시뮬 쪽)**: v5 러너 `_feed_tick` 이 로봇별 `q[6]`(`articulation.get_joint_positions()[:6]`, URDF 순서, rad)
+과 `base {pos[3], quat[w,x,y,z]}`(`base_position`/`base_orientation`, Isaac 월드 — 레일 이동·리프트 포함), 그리고
+`scene {up:"z", long:"y", car_min, car_max}`(차 점군 bbox) 를 싣는다. 주기 `POLISH_MONITOR_FEED_EVERY`(기본 6 스텝 ≈ 10 Hz).
+`MonitorFeed.update(..., scene=)` 가 q/base 를 통과시킨다. `feed_demo.py` 는 합성 q/base/scene 을 10 Hz 로 쓴다.
+
+**콘솔 쪽 (UI2 커밋)**: `viewport.setLive(feed)` — 피드에 q 가 있으면 공정 중 자체 IK 대신 `_driveLive`:
+`q_rig = LIVE_Q_SIGN · (q_isaac − LIVE_Q_OFFSET)` 를 속도 제한(6 rad/s)으로 따라가고, 베이스는 Isaac 위치·자세를
+그대로(받침대 숨김 — 천장 로봇은 매달림). 좌표 변환은 Isaac(Z-up, 길이축 y) → three(Y-up) 거울상 map (−x, z, −y),
+스케일·중심은 `scene` 의 차 bbox 와 콘솔 차체 bbox 로 맞춤. `template.html` 의 `pollLiveRun` 이 매 폴링마다
+`setLive(feed)`, `stopTimers` 가 해제. 연마 자국은 로봇 state==POLISH & 힘>0.5 N 일 때만 찍힘.
+
+**리그 보정 (CPU, scratchpad `rig_calib.py`)**: 콘솔 리그(m0609.js)의 피벗·축을 URDF FK 와 최소제곱 매칭 →
+best map (−x, z, −y) **거울상**(det −1, 회전 부호 전체 반전), 구운 자세 q0 = (−0.003, 1.165, −1.564, −0.012, −0.679, 0),
+피벗 오차 0/6/12/16/16/41 mm. 따라서 `LIVE_Q_SIGN = [−1]×6`, `LIVE_Q_OFFSET = q0`. 41 mm(j6)는 리그 자체 근사 오차.
+
+**검증**: 로컬 모드 서버(`PT_MONITOR_FEED`) + `feed_demo.py` → `/api/monitor` 에 q/base/scene 도달 확인(10 Hz).
+브라우저에서 팔이 맞게 서는지(앞뒤 `LIVE_LONG_FLIP`, 좌우, 관절 부호)는 **Isaac 실피드로 실측 후 확정** —
+재실행 종료 후 `run_v5_rl_view.sh --headless` 를 잠깐 띄우고 콘솔을 열어 HOME 자세 비교. 큐 모드는 같은 피드
+필드를 그대로 전달하므로 추가 작업 없음(단 1~2 Hz 스냅샷 보간).

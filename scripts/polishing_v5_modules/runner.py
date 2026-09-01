@@ -452,6 +452,11 @@ def main(simulation_app, obj_name="car"):
         monitor_feed.event("C", f"공정 시작 — 로봇 {len(agents)}대, 정책 {'ON' if rl_registry is not None else 'OFF'}", "info", 0.0)
         print(f"[main] 모니터 피드 → {_feed_path}")
     _NAMES = {"C": "천장", "SL": "좌측", "SR": "우측"}
+    _FEED_EVERY = max(1, int(os.environ.get("POLISH_MONITOR_FEED_EVERY", "6")))   # 6 스텝 ≈ 10 Hz (팔 동기화용)
+    # 콘솔이 Isaac 월드(Z-up, 차 길이축 Y)를 자기 좌표계로 옮길 때 쓰는 기준: 차 점군 bbox
+    _feed_scene = {"up": "z", "long": "y",
+                   "car_min": [float(v) for v in np.min(raw_points, axis=0)] if len(raw_points) else [0, 0, 0],
+                   "car_max": [float(v) for v in np.max(raw_points, axis=0)] if len(raw_points) else [0, 0, 0]}
     def _feed_tick():
         if monitor_feed is None:
             return
@@ -459,11 +464,23 @@ def main(simulation_app, obj_name="car"):
         for a in agents:
             st_name = str(getattr(a, "run_state", "POLISH")).split(".")[-1]
             seg_prog = (a.current_path_idx_float / max(len(a.path) - 1, 1)) if len(getattr(a, "path", [])) else 0.0
-            robots.append({"id": a.label, "name": _NAMES.get(a.label, a.label),
-                           "force": float(a.filtered_contact_force), "target": float(getattr(a, "_target_force", 0.0)),
-                           "state": st_name, "progress": float(min(max(seg_prog, 0.0), 1.0)),
-                           "rl_force_scale": float(getattr(a, "_rl_force_scale", 1.0)),
-                           "rl_feed_scale": float(getattr(a, "_rl_feed_scale", 1.0))})
+            rob = {"id": a.label, "name": _NAMES.get(a.label, a.label),
+                   "force": float(a.filtered_contact_force), "target": float(getattr(a, "_target_force", 0.0)),
+                   "state": st_name, "progress": float(min(max(seg_prog, 0.0), 1.0)),
+                   "rl_force_scale": float(getattr(a, "_rl_force_scale", 1.0)),
+                   "rl_feed_scale": float(getattr(a, "_rl_feed_scale", 1.0))}
+            # 콘솔 3D 팔 동기화용: 팔 관절각 6개(rad, URDF 순서) + 베이스 자세(Isaac 월드, quat w,x,y,z)
+            try:
+                _q = np.asarray(a.articulation.get_joint_positions(), dtype=float)
+                rob["q"] = [float(v) for v in _q[:6]]
+            except Exception:
+                pass
+            try:
+                rob["base"] = {"pos": [float(v) for v in a.base_position[:3]],
+                               "quat": [float(v) for v in a.base_orientation[:4]]}
+            except Exception:
+                pass
+            robots.append(rob)
         try:
             cov = polish_viz.covered_count() / max(polish_viz.total_count(), 1)
         except Exception:
@@ -483,7 +500,7 @@ def main(simulation_app, obj_name="car"):
             except Exception as exc:
                 cells = {"error": str(exc)[:80]}
         overall_state = "DONE" if all(a.done for a in agents) else robots[0]["state"] if robots else "POLISH"
-        monitor_feed.update(overall_state, cov, robots, elapsed_s=sim_step / 60.0, cells=cells)
+        monitor_feed.update(overall_state, cov, robots, elapsed_s=sim_step / 60.0, cells=cells, scene=_feed_scene)
 
     # 물리 초기화
     world.reset()
@@ -650,7 +667,7 @@ def main(simulation_app, obj_name="car"):
 
         for agent in agents:
             agent.step(stage)
-        if monitor_feed is not None and sim_step % 20 == 0:
+        if monitor_feed is not None and sim_step % _FEED_EVERY == 0:
             _feed_tick()
         if rl_registry is not None and sim_step % 3000 == 0:      # ~50 s 마다 중간 판정 저장
             _rl_flush("periodic")
