@@ -1342,7 +1342,7 @@ class PolyTwinViewport extends HTMLElement {
       else m.visible = false;
     });
     this._model = this._models.get(id);
-    this._cellBox = null; this._waBox = null;
+    this._cellBox = null; this._waBox = null; this._paintBox = null;
     this._applyCarLift();
     // 차종마다 다시 굽는다. 예전에는 처음 한 번만 구워서 차를 바꾸면
     // 앞차의 표면 위에 경로가 그려졌다.
@@ -1376,6 +1376,9 @@ class PolyTwinViewport extends HTMLElement {
     const w = new THREE.Vector3();
     for (const q of pts) { w.copy(q).applyMatrix4(this._model.matrixWorld); const k = key(w.x, w.y, w.z); let arr = grid.get(k); if (!arr) grid.set(k, arr = []); arr.push(w.clone()); }
     this._paintGrid = { grid, CELL, n: pts.length };
+    // 도장 면 bbox(휠·미러·유리 제외) — Isaac 스캔 차(도장 면만 스캔) 와 비례가 맞는 기준 상자
+    if (pts.length) { const pb = new THREE.Box3(); for (const q of pts) pb.expandByPoint(w.copy(q).applyMatrix4(this._model.matrixWorld)); this._paintBox = pb; }
+    else this._paintBox = null;
   }
 
   /** 월드 점이 도장 정점에서 r 이내인가 (도장 정점이 수집되지 않은 모델은 항상 true) */
@@ -1421,9 +1424,16 @@ class PolyTwinViewport extends HTMLElement {
      기록에서는 "지금 어느 셀을 작업 중인지(tcp)·진행률·시간·완료 셀" 만 쓰고, 로봇의 실제 움직임·배치는 콘솔 자체
      애니메이션(레인 훑기·레일 슬라이딩·접근/후퇴)이 맡는다. 셀 위치는 Isaac 차 bbox 상대좌표 → 콘솔 차 bbox 로 옮겨
      그 근처 레인(콘솔 차 표면 위)을 훑으므로 차체를 뚫지 않는다. */
+  /** 상대 매핑 점을 콘솔 차 도장 표면(레인 점)에 스냅 — 스캔 차와 모델 형상 차이로 떠 보이는 것을 없앤다 */
+  _snapToSurface(pt, r = 0.35) {
+    const F = this._flat; if (!F || !F.length) return pt;
+    let best = null, bd = r * r;
+    for (let i = 0; i < F.length; i += 2) { const d = F[i].distanceToSquared(pt); if (d < bd) { bd = d; best = F[i]; } }
+    return best ? best.clone() : pt;
+  }
   _mapRel(pt) {
     const sc = this._live && this._live.scene; if (!sc || !sc.car_min || !this._model) return null;
-    if (!this._waBox) { this._model.updateMatrixWorld(true); this._waBox = new THREE.Box3().setFromObject(this._model); }
+    if (!this._waBox) { this._model.updateMatrixWorld(true); this._waBox = (this._paintBox && !this._paintBox.isEmpty()) ? this._paintBox.clone() : new THREE.Box3().setFromObject(this._model); }
     const b = this._waBox, mn = sc.car_min, mx = sc.car_max;
     const u = (pt[0] - mn[0]) / Math.max(1e-6, mx[0] - mn[0]);   // Isaac x(가로) → 콘솔 x
     const w = 1 - (pt[1] - mn[1]) / Math.max(1e-6, mx[1] - mn[1]);   // Isaac y(길이, 앞 +) → 콘솔 길이축. 콘솔 Z4 는 앞이 −z 라 반전 (좌우는 그대로 맞음)
@@ -1487,7 +1497,7 @@ class PolyTwinViewport extends HTMLElement {
       const rid = cell.userData.robotId;
       const r = (rid && feed.robots.find((x) => x.id === rid)) || null;
       if (!r || !r.tcp) continue;                                  // 이동 중(SLIDE)이면 직전 구간을 계속 훑는다
-      const pt = this._mapRel(r.tcp); if (!pt) continue;
+      let pt = this._mapRel(r.tcp); if (!pt) continue; pt = this._snapToSurface(pt);
       const last = cell.userData.waPt;
       if (!last || last.distanceTo(pt) > 0.06) {                    // 셀이 바뀌었다 → 새 작업 구간
         if (this._setWorkWindow(cell, pt)) { cell.userData.waPt = pt.clone(); this.stampPolish(pt, this._waCellRadius(), true, 0.6); }   // 작업 중인 셀: 팔이 있는 자리부터 광택
@@ -1554,7 +1564,7 @@ class PolyTwinViewport extends HTMLElement {
       const geo = new THREE.SphereGeometry(0.036, 10, 8), mat = new THREE.MeshStandardMaterial({ roughness: 0.55, metalness: 0.05 });
       const mesh = new THREE.InstancedMesh(geo, mat, items.length), m4 = new THREE.Matrix4(), col = new THREE.Color();
       const C = { pass: 0x2e8b57, spot_repaint_review: 0xe69f00, rework_candidate: 0xd55e00 };
-      for (let i = 0; i < items.length; i++) { const it = items[i]; const m = this._mapRel([Number(it[0]), Number(it[1]), Number(it[2])]); if (!m) continue; m4.makeTranslation(m.x, m.y, m.z); mesh.setMatrixAt(i, m4); mesh.setColorAt(i, col.setHex(C[it[3]] || 0x888888)); }
+      for (let i = 0; i < items.length; i++) { const it = items[i]; let m = this._mapRel([Number(it[0]), Number(it[1]), Number(it[2])]); if (!m) continue; m = this._snapToSurface(m); m4.makeTranslation(m.x, m.y, m.z); mesh.setMatrixAt(i, m4); mesh.setColorAt(i, col.setHex(C[it[3]] || 0x888888)); }
       mesh.instanceMatrix.needsUpdate = true; if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
       this.cellsLayer.add(mesh); this._cellsMesh = mesh; return;
     }
