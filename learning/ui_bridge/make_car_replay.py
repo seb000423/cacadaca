@@ -15,7 +15,20 @@ ap.add_argument("--out", default=os.path.join(_HERE, "out", "run_car_replay.sqli
 ap.add_argument("--cell_s", type=float, default=309.0, help="합격/일반 셀 공정시간(s) — 기준 레시피 150셀 평균")
 ap.add_argument("--trip_s", type=float, default=45.0, help="과부하 트립 셀(passes=0) 소요(s)")
 ap.add_argument("--hz", type=float, default=1.0)
+ap.add_argument("--no_ik", action="store_true", help="오프라인 IK 없이(콘솔 IK 사용) — 검증용")
 a = ap.parse_args()
+IK = None
+if not a.no_ik:
+    try:
+        from learning.ui_bridge.replay_ik import ArmIK, base_T, fk
+        from scripts.path_generator import load_ply_points
+        import numpy as _np
+        _pts = _np.asarray(load_ply_points(os.path.join(_REPO, "scan_result", "car", "points", "real_camera_surface_points.ply")), float)
+        _pts[:, 2] += 0.90     # 리프트
+        IK = ArmIK(_pts[::2], clearance=0.07)
+        print(f"offline IK on: car points {len(_pts)//2}")
+    except Exception as exc:
+        print(f"offline IK unavailable ({exc}) → 콘솔 IK 사용"); IK = None
 
 CAR_LIFT_Z = 0.90                       # v5 월드 = 스캔 좌표 + 리프트
 SCENE = {"up": "z", "long": "y", "car_min": [-0.6652, -1.5103, 1.0154], "car_max": [0.6672, 1.5278, 1.8722],   # run 8 실측 bbox
@@ -111,6 +124,33 @@ for rid, cells in plan.items():
     tl.append((t, t + 1e9, "DONE", None, prev, prev))
     timelines[rid] = tl
 T_END = max(tl[-2][1] for tl in timelines.values())
+
+# ── 오프라인 IK: 셀마다 (접근 시작, 폴리싱 시작, 중간 −, 중간 +, 끝, 후퇴 끝) 관절 키프레임 ──
+KEYQ = {}          # (rid, cell_id) → dict(app0, pol0, polm, polp, pol1, ret1)
+if IK is not None:
+    import numpy as _np
+    stats = []
+    for rid, cells in plan.items():
+        seed = _np.array(POSE[rid]["q"], float); prev_q = seed.copy()
+        for r in cells:
+            c = _np.array([float(r["center_x_m"]), float(r["center_y_m"]), float(r["center_z_m"]) + CAR_LIFT_Z])
+            n = _np.array(cell_normal(r), float); n /= (_np.linalg.norm(n) or 1.0)
+            side = _np.array([-n[1], n[0], 0.0]); sn = _np.linalg.norm(side); side = side / sn if sn > 1e-6 else _np.array([1.0, 0, 0])
+            Tb = base_T(base_for(rid, r), POSE[rid]["quat"])
+            keys = {}
+            q_app, e, d = IK.solve(Tb, c + n * 0.15, n, prev_q, w_clear=200.0); keys["app0"] = q_app
+            q_p0, e0, d0 = IK.solve(Tb, c, n, q_app); keys["pol0"] = q_p0
+            q_pm, _, _ = IK.solve(Tb, c - side * 0.03, n, q_p0); keys["polm"] = q_pm
+            q_pp, _, _ = IK.solve(Tb, c + side * 0.03, n, q_p0); keys["polp"] = q_pp
+            keys["pol1"] = q_p0; keys["ret1"] = q_app
+            KEYQ[(rid, r["cell_id"])] = keys; prev_q = q_app
+            stats.append((e0, d0))
+    es = _np.array([x[0] for x in stats]); ds = _np.array([x[1] for x in stats])
+    print(f"IK: {len(stats)} cells, pad error mean {es.mean()*1000:.1f} mm / max {es.max()*1000:.1f} mm, "
+          f"min link clearance mean {ds.mean()*100:.1f} cm, cells < 5 cm: {(ds < 0.05).sum()}")
+
+def _lerp_q(qa, qb, u):
+    return [float(qa[j] + (qb[j] - qa[j]) * u) for j in range(6)]
 print(f"cells C={len(plan['C'])} SL={len(plan['SL'])} SR={len(plan['SR'])}  total sim time {T_END/3600:.1f} h")
 
 disp_k = {"pass": "합격", "spot_repaint_review": "스팟 재도장 검토", "rework_candidate": "재작업 후보"}
@@ -118,7 +158,7 @@ rec = SimRecorder(a.out, meta={"scene": SCENE, "hz": a.hz, "robots": [{"id": "C"
                               "recipe": {"replay_of": os.path.basename(a.cells)}, "rl": True, "physical_contact": True,
                               "recipe_values": {"force_n": 6.69, "feed_mm_s": 5.65, "rpm": 3259, "step_over_ratio": 0.27, "n_passes": 2, "pad_radius_m": 0.055, "robots": ["C", "SL", "SR"]},
                               "params": {"robotCount": 3, "hasRail": True, "hasLift": True, "tool": "dual", "pad": 110, "carLift": 0, "recipe": "base"},
-                              "kind": "result_replay"}, chunk_s=60.0)
+                              "kind": "result_replay_q" if IK is not None else "result_replay"}, chunk_s=60.0)
 idx = {rid: 0 for rid in plan}; done_cells = []; done_ids = set(); last_snap = 0
 n_total = len(rows); dt = 1.0 / a.hz; t = 0.0; nf = 0
 while t <= T_END + 1.0:
@@ -130,7 +170,19 @@ while t <= T_END + 1.0:
         u = 0.0 if t1 - t0 <= 0 or t1 > 1e8 else max(0.0, min(1.0, (t - t0) / (t1 - t0)))
         base = [b0[i] + (b1[i] - b0[i]) * u for i in range(3)] if state == "SLIDE" else list(b1)
         tcp = None; nrm = None; q = None
-        if r is not None and state in ("APPROACH", "POLISH", "RETRACT"):
+        keys = KEYQ.get((rid, r["cell_id"])) if (r is not None and IK is not None) else None
+        if keys is not None and state in ("APPROACH", "POLISH", "RETRACT"):
+            if state == "APPROACH":
+                q = _lerp_q(keys["app0"], keys["pol0"], u); force = 0.0
+            elif state == "POLISH":
+                ph = (t - t0) / max(1.0, t1 - t0); w = math.sin(2 * math.pi * 2 * ph)
+                q = _lerp_q(keys["pol0"], keys["polp"] if w >= 0 else keys["polm"], abs(w))
+                force = TARGET[rid] * (1.0 + 0.06 * math.sin(2 * math.pi * 0.7 * t + hash(rid) % 7))
+            else:
+                q = _lerp_q(keys["pol1"], keys["ret1"], u); force = 0.0
+        elif keys is None and state == "SLIDE" and IK is not None:
+            q = CARRY_Q; force = 0.0
+        elif r is not None and state in ("APPROACH", "POLISH", "RETRACT"):
             c = [float(r["center_x_m"]), float(r["center_y_m"]), float(r["center_z_m"]) + CAR_LIFT_Z]
             nrm = cell_normal(r)
             q = POSE[rid]["q"]     # 실제 Isaac 폴리싱 자세 — 콘솔 IK 의 시드(팔꿈치 방향)
@@ -149,8 +201,8 @@ while t <= T_END + 1.0:
         done_n = sum(1 for k in range(idx[rid]) if tl[k][2] == "RETRACT")
         rob = {"id": rid, "force": force, "target": TARGET[rid], "state": state, "progress": done_n / max(1, len(plan[rid])),
                "rl_force_scale": 1.0, "rl_feed_scale": 1.0, "base": {"pos": base, "quat": POSE[rid]["quat"]}}
-        if q is not None: rob["q"] = q
-        if tcp is not None: rob["tcp"] = tcp; rob["normal"] = nrm
+        if q is not None: rob["q"] = [float(v) for v in q]
+        if tcp is not None and IK is None: rob["tcp"] = tcp; rob["normal"] = nrm   # 콘솔 IK 경로(오프라인 IK 없을 때만)
         robots.append(rob)
         # 셀 완료 시각(RETRACT 시작) 에 판정 기록
         if state == "RETRACT" and r is not None and r["cell_id"] not in done_ids:
