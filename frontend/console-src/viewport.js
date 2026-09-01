@@ -517,6 +517,18 @@ const JOINT_RATE = 3.2;
 // 그만큼 팔이 닿지 못해 패드가 표면에서 뜬다. 속도만 제한하고 따라붙게 한다.
 const RAIL_SPEED = 1.8;
 
+/* ── Isaac 동기화(LIVE) ─────────────────────────────────────────────
+   시뮬 피드(/api/monitor)에 로봇별 관절각 q[6]·베이스 자세가 실려 오면 자체 IK 대신 그대로 따라간다.
+   리그의 q=0 은 GLB 에 구워진 자세이고 리그는 URDF 의 거울상(map (−x, z, −y), det −1)이라
+   q_rig = LIVE_Q_SIGN · (q_isaac − LIVE_Q_OFFSET). 값은 scratchpad/rig_calib.py 최소제곱 결과
+   (피벗 오차 ≤ 41 mm). Isaac 실측으로 확정 전까지는 근사. */
+const LIVE_Q_SIGN = [-1, -1, -1, -1, -1, -1];
+const LIVE_Q_OFFSET = [-0.0034, 1.1651, -1.5641, -0.0116, -0.6794, 0.0];
+const LIVE_LONG_FLIP = false;   // 차 앞뒤가 반대로 보이면 true (길이축 180° 회전)
+const LIVE_JOINT_RATE = 6.0;    // 피드는 수 Hz 라 따라붙는 속도를 공정보다 높인다 (rad/s)
+// Isaac(Z-up, x 가로·y 길이·z 높이) → three(Y-up): 거울상 map (−x, z, −y)
+const _LIVE_M = new THREE.Matrix3().set(-1, 0, 0, 0, 0, 1, 0, -1, 0);
+
 /* meshopt/KHR_mesh_quantization 로 구운 GLB 는 위치·법선을 정수로 담고
    노드 스케일로 복원한다. 이 상태에서 geometry.applyMatrix4() 를 쓰면
    변환한 실수값을 정수 배열에 도로 써 넣어 형상이 뭉개진다.
@@ -1258,6 +1270,79 @@ class PolyTwinViewport extends HTMLElement {
     this._sideFields = buildSideFields(this.renderer, this._model);
   }
 
+  /** 시뮬 피드(/api/monitor 의 feed) 를 넣으면 팔이 Isaac 관절을 그대로 따른다. null 이면 해제. */
+  setLive(feed) {
+    const had = !!this._live;
+    this._live = feed && feed.robots && feed.robots.some((r) => Array.isArray(r.q)) ? feed : null;
+    if (this._live && this._live.scene && !this._liveXf) this._buildLiveXform(this._live.scene);
+    if (had && !this._live) {
+      // 해제: 받침대 다시 보이고 배치 자세로
+      for (const cell of this._cells) {
+        if (cell.userData.stand) cell.userData.stand.visible = true;
+        cell.userData.liveQ = null;
+      }
+      this._liveXf = null;
+    }
+  }
+
+  /* Isaac 월드 → 콘솔 월드. 차 점군 bbox(feed.scene) 와 콘솔 차체 bbox 를 맞춘다(길이축 스케일 + 중심 정렬). */
+  _buildLiveXform(scene) {
+    if (!this._model || !scene || !scene.car_min || !scene.car_max) return;
+    this._model.updateMatrixWorld(true);
+    const b = new THREE.Box3().setFromObject(this._model);
+    const mid = b.getCenter(new THREE.Vector3()), size = b.getSize(new THREE.Vector3());
+    const LONG = (this._axes && this._axes.LONG) || 'z';
+    const mn = new THREE.Vector3().fromArray(scene.car_min), mx = new THREE.Vector3().fromArray(scene.car_max);
+    const isaacLen = Math.max(1e-3, mx.y - mn.y);
+    const s = THREE.MathUtils.clamp(size[LONG] / isaacLen, 0.5, 2.0);
+    const rot = new THREE.Matrix4().setFromMatrix3(_LIVE_M);
+    if (LIVE_LONG_FLIP) rot.premultiply(new THREE.Matrix4().makeRotationY(Math.PI));
+    const cIsaac = mn.clone().add(mx).multiplyScalar(0.5 * s).applyMatrix4(rot);
+    // 높이는 차 바닥끼리 맞춘다(Isaac 차 z_min ↔ 콘솔 차 y_min)
+    const floorIsaac = new THREE.Vector3(0, 0, mn.z * s).applyMatrix4(rot);
+    const t = new THREE.Vector3(mid.x - cIsaac.x, b.min.y - floorIsaac.y, mid.z - cIsaac.z);
+    this._liveXf = { s, rot, t, q: new THREE.Quaternion().setFromRotationMatrix(rot) };
+  }
+
+  _driveLive(dt) {
+    const feed = this._live; if (!feed) return;
+    const xf = this._liveXf;
+    const robots = feed.robots;
+    const _p = new THREE.Vector3(), _qi = new THREE.Quaternion(), _v = new THREE.Vector3();
+    for (let ci = 0; ci < this._cells.length; ci++) {
+      const cell = this._cells[ci];
+      const r = robots[ci]; if (!r || !Array.isArray(r.q)) continue;
+      // 관절: 오프셋·부호 보정 후 속도 제한으로 따라붙기
+      const tgt = cell.userData.liveQ || (cell.userData.liveQ = cell.userData.q.slice());
+      for (let j = 0; j < 6; j++) tgt[j] = LIVE_Q_SIGN[j] * ((Number(r.q[j]) || 0) - LIVE_Q_OFFSET[j]);
+      const q = cell.userData.q, step = LIVE_JOINT_RATE * dt;
+      for (let j = 0; j < 6; j++) q[j] += THREE.MathUtils.clamp(tgt[j] - q[j], -step, step);
+      setCellQ(cell, q);
+      // 베이스 자세: 피드에 있으면 Isaac 위치·자세를 그대로(레일 이동·리프트 포함)
+      if (r.base && r.base.pos && xf) {
+        _p.fromArray(r.base.pos).multiplyScalar(xf.s).applyMatrix4(xf.rot).add(xf.t);
+        cell.position.copy(_p);
+        if (r.base.quat) {
+          // 거울상 변환: 축은 M·n, 각도는 반전 → (w, −M·v)
+          _v.set(r.base.quat[1], r.base.quat[2], r.base.quat[3]).applyMatrix3(_LIVE_M).negate();
+          _qi.set(_v.x, _v.y, _v.z, r.base.quat[0]);
+          if (LIVE_LONG_FLIP) _qi.premultiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI));
+          cell.quaternion.copy(_qi);
+        }
+        cell.userData.armRoot.position.y = 0;
+        if (cell.userData.stand) cell.userData.stand.visible = false;   // 천장 로봇은 받침대가 없다
+        cell.updateMatrixWorld(true);
+      }
+      // 패드 자전·연마 자국 — 접촉 중(POLISH)일 때만
+      const rpm = this._params.rpm || 3000;
+      cell.userData.padDisc.rotation.y += (rpm / 60) * Math.PI * 2 * dt;
+      if (r.state === 'POLISH' && (Number(r.force) || 0) > 0.5) {
+        cell.userData.padAnchor.getWorldPosition(_p);
+        this.stampPolish(_p, (this._params.pad / 1000) / 2);
+      }
+    }
+  }
+
   setParams(p) {
     const prev = this._params;
     const spacingChanged = p.pad !== prev.pad || p.overlap !== prev.overlap;
@@ -1412,6 +1497,13 @@ class PolyTwinViewport extends HTMLElement {
         cell.userData.qPrev = null;
       }
       this.head.visible = false;              // 작업점 표시도 공정 중에만
+      this.renderer.render(this.scene, this.camera);
+      return;
+    }
+
+    if (this._live) {
+      this._driveLive(dt);
+      this.head.visible = false;
       this.renderer.render(this.scene, this.camera);
       return;
     }

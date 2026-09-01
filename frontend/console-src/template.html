@@ -516,7 +516,10 @@ class Component extends DCLogic {
     if (v && v.setView) v.setView(id);
   }
 
-  stopTimers() { clearTimeout(this._simTimer); clearInterval(this._monTimer); clearInterval(this._liveTimer); }
+  stopTimers() {
+    clearTimeout(this._simTimer); clearInterval(this._monTimer); clearInterval(this._liveTimer);
+    const v = this.vp(); if (v && v.setLive) v.setLive(null);
+  }
 
   /* ══ 실제 시뮬레이션 실행 (백엔드 /api/sim/*) ═══════════════════════
      로컬 서버가 Isaac Sim(원코드 v5 + 잔차 정책)을 띄우고, 모니터는 /api/monitor 피드로 채운다.
@@ -551,6 +554,7 @@ class Component extends DCLogic {
       fetch('/api/sim/status', { credentials: 'same-origin', cache: 'no-store' }).then((r) => r.json()).catch(() => null),
     ]).then(([m, st]) => {
       const feed = m && m.live ? m.feed : null;
+      const v = this.vp(); if (v && v.setLive) v.setLive(feed);   // 3D 팔 = Isaac 관절 그대로
       const el = performance.now() - this._runT0;
       this.setState({ runEl: el, mon: this.liveMon(feed, t) });
       const done = st && !st.running && (st.exitCode !== null || (feed && feed.state === 'DONE'));
