@@ -85,6 +85,7 @@ class RobotPolishEnvCfg(PolishEnvCfg):
     physical_admittance_max_vel_m_s: float = 0.012
     # 센서 후처리 — raw는 그대로 두고 filtered 를 별도 유지한다 (로그 5종 분리 원칙).
     sensor_filter_alpha: float = 0.5       # 1차 저역통과 (physics rate 기준 EMA 계수)
+    force_hard_debounce_substeps: int = 6   # 하드리밋 초과가 이만큼 연속(120 Hz → 50 ms)일 때만 위반
     sensor_valid_min_n: float = 0.05       # 이 이하는 비접촉(자유공간 ≈ 0 N) 판정
 
     # ── 줄바꿈(레스터 line 전환) 램프 리미터 (PT-DESIGN) ────────────────────

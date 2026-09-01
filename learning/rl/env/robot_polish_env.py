@@ -386,7 +386,13 @@ class RobotPolishEnv(PolishEnv):
         # raw 순간힘 14N 감시 (9.25 교정) — 평균화가 짧은 스파이크를 은폐하지 않게
         # 물리스텝 단위로 즉시 위반 기록. 판정·학습 공통의 안전 의미론.
         self._force_raw_peak_n = torch.maximum(self._force_raw_peak_n, raw)
-        self._force_hard_violated |= raw > self.cfg.force_hard_limit_n
+        # 디바운스 (2026-09-01): 첫 접촉의 단발 스파이크(수 ms)는 접촉 아티팩트 — 품질이 합격인
+        # 셀까지 과부하로 실패 처리하던 원인. 한계 초과가 debounce_substeps 만큼 연속될 때만 위반.
+        over = raw > self.cfg.force_hard_limit_n
+        if not hasattr(self, "_over_streak"):
+            self._over_streak = torch.zeros(self.num_envs, dtype=torch.int32, device=self.device)
+        self._over_streak = torch.where(over, self._over_streak + 1, torch.zeros_like(self._over_streak))
+        self._force_hard_violated |= self._over_streak >= int(self.cfg.force_hard_debounce_substeps)
         alpha = float(self.cfg.sensor_filter_alpha)
         self._force_sensor_filt_n = alpha * raw + (1.0 - alpha) * self._force_sensor_filt_n
         # 진단: 패드↔작업면 pair 분리힘. net 과 큰 차이가 나면 다른 물체와의 허위 접촉.
