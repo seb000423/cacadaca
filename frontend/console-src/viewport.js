@@ -694,20 +694,20 @@ function robotCell(parts, mats) {
 
   // 패드 앵커 — 원점이 접촉면, +Z 가 바깥 법선
   const padAnchor = new THREE.Object3D();
-  padAnchor.position.copy(j6a).multiplyScalar(PAD_OFFSET);
+  padAnchor.position.copy(j6a).multiplyScalar(PAD_OFFSET + 0.036);   // 하우징 면(+0.046) + 플레이트/폼 두께 → 스펀지 접촉면
   padAnchor.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), j6a);
   parent.add(padAnchor);
 
   /* 연마 스펀지 패드 — 접촉면(앵커 원점)에서 툴 쪽(+Z)으로 2.8 cm 두께의 폼 + 어두운 백킹 플레이트.
      떠 있는 얇은 원판 대신 실제 패드처럼 보이고, 툴 하우징과의 틈을 메운다. */
+  /* 앵커 좌표계: 원점 = 접촉면, +Z = 표면 안쪽(툴 축 방향), −Z = 툴(하우징) 쪽. 스펀지는 −Z 쪽에 쌓는다:
+     접촉면(0) ← 폼 2.8 cm ← 백킹 플레이트 ← 하우징 면. 앵커 자체를 폼 두께만큼 툴 축 앞으로 내보내 하우징에 붙인다. */
   const padDisc = new THREE.Group();
-  const foam = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.052, 0.028, 40), mats.pad);
-  foam.rotation.x = Math.PI / 2; foam.position.z = 0.014; foam.castShadow = true;
+  const foam = new THREE.Mesh(new THREE.CylinderGeometry(0.052, 0.055, 0.028, 40), mats.pad);
+  foam.rotation.x = Math.PI / 2; foam.position.z = -0.014; foam.castShadow = true;
   const plate = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.01, 40), mats.dark);
-  plate.rotation.x = Math.PI / 2; plate.position.z = 0.033;
-  const stem = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.018, 0.05, 16), mats.dark);
-  stem.rotation.x = Math.PI / 2; stem.position.z = 0.06;
-  padDisc.add(foam, plate, stem);
+  plate.rotation.x = Math.PI / 2; plate.position.z = -0.033;
+  padDisc.add(foam, plate);
   padAnchor.add(padDisc);
   // 작업 지점 표시 — 레이저처럼 툴에서 표면으로 내려오는 투명한 빔과 표면 글로우(월드에 두고 매 프레임 옮긴다)
   const glow = new THREE.MeshBasicMaterial({ color: 0x8FE9FF, transparent: true, opacity: 0.42, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });

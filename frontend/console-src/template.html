@@ -343,14 +343,19 @@
           <option value="">기록 선택 — DB 에 저장된 시뮬을 보간 재생</option>
           <sc-for list="{{ runOpts }}" as="o" hint-placeholder-count="2"><option value="{{ o.id }}">{{ o.label }}</option></sc-for>
         </select>
-        <input type="range" min="0" max="1000" value="{{ replayPos }}" sc-camel-on-input="{{ replaySeek }}" aria-label="재생 위치" style="width: 100%">
+        <div style="display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text-lo)">
+          <div style="white-space: nowrap">시간</div>
+          <input type="range" min="0" max="1000" value="{{ replayPos }}" sc-camel-on-input="{{ replaySeek }}" aria-label="재생 위치(시간)" style="flex: 1">
+        </div>
         <div style="display: flex; gap: 8px">
           <div sc-camel-on-click="{{ replayToggle }}" tabindex="0" style="flex: 1; padding: 9px 0; border: 1px solid var(--line); text-align: center; font-size: 14px; letter-spacing: 0.06em; color: var(--text-mid); cursor: pointer">{{ replayBtn }}</div>
           <div sc-camel-on-click="{{ toggleCells }}" tabindex="0" style="padding: 9px 10px; border: 1px solid var(--line); text-align: center; font-size: 13px; color: var(--text-lo); cursor: pointer; white-space: nowrap">{{ cellsLabel }}</div>
           <div sc-camel-on-click="{{ deleteRun }}" tabindex="0" title="선택한 기록 삭제" style="padding: 9px 10px; border: 1px solid var(--line); text-align: center; font-size: 13px; color: var(--warn); cursor: pointer; white-space: nowrap">삭제</div>
-          <select sc-camel-on-input="{{ replaySpeed }}" aria-label="재생 속도" style="width: 88px; padding: 8px 10px; border: 1px solid var(--line); background: var(--bg-void); color: var(--text-mid); font-size: 14px; border-radius: var(--r-sm)">
-            <option value="0.5">0.5x</option><option value="1" selected>1x</option><option value="2">2x</option><option value="4">4x</option><option value="8">8x</option><option value="16">16x</option><option value="32">32x</option><option value="64">64x</option><option value="128">128x</option>
-          </select>
+        </div>
+        <div style="display: flex; gap: 4px">
+          <sc-for list="{{ speedOpts }}" as="sp" hint-placeholder-count="6">
+            <div sc-camel-on-click="{{ sp.pick }}" tabindex="0" style="flex: 1; padding: 7px 0; border: 1px solid {{ sp.border }}; background: {{ sp.bg }}; color: {{ sp.color }}; text-align: center; font-family: var(--f-mono); font-size: 13px; cursor: pointer">{{ sp.label }}</div>
+          </sc-for>
         </div>
       </div>
       </sc-if>
@@ -1229,6 +1234,11 @@ class Component extends DCLogic {
       toggleCells: () => this.setState({ cellsOn: !s.cellsOn }, () => { const v = this.vp(); if (v && v.setCellsVisible) v.setCellsVisible(this.state.cellsOn); }),
       deleteRun: () => this.deleteRun(),
       replaySpeedVal: String(s.replay ? s.replay.speed : 1),
+      speedOpts: [1, 4, 16, 32, 64, 128].map((x) => ({ label: x + 'x',
+        border: s.replay && s.replay.speed === x ? 'var(--accent)' : 'var(--line)',
+        bg: s.replay && s.replay.speed === x ? 'rgb(var(--accent-ch) / 0.08)' : 'transparent',
+        color: s.replay && s.replay.speed === x ? 'var(--text-hi)' : 'var(--text-mid)',
+        pick: () => { const v = this.vp(); if (v && v._replay) v.replay.setSpeed(x); } })),
       pickRun: (e) => this.pickRun(e),
       replayToggle: () => this.replayToggle(),
       replaySeek: (e) => this.replaySeek(e),
