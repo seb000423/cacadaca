@@ -369,7 +369,7 @@ async function handleApi(req, res, pathname) {
       if (kind === 'state' && method === 'GET') return json(res, 200, { job: jobPublic(j) });
       if (method !== 'POST') return json(res, 405, { error: '지원하지 않는 요청입니다.' });
       const body = await readBody(req, 512 * 1024);
-      if (kind === 'feed') { await store.putState('feed', body.feed || body); const cr = await store.getState('control'); let control = null; try { control = cr ? JSON.parse(cr.payload) : null; } catch { control = null; } return json(res, 200, { ok: true, control, stopRequested: !!j.stop_requested }); }
+      if (kind === 'feed') { await store.putState('feed', body.feed || body); await store.putState('worker', { name: j.worker || 'gpu', ts: Date.now() }); const cr = await store.getState('control'); let control = null; try { control = cr ? JSON.parse(cr.payload) : null; } catch { control = null; } return json(res, 200, { ok: true, control, stopRequested: !!j.stop_requested }); }
       if (kind === 'result') { await store.setJobResult(id, body.result || body); return json(res, 200, { ok: true }); }
       if (kind === 'exit') {
         const code = Number(body.exitCode);
