@@ -718,9 +718,9 @@ function robotCell(parts, mats) {
   padDisc.add(foam, plate);
   padAnchor.add(padDisc);
   // 작업 지점 표시 — 레이저처럼 툴에서 표면으로 내려오는 투명한 빔과 표면 글로우(월드에 두고 매 프레임 옮긴다)
-  const glow = new THREE.MeshBasicMaterial({ color: 0x8FE9FF, transparent: true, opacity: 0.42, blending: THREE.AdditiveBlending, depthWrite: false, depthTest: false, side: THREE.DoubleSide });
+  const glow = new THREE.MeshBasicMaterial({ color: 0x8FE9FF, transparent: true, opacity: 0.42, blending: THREE.AdditiveBlending, depthWrite: false, depthTest: true, side: THREE.DoubleSide });
   const spot = new THREE.Mesh(new THREE.CircleGeometry(0.075, 40), glow);
-  const beam = new THREE.Mesh(new THREE.CylinderGeometry(0.005, 0.012, 1, 12, 1, true), new THREE.MeshBasicMaterial({ color: 0x8FE9FF, transparent: true, opacity: 0.22, blending: THREE.AdditiveBlending, depthWrite: false, depthTest: false }));
+  const beam = new THREE.Mesh(new THREE.CylinderGeometry(0.005, 0.012, 1, 12, 1, true), new THREE.MeshBasicMaterial({ color: 0x8FE9FF, transparent: true, opacity: 0.22, blending: THREE.AdditiveBlending, depthWrite: false, depthTest: true }));
   spot.renderOrder = 20; beam.renderOrder = 20;   // 차체 뒤에 가려지지 않게 마지막에 그린다
   spot.visible = false; beam.visible = false;
   g.userData.spot = spot; g.userData.beam = beam;
@@ -1297,10 +1297,21 @@ class PolyTwinViewport extends HTMLElement {
       return Math.sqrt(dc * dc + dy * dy + dl * dl);
     };
 
-    const owner = this._lanes.map((lane) => lane.map((pt) => {
+    const carMid = (() => { try { this._model.updateMatrixWorld(true); return new THREE.Box3().setFromObject(this._model).getCenter(new THREE.Vector3()); } catch { return new THREE.Vector3(); } })();
+    const owner = this._lanes.map((lane, li) => lane.map((pt, k) => {
       let best = -1, bd = Infinity;
+      const n = this._normals[li] && this._normals[li][k];
       for (let ci = 0; ci < this._cells.length; ci++) {
         const cell = this._cells[ci];
+        /* 면 규칙 — 천장 로봇은 위를 향한 면(윗면)만, 측면 로봇은 자기 쪽 옆면·모서리만. 반대편이나 지붕 한가운데로
+           팔을 뻗게 두면 차체를 가로질러 관통한다. */
+        if (n) {
+          if (cell.userData.ceiling) { if (n.y < 0.45) continue; }
+          else {
+            if (n.y > 0.85) continue;
+            if ((pt[CROSS] - carMid[CROSS]) * cell.userData.side < -0.05) continue;
+          }
+        }
         // 팔을 다 편 자리는 배정하지 않는다. 경계에서는 CCD 가 수렴하지 못해
         // 패드가 표면에서 20 cm 뜬 채로 따라다닌다 — 닿을 수 있는 곳만 맡긴다.
         if (gap(cell, pt, 0) > REACH * 0.90) continue;
@@ -1392,6 +1403,27 @@ class PolyTwinViewport extends HTMLElement {
     else this._paintBox = null;
     this._waBox = null;                       // 셀 매핑 기준 상자는 필드와 같이 다시 잡는다
     if (this._cellsEnabled && this._lastCells) { this._cellsKey = null; this.setCells(this._lastCells, this._lastScene); }
+  }
+
+  /** 윗면 높이맵에서 (long, cross) 위치의 표면 높이 — 없으면 NaN */
+  _topHeightAt(pt) {
+    const f = this._field; if (!f) return NaN;
+    const u = (pt[f.long] - f.l0) / (f.l1 - f.l0), v = (pt[f.cross] - f.c0) / (f.c1 - f.c0);
+    if (u < 0 || u > 1 || v < 0 || v > 1) return NaN;
+    const i = Math.round(u * (f.nLong - 1)), j = Math.round(v * (f.nCross - 1));
+    const h = f.h[j * f.nLong + i];
+    return Number.isFinite(h) ? h : NaN;
+  }
+  /** 팔 관절(2~5)이 차체 안에 있나 — 윗면 높이맵 아래이거나 도장 정점 4 cm 이내 */
+  _armInsideCar(cell) {
+    const jp = new THREE.Vector3();
+    for (const ji of [2, 3, 4, 5]) {
+      cell.userData.joints[ji].getWorldPosition(jp);
+      const h = this._topHeightAt(jp);
+      if (Number.isFinite(h) && jp.y < h - 0.02) return true;
+      if (this._paintGrid && this._paintGrid.n && this._nearPaint(jp, 0.04)) return true;
+    }
+    return false;
   }
 
   /** 월드 점이 도장 정점에서 r 이내인가 (도장 정점이 수집되지 않은 모델은 항상 true) */
@@ -2023,7 +2055,7 @@ class PolyTwinViewport extends HTMLElement {
         // 경로선은 z-fighting 을 피하려고 도장면에서 13 mm 띄워 그린다.
         // 패드는 그 선이 아니라 도장면을 짚어야 하므로 되돌려 겨눈다.
         _ikPad.copy(pt).addScaledVector(nrm, -PATH_LIFT + 0.002);   // 표면에서 2 mm 띄운다(패드가 파묻혀 보이지 않게)
-        _ikBack.copy(_ikPad).addScaledVector(nrm, 0.12);
+        _ikBack.copy(_ikPad).addScaledVector(nrm, 0.18);              // 손목을 법선 쪽으로 더 세워 팔이 차체 위를 지나가게
         if (contact) {   // 작업 중 손목이 살짝 흔들린다(±1.2 cm, 1.3 Hz) — 진짜 폴리싱처럼 팔에 움직임이 보이게
           const side = new THREE.Vector3(nrm.z, 0, -nrm.x); if (side.lengthSq() < 1e-6) side.set(1, 0, 0); side.normalize();
           _ikBack.addScaledVector(side, 0.012 * Math.sin(t * 2 * Math.PI * 1.3 + ci * 2.1));
@@ -2056,6 +2088,11 @@ class PolyTwinViewport extends HTMLElement {
         const q0 = cell.userData.qPrev || (cell.userData.qPrev = cell.userData.q.slice());
         for (let jj = 0; jj < 6; jj++) q0[jj] = cell.userData.q[jj];
         solveIK(cell, _ikPad, _ikBack, 8);
+        // 관절이 차체 안으로 들어갔으면 손목을 더 세워(0.35 → 0.5 m) 다시 푼다 — 관통 방지
+        if (this._armInsideCar(cell)) {
+          _ikBack.copy(_ikPad).addScaledVector(nrm, 0.35); solveIK(cell, _ikPad, _ikBack, 8);
+          if (this._armInsideCar(cell)) { _ikBack.copy(_ikPad).addScaledVector(nrm, 0.5); solveIK(cell, _ikPad, _ikBack, 8); }
+        }
 
         // 관절 각속도 제한 — 해가 튀어도 팔은 튀지 않게
         const maxStep = JOINT_RATE * dt;

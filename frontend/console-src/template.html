@@ -123,6 +123,7 @@
         </svg>
         <span>POLY<span style="color: var(--accent)">TWIN</span></span>
       </div>
+      <a href="index.html" title="메인으로" style="font-size: 14px; color: var(--text-lo); letter-spacing: 0.06em; text-decoration: none; margin-right: 14px">← 메인</a>
       <div style="font-size: 15px; color: var(--text-lo)">차량 3D · 파라미터 설정</div>
       <div style="flex: 1"></div>
       <div style="font-family: var(--f-mono); font-size: 15px; color: var(--text-mid)">{{ vehicleName }}</div>
@@ -238,7 +239,7 @@
         </div>
       </section>
 
-      <sc-if value="{{ hasContact }}" hint-placeholder-val="{{ false }}">
+      <sc-if value="{{ showContact }}" hint-placeholder-val="{{ false }}">
       <section style="border: 1px solid var(--bg-panel); padding: 13px 16px 12px">
         <div style="display: flex; align-items: baseline; gap: 10px; margin-bottom: 8px">
           <div style="font-size: 14px; font-weight: 500; letter-spacing: 0.12em; text-transform: uppercase; color: var(--text-lo)">패드 접촉 정합</div>
@@ -281,7 +282,8 @@
       </section>
       </sc-if>
 
-      <section style="border: 1px solid var(--bg-panel); padding: 15px 16px 13px">
+      <sc-if value="{{ showDetail }}" hint-placeholder-val="{{ true }}">
+<section style="border: 1px solid var(--bg-panel); padding: 15px 16px 13px">
         <div style="display: flex; align-items: baseline; gap: 8px">
           <div style="font-size: 14px; font-weight: 500; letter-spacing: 0.12em; text-transform: uppercase; color: var(--text-lo)">접촉력</div>
           <div style="flex: 1"></div>
@@ -302,6 +304,7 @@
           <div>편차 <span style="color: {{ monStateColor }}">{{ monDev }}</span> N</div>
         </div>
       </section>
+      </sc-if>
 
       <section style="display: grid; grid-template-columns: 1fr 1fr; gap: 1px; background: var(--bg-panel); border: 1px solid var(--bg-panel)">
         <div style="background: var(--bg-base); padding: 13px 14px">
@@ -1278,6 +1281,8 @@ class Component extends DCLogic {
                      quality: '품질 우선 — 이송 ×1.3, 150셀 148 합격, 셀당 232 s (−25 %)' })[s.recipe] || '',
       showCtl: !!(s.running && this._liveRun),
       hasContact: !!(s.contact && s.contact.rows && s.contact.rows.length),
+      showDetail: !(s.replay && s.replay.active),                 // 기록 재생 중엔 콘솔은 진행·시간·컨트롤만 — 세부 계측은 ② 공정 감시
+      showContact: false,                                          // 접촉 정합은 ② 공정 감시로 옮김 (콘솔에서는 숨김)
       contactRate: s.contact && s.contact.rate !== null && s.contact.rate !== undefined ? s.contact.rate + ' %' : '—',
       contactRateColor: s.contact && s.contact.rate !== null && s.contact.rate < 85 ? 'var(--warn)' : 'var(--ok)',
       contactRows: ((s.contact && s.contact.rows) || []).map((c) => ({
