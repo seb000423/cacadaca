@@ -498,6 +498,7 @@ async function boot() {
     attachPolish(o.material);
   });
   cell.add(car);
+  MON.car = car; MON.carBaseY = car.position.y;
 
   const carW = carSize.x * k;
   const carB = new THREE.Box3().setFromObject(car);
@@ -517,6 +518,7 @@ async function boot() {
     r.traverse((o) => { if (o.isMesh) { o.material = M.steel; o.castShadow = o.receiveShadow = true; } });
     r.position.set(sx * RAIL_X, railSize.y / 2, railZ);
     cell.add(r);
+    MON.rails.push(r);
   }
 
   /* ── 갠트리 ── 모델이 없는 부분만 상자로. 산업 구조물이라 상자가 맞다 ── */
@@ -561,7 +563,7 @@ async function boot() {
     arm.root.position.y = LIFT_H;                // 리프트 상면
     arm.root.rotation.y = sx < 0 ? Math.PI / 2 : -Math.PI / 2;   // 차체를 본다
     carriage.add(arm.root);
-    return { label, carriage, arm, sx, overhead: false };
+    return { label, carriage, arm, sx, overhead: false, lift };
   };
 
   const mkOverhead = () => {
@@ -689,6 +691,13 @@ async function pollLive() {
     if (LIVE.on !== was) {
       addEvent('C', LIVE.on ? '시뮬레이션 피드 연결 — LIVE' : '피드 끊김 — 데모 데이터로 전환', LIVE.on ? 'info' : 'warn');
       document.body.dataset.live = LIVE.on ? '1' : '0';
+      if (LIVE.on) {   // 실행 중인 작업의 설비 조건을 장면에 반영
+        fetch('/api/sim/status', { cache: 'no-store' }).then((x) => x.json()).then((st) => {
+          const pr = st && st.params; const robots = LIVE.feed && LIVE.feed.robots ? LIVE.feed.robots.map((r) => r.id) : [];
+          const wait = () => { if (typeof arms !== 'undefined' && arms && arms.length && MON.car) applyRunParams(pr || {}, robots); else setTimeout(wait, 300); };
+          wait();
+        }).catch(() => {});
+      }
     }
   } catch (e) {
     if (LIVE.on) { LIVE.on = false; LIVE.feed = null; document.body.dataset.live = '0'; }
@@ -697,6 +706,23 @@ async function pollLive() {
 /* ══ 기록 재생 ═══════════════════════════════
    monitor.html?run=<id>[&speed=4] — 서버 DB 의 시뮬 기록(/api/runs/:id/chunks)을 시뮬 시각 기준으로 재생한다.
    청크를 30 s 앞서 받아 두고 시각 ≤ t 인 프레임을 쓰므로 폴링 지터가 없다. 기록 중인 런은 끝−3 s 를 따라간다. */
+/* ── 설비 조건 동기화 ── 기록(run.meta.params/robots) 또는 실행 상태(/api/sim/status.params)의 대수·레일·리프트·차 리프트를 장면에 반영 */
+const MON = { car: null, carBaseY: 0, rails: [], params: null };
+function applyRunParams(pr, robots) {
+  pr = pr || {};
+  const set = (robots || []).map((r) => (r && r.id) || r).filter(Boolean).sort().join('/');
+  const rc = Number(pr.robotCount) || (set === 'C' ? 1 : set === 'SL/SR' ? 2 : 3);
+  MON.params = { rc, hasRail: pr.hasRail !== false, hasLift: pr.hasLift !== false, carLift: (Number(pr.carLift) || 0) / 1000 };
+  if (typeof arms !== 'undefined' && arms) arms.forEach((a) => {
+    const on = a.overhead ? (rc === 1 || rc === 3) : (rc >= 2);
+    a.carriage.visible = on;
+    if (a.lift) a.lift.visible = MON.params.hasLift;
+  });
+  MON.rails.forEach((r) => { r.visible = MON.params.hasRail; });
+  if (MON.car) MON.car.position.y = MON.carBaseY + MON.params.carLift;
+  addEvent('C', `설비 조건 동기화 — 로봇 ${rc}대 · 레일 ${MON.params.hasRail ? '있음' : '없음'} · 리프트 ${MON.params.hasLift ? '있음' : '없음'} · 차 리프트 ${Math.round(MON.params.carLift * 1000)} mm`, 'info');
+}
+
 const REPLAY = { on: false, id: null, run: null, t: 0, speed: 1, frames: [], loadedTo: -1, loading: false, events: [], evIdx: 0,
                  hist: {}, follow: false, lastRefresh: 0 };
 async function gunzipJson(b64) {
@@ -753,6 +779,9 @@ async function replayStart(id, speed) {
   await replayEnsure(0);
   document.body.dataset.live = '1';
   addEvent('C', '기록 재생 — ' + (r.run.name || ('run ' + id)) + ' · ' + REPLAY.speed + 'x', 'info');
+  const meta = r.run.meta || {};
+  const applyWhenReady = () => { if (typeof arms !== 'undefined' && arms && arms.length && MON.car) applyRunParams(meta.params || {}, meta.robots || []); else setTimeout(applyWhenReady, 300); };
+  applyWhenReady();
 }
 function replayTick(dt) {
   if (!REPLAY.run) return;
