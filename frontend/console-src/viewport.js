@@ -200,7 +200,24 @@ async function loadCar(url) {
     m.userData.paint = isPaint;
     m.castShadow = true; m.receiveShadow = true;
     group.add(m);
-    if (isPaint) { const a = g.attributes.position; for (let k = 0; k < a.count; k++) paintPts.push(new THREE.Vector3(a.getX(k), a.getY(k), a.getZ(k))); }
+    if (isPaint) {
+      /* 도장 면을 정점이 아니라 삼각형 면 위 표본(≈5 cm 간격)으로 담는다 — 거친 메시는 큰 패널 한가운데에 정점이 없어
+         정점만 쓰면 보닛·루프·도어 중앙 레인이 통째로 빠진다 */
+      const a = g.attributes.position, idx = g.index;
+      const nTri = idx ? idx.count / 3 : a.count / 3;
+      const A = new THREE.Vector3(), B = new THREE.Vector3(), C = new THREE.Vector3();
+      const STEP = 0.05;
+      for (let tI = 0; tI < nTri; tI++) {
+        const i0 = idx ? idx.getX(tI * 3) : tI * 3, i1 = idx ? idx.getX(tI * 3 + 1) : tI * 3 + 1, i2 = idx ? idx.getX(tI * 3 + 2) : tI * 3 + 2;
+        A.set(a.getX(i0), a.getY(i0), a.getZ(i0)); B.set(a.getX(i1), a.getY(i1), a.getZ(i1)); C.set(a.getX(i2), a.getY(i2), a.getZ(i2));
+        const n = Math.max(1, Math.ceil(Math.max(A.distanceTo(B), B.distanceTo(C), C.distanceTo(A)) / STEP));
+        for (let u = 0; u <= n; u++) for (let v = 0; u + v <= n; v++) {
+          const w0 = u / n, w1 = v / n, w2 = 1 - w0 - w1;
+          paintPts.push(new THREE.Vector3(A.x * w0 + B.x * w1 + C.x * w2, A.y * w0 + B.y * w1 + C.y * w2, A.z * w0 + B.z * w1 + C.z * w2));
+        }
+        if (paintPts.length > 400000) break;
+      }
+    }
   });
   group.userData.size = bbox().getSize(new THREE.Vector3());
   group.userData.paintPts = paintPts;
@@ -1261,7 +1278,7 @@ class PolyTwinViewport extends HTMLElement {
       cell.userData.ceiling = true;
       cell.userData.robotId = 'C';
       cell.userData.side = 0;                        // 지붕 담당 — 옆면 셀과 구역이 겹치지 않는다
-      cell.userData.onRail = false;
+      cell.userData.onRail = true;                   // 갠트리를 따라 길이축으로 이동한다 (레일 슬라이딩과 같은 논리)
       cell.userData.span = [l0, l1];
       cell.userData.home = mid[LONG];
       this.robots.add(cell);
@@ -1292,8 +1309,11 @@ class PolyTwinViewport extends HTMLElement {
     // 다만 구역을 가를 때는 약하게(0.3) 살려 둬야 같은 쪽 두 대가 갈린다.
     const gap = (cell, pt, w) => {
       const dc = pt[CROSS] - cell.userData.shoulder[CROSS];
-      const dy = pt.y - cell.userData.shoulder.y;
-      const dl = (pt[LONG] - cell.userData.shoulder[LONG]) * (cell.userData.onRail ? w : 1);
+      // 리프트로 어깨 높이를 맞출 수 있는 셀(천장 갠트리, 텔레리프트 측면)은 높이 차도 약하게 본다
+      const canLift = cell.userData.ceiling || this._params.hasLift;
+      const dy = (pt.y - cell.userData.shoulder.y) * (canLift ? Math.max(w, 0.35) : 1);
+      const travel = cell.userData.onRail || cell.userData.ceiling;   // 레일/갠트리를 따라 길이축 이동 가능
+      const dl = (pt[LONG] - cell.userData.shoulder[LONG]) * (travel ? w : 1);
       return Math.sqrt(dc * dc + dy * dy + dl * dl);
     };
 
