@@ -133,9 +133,10 @@ while t <= T_END + 1.0:
         if r is not None and state in ("APPROACH", "POLISH", "RETRACT"):
             c = [float(r["center_x_m"]), float(r["center_y_m"]), float(r["center_z_m"]) + CAR_LIFT_Z]
             nrm = cell_normal(r)
+            q = POSE[rid]["q"]     # 실제 Isaac 폴리싱 자세 — 콘솔 IK 의 시드(팔꿈치 방향)
             if state == "POLISH":
-                # 셀 안에서 12 cm 래스터(왕복) — 패드가 셀을 훑는 것처럼
-                ph = (t - t0) / max(1.0, t1 - t0); lane = math.sin(2 * math.pi * 6 * ph) * 0.05
+                # 셀 안에서 6 cm 래스터(왕복, 셀당 2회) — 패드가 셀을 훑는 것처럼 (고배속에서도 떨리지 않게 작게)
+                ph = (t - t0) / max(1.0, t1 - t0); lane = math.sin(2 * math.pi * 2 * ph) * 0.03
                 side = [-nrm[1], nrm[0], 0.0]; sn = math.sqrt(side[0] ** 2 + side[1] ** 2) or 1.0
                 tcp = [c[i] + side[i] / sn * lane for i in range(3)]
                 force = TARGET[rid] * (1.0 + 0.06 * math.sin(2 * math.pi * 0.7 * t + hash(rid) % 7))
