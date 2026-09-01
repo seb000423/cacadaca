@@ -754,12 +754,30 @@ class PolyTwinViewport extends HTMLElement {
     this._init = true;
     this.style.display = 'block';
 
-    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
-    renderer.setPixelRatio(Math.min(devicePixelRatio, 1.5));
+    /* 그래픽 품질 — 내장 GPU(Intel/AMD APU)나 소프트웨어 렌더러면 MSAA·소프트 그림자·1.5x 픽셀비가
+       프레임을 떨어뜨린다(크롬이 Intel 에 msaa_is_slow 워크어라운드를 건다). WebGL 렌더러 이름을 미리 읽어
+       가벼운 프리셋을 고른다. localStorage 'pt.gfx' = 'high' | 'low' 로 강제할 수 있다. */
+    const gfx = (() => {
+      let pref = null; try { pref = localStorage.getItem('pt.gfx'); } catch { pref = null; }
+      if (pref === 'high' || pref === 'low') return pref;
+      try {
+        const c = document.createElement('canvas');
+        const gl = c.getContext('webgl2') || c.getContext('webgl');
+        const ext = gl && gl.getExtension('WEBGL_debug_renderer_info');
+        const name = ext ? String(gl.getParameter(ext.UNMASKED_RENDERER_WEBGL)) : '';
+        this._gpuName = name;
+        return /intel|llvmpipe|swiftshader|software|radeon\(tm\) graphics|apu/i.test(name) ? 'low' : 'high';
+      } catch { return 'high'; }
+    })();
+    this._gfx = gfx;
+    const renderer = new THREE.WebGLRenderer({ antialias: gfx === 'high', alpha: true,
+                                               powerPreference: 'high-performance' });
+    renderer.setPixelRatio(gfx === 'high' ? Math.min(devicePixelRatio, 1.5) : 1);
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
     renderer.toneMappingExposure = 1.25;
     renderer.shadowMap.enabled = true;
-    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    renderer.shadowMap.type = gfx === 'high' ? THREE.PCFSoftShadowMap : THREE.PCFShadowMap;
+    if (gfx === 'low') console.info('[viewport] 저사양 프리셋 (GPU: ' + (this._gpuName || '?') + ') — localStorage pt.gfx=high 로 해제');
     renderer.setClearColor(0x000000, 0);
     this.appendChild(renderer.domElement);
     Object.assign(renderer.domElement.style, { display: 'block', width: '100%', height: '100%' });
@@ -774,7 +792,7 @@ class PolyTwinViewport extends HTMLElement {
     const key = new THREE.DirectionalLight(0xffffff, 3.0);
     key.position.set(2.4, 6.5, 3.2);
     key.castShadow = true;
-    key.shadow.mapSize.set(1024, 1024);
+    key.shadow.mapSize.set(gfx === 'high' ? 1024 : 512, gfx === 'high' ? 1024 : 512);
     key.shadow.autoUpdate = false;
     key.shadow.needsUpdate = true;
     key.shadow.camera.left = -6; key.shadow.camera.right = 6;
