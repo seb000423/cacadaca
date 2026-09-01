@@ -1370,6 +1370,7 @@ class PolyTwinViewport extends HTMLElement {
     const y = Math.max(0, this._params.carLift || 0);
     this._models.forEach((m) => { m.position.y = y; m.updateMatrixWorld(true); });
     this._waBox = null; this._paintBox = null;   // 차가 움직였다 — 셀 매핑 기준 상자 무효화 (다음 _buildFields 에서 재계산)
+    if (this._cellsEnabled && this._lastCells) { this._cellsKey = null; this.setCells(this._lastCells, this._lastScene); }   // 이미 찍힌 구슬도 새 높이로
   }
 
   /** 위에서 한 장, 옆에서 두 장. 옆면 두 장이 도어와 펜더를 맡는다. */
@@ -1390,6 +1391,7 @@ class PolyTwinViewport extends HTMLElement {
     if (pts.length) { const pb = new THREE.Box3(); for (const q of pts) pb.expandByPoint(w.copy(q).applyMatrix4(this._model.matrixWorld)); this._paintBox = pb; }
     else this._paintBox = null;
     this._waBox = null;                       // 셀 매핑 기준 상자는 필드와 같이 다시 잡는다
+    if (this._cellsEnabled && this._lastCells) { this._cellsKey = null; this.setCells(this._lastCells, this._lastScene); }
   }
 
   /** 월드 점이 도장 정점에서 r 이내인가 (도장 정점이 수집되지 않은 모델은 항상 true) */
@@ -1591,6 +1593,7 @@ class PolyTwinViewport extends HTMLElement {
     this._stampedN = items.length;
   }
   setCells(snapshot, scene) {
+    this._lastCells = snapshot; this._lastScene = scene;
     this.stampCells(snapshot, scene);
     if (!this._cellsEnabled) return;
     const items = snapshot && Array.isArray(snapshot.items) ? snapshot.items.filter((it) => it && it[3] && it[3] !== 'not_reached') : [];
@@ -1631,6 +1634,9 @@ class PolyTwinViewport extends HTMLElement {
     if (this._cellsMesh) { this.cellsLayer.remove(this._cellsMesh); this._cellsMesh.geometry.dispose(); this._cellsMesh.material.dispose(); this._cellsMesh = null; }
     this._cellsKey = null;
   }
+
+  /** 접촉 품질 스냅샷 — 로봇별 {id, working, dist(m), angle(°), ok} (콘솔 공정 감시 패널이 5 Hz 로 읽는다) */
+  getContact() { return this._cells.map((c) => c.userData.contactQ).filter(Boolean); }
 
   /** 기록 재생기 (지연 생성) — 콘솔이 v.replay.load(id) / play() / pause() / seek(t) / setSpeed(x) 로 쓴다 */
   get replay() { return this._replay || (this._replay = new ReplayPlayer(this)); }
@@ -2022,6 +2028,11 @@ class PolyTwinViewport extends HTMLElement {
 
         // 작업 지점 빛: 표면 글로우(법선 정렬) + 손목→표면 빔. 접촉 중일 때만, 숨쉬듯 맥동
         {
+          // 접촉 품질 — 패드 접촉면(앵커)과 표면 작업점의 거리, 패드 법선(앵커 −Z)과 표면 법선의 각도
+          const aw = cell.userData.padAnchor.getWorldPosition(new THREE.Vector3());
+          const an = new THREE.Vector3(0, 0, -1).applyQuaternion(cell.userData.padAnchor.getWorldQuaternion(new THREE.Quaternion())).normalize();
+          const dist = aw.distanceTo(_ikPad), ang = THREE.MathUtils.radToDeg(Math.acos(THREE.MathUtils.clamp(an.dot(nrm), -1, 1)));
+          cell.userData.contactQ = { id: cell.userData.robotId || ('R' + (ci + 1)), working: contact, dist, angle: ang, ok: !contact || (dist < 0.012 && ang < 12) };
           const spot = cell.userData.spot, beam = cell.userData.beam;
           if (spot && beam) {
             if (contact) {

@@ -238,6 +238,24 @@
         </div>
       </section>
 
+      <sc-if value="{{ hasContact }}" hint-placeholder-val="{{ false }}">
+      <section style="border: 1px solid var(--bg-panel); padding: 13px 16px 12px">
+        <div style="display: flex; align-items: baseline; gap: 10px; margin-bottom: 8px">
+          <div style="font-size: 14px; font-weight: 500; letter-spacing: 0.12em; text-transform: uppercase; color: var(--text-lo)">패드 접촉 정합</div>
+          <div style="flex: 1"></div>
+          <div style="font-family: var(--f-mono); font-size: 16px; color: {{ contactRateColor }}">{{ contactRate }}</div>
+        </div>
+        <sc-for list="{{ contactRows }}" as="c" hint-placeholder-count="3">
+          <div style="display: grid; grid-template-columns: 34px 1fr auto; gap: 8px; padding: 4px 0; font-size: 14px; color: var(--text-mid); font-variant-numeric: tabular-nums">
+            <div style="font-family: var(--f-mono); color: var(--text-lo)">{{ c.id }}</div>
+            <div style="color: {{ c.color }}">{{ c.state }}</div>
+            <div style="font-family: var(--f-mono); color: var(--text-lo)">{{ c.detail }}</div>
+          </div>
+        </sc-for>
+        <div style="margin-top: 6px; font-size: 13px; color: var(--text-lo); line-height: 1.5; word-break: keep-all">거리 12 mm·각도 12° 이내면 접촉. 이탈 구간은 도달 한계(곡면·가장자리)로 실제 공정에서도 재작업 후보가 된다.</div>
+      </section>
+      </sc-if>
+
       <sc-if value="{{ showCtl }}" hint-placeholder-val="{{ false }}">
       <section style="border: 1px solid var(--bg-panel); padding: 13px 16px 12px">
         <div style="display: flex; align-items: baseline; gap: 10px; margin-bottom: 10px">
@@ -566,6 +584,7 @@ class Component extends DCLogic {
     replayId: '',        // 재생 중인 기록 id
     cellsOn: false,      // 3D 셀 판정 지도 표시 (기본 끔)
     simCond: null,       // 시뮬(피드/기록)이 보고한 공정 조건 {recipe, robots, params} — 상태줄·조건 대조
+    contact: null,       // 콘솔 애니메이션 실측 접촉 품질 {rows:[{id,working,dist,angle,ok}], rate}
     showCondModal: false, condRows: [],   // 공정 실행 조건 오류 팝업
     replay: null,        // 재생기 상태 {t, duration, playing, speed, follow, status, active}
   };
@@ -641,7 +660,12 @@ class Component extends DCLogic {
       const now = performance.now();
       if (now - (this._rpEmit || 0) < 200) return;     // 표시 갱신은 5 Hz — 3D 는 60 fps 로 따로 돈다
       this._rpEmit = now;
-      this.setState({ mon: this.liveMon(feed, t) });
+      /* 접촉 품질(콘솔 애니메이션 실측): 로봇별 패드-표면 거리·각도. 정합률은 최근 100 표본의 ok 비율 */
+      const cq = (v.getContact ? v.getContact() : []);
+      const hist = this._cqHist || (this._cqHist = []);
+      for (const c of cq) if (c.working) { hist.push(c.ok ? 1 : 0); if (hist.length > 100) hist.shift(); }
+      const rate = hist.length ? Math.round(100 * hist.reduce((a, b) => a + b, 0) / hist.length) : null;
+      this.setState({ mon: this.liveMon(feed, t), contact: { rows: cq, rate } });
     };
     if (!keepTimers) this.stopTimers();
     this.setState({ replayId: String(id), mon: null }, () => {
@@ -1253,6 +1277,13 @@ class Component extends DCLogic {
                      fast: '시간 단축 — 이송 ×1.5 · 힘 ×1.15, 150셀 147 유지, 셀당 177 s (−43 %)',
                      quality: '품질 우선 — 이송 ×1.3, 150셀 148 합격, 셀당 232 s (−25 %)' })[s.recipe] || '',
       showCtl: !!(s.running && this._liveRun),
+      hasContact: !!(s.contact && s.contact.rows && s.contact.rows.length),
+      contactRate: s.contact && s.contact.rate !== null && s.contact.rate !== undefined ? s.contact.rate + ' %' : '—',
+      contactRateColor: s.contact && s.contact.rate !== null && s.contact.rate < 85 ? 'var(--warn)' : 'var(--ok)',
+      contactRows: ((s.contact && s.contact.rows) || []).map((c) => ({
+        id: c.id, state: !c.working ? '이동' : c.ok ? '접촉' : (c.angle >= 12 ? '각도 이탈' : '거리 이탈'),
+        detail: c.working ? (Math.round(c.dist * 1000) + ' mm · ' + Math.round(c.angle) + '°') : '',
+        color: !c.working ? 'var(--text-lo)' : c.ok ? 'var(--ok)' : 'var(--warn)' })),
       ctlPauseLabel: s.ctl.pause ? '재개' : '일시정지',
       ctlPauseBorder: s.ctl.pause ? 'var(--accent)' : 'var(--line)',
       ctlForce: '×' + Number(s.ctl.force_scale || 1).toFixed(2),
