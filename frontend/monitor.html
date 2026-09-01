@@ -169,6 +169,36 @@ button { font: inherit; color: inherit; background: none; border: 0; cursor: poi
   display: flex; justify-content: space-between; gap: 12px; pointer-events: none;
 }
 .view__note b { color: var(--text-mid); font-weight: 500; }
+.view__top, .view__note { z-index: 2; }
+
+/* ── 로봇별 섹션 뷰 ── 캔버스 하나를 scissor 로 나눠 그리고, 이 오버레이가 칸·헤더를 그린다 */
+.vps {
+  position: absolute; inset: 0; z-index: 1; display: grid; gap: 0; pointer-events: none;
+}
+.vps[data-n="1"] { grid-template-columns: 1fr; }
+.vps[data-n="2"] { grid-template-columns: 1fr 1fr; }
+.vps[data-n="3"] { grid-template-columns: 1fr 1fr 1fr; }
+.vps[hidden] { display: none; }
+.vp { position: relative; min-width: 0; min-height: 0; border-right: 1px solid var(--line-hi); }
+.vp:last-child { border-right: 0; }
+.vp__hd {
+  position: absolute; left: 10px; bottom: 34px; display: flex; align-items: center; gap: 8px;
+  padding: 7px 10px; border: 1px solid var(--line-hi); border-radius: var(--r-sm);
+  background: color-mix(in srgb, var(--bg-panel) 86%, transparent);
+  font-family: var(--f-mono); font-size: 14px; letter-spacing: 0.06em; color: var(--text-lo);
+}
+.vp__hd b { color: var(--text-hi); font-weight: 600; font-size: 15px; }
+.vp__st { display: inline-flex; align-items: center; gap: 6px; color: var(--text-mid); }
+.vp__st i { width: 6px; height: 6px; border-radius: 50%; background: var(--ok); animation: pulse 1.6s var(--e-out) infinite; }
+.vp__st[data-state="SLIDE"] i, .vp__st[data-state="APPROACH"] i, .vp__st[data-state="RETRACT"] i { background: var(--warn); animation: none; }
+.vp__st[data-state="DONE"] i, .vp__st[data-state="IDLE"] i { background: var(--accent); animation: none; }
+.vp__pct { color: var(--accent); font-weight: 600; }
+.vp__f { color: var(--text-mid); }
+@media (max-width: 1080px) {
+  .vps[data-n="2"], .vps[data-n="3"] { grid-template-columns: 1fr; grid-auto-rows: 1fr; }
+  .vp { border-right: 0; border-bottom: 1px solid var(--line-hi); }
+  .vp:last-child { border-bottom: 0; }
+}
 
 #fail {
   position: absolute; inset: 0; display: none; place-content: center; padding: 32px;
@@ -269,6 +299,7 @@ button { font: inherit; color: inherit; background: none; border: 0; cursor: poi
 
   <section class="view" aria-label="실시간 3D 뷰">
     <canvas id="cv"></canvas>
+    <div class="vps" id="vps" data-n="3"></div>
 
     <div class="view__top">
       <div class="cams" id="cams" role="group" aria-label="카메라"></div>
@@ -279,7 +310,7 @@ button { font: inherit; color: inherit; background: none; border: 0; cursor: poi
     </div>
 
     <div class="view__note">
-      <span>셀 <b>A-02</b> · 로봇 <b>3</b>대 · 레일 <b>2</b>축 + 갠트리 <b>1</b>축</span>
+      <span id="note">셀 <b>A-02</b> · 로봇 <b>3</b>대 · 섹션 뷰 (팔 + 차체)</span>
       <span id="fps">—</span>
     </div>
 
@@ -504,6 +535,8 @@ async function boot() {
   const carB = new THREE.Box3().setFromObject(car);
   carU.uMinZ.value = carB.min.z;
   carU.uMaxZ.value = carB.max.z;
+  MON.carTop = carB.max.y;
+  MON.carHalfW = carW / 2;
 
   /* ── 레일 2축 ── Y 중심이 원점이라 두께 절반만 올리면 바닥에 앉는다 ── */
   const railSrc = await load('rail');
@@ -535,12 +568,15 @@ async function boot() {
   beam.castShadow = true;
   gantry.add(beam);
   cell.add(gantry);
+  MON.gear.push(gantry);
 
   /* 갠트리 레일 — 빔을 따라 Z 로 달리는 거더 */
   const girder = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.2, 6.4), M.steel);
   girder.position.set(0, BEAM_Y + 0.11, 0);
   girder.castShadow = true;
   cell.add(girder);
+  MON.gear.push(girder);
+  MON.railX = RAIL_X; MON.beamY = BEAM_Y;
 
   /* ── 리프트 + 로봇 ── 밑면이 원점이라 레일 상면에 그대로 얹힌다 ── */
   const liftSrc = await load('lift');
@@ -563,7 +599,11 @@ async function boot() {
     arm.root.position.y = LIFT_H;                // 리프트 상면
     arm.root.rotation.y = sx < 0 ? Math.PI / 2 : -Math.PI / 2;   // 차체를 본다
     carriage.add(arm.root);
-    return { label, carriage, arm, sx, overhead: false, lift };
+    /* 섹션 뷰용 받침 기둥 — 레일·리프트를 숨긴 칸에서 팔이 서 있을 자리 */
+    const ped = new THREE.Mesh(new THREE.CylinderGeometry(0.17, 0.21, 1, 28), M.dark);
+    ped.visible = false; ped.castShadow = true;
+    carriage.add(ped);
+    return { label, carriage, arm, sx, overhead: false, lift, ped, liftH: LIFT_H, railX: RAIL_X, railTop: RAIL_TOP };
   };
 
   const mkOverhead = () => {
@@ -573,10 +613,15 @@ async function boot() {
     const arm = buildArm(parts, M);
     arm.root.rotation.z = Math.PI;               // 거꾸로 매달린다
     carriage.add(arm.root);
+    /* 섹션 뷰에서 거더를 숨겨도 팔이 허공에 뜨지 않도록 캐리지 마운트 블록을 둔다 */
+    const mount = new THREE.Mesh(new THREE.BoxGeometry(0.36, 0.18, 0.56), M.dark);
+    mount.position.y = 0.09; mount.castShadow = true;
+    carriage.add(mount);
     return { label: 'C', carriage, arm, sx: 0, overhead: true };
   };
 
   arms = [mkOverhead(), mkSide(-1, 'SL'), mkSide(1, 'SR')];
+  arms.forEach((a) => { a.enabled = true; a.id = a.overhead ? 'C' : (a.sx < 0 ? 'SL' : 'SR'); });
 
   /* ── 프레이밍 — 바운딩 스피어 기준. 고정 좌표는 쓰지 않는다 ── */
   const box = new THREE.Box3();
@@ -597,7 +642,10 @@ async function boot() {
   scene.fog = new THREE.FogExp2(new THREE.Color(COL.void).getHex(), 0.02);
 
   buildCams();
-  setCam(0);
+  const camQ = Number(new URLSearchParams(location.search).get('cam'));
+  if (Number.isInteger(camQ) && camQ >= 0 && camQ < CAMS.length) camIdx = camQ;   // ?cam=1 — 전체 뷰로 열기
+  layoutSections();                                // 설비 조건은 replay/LIVE 쪽 wait 루프가 arms 준비 후 applyRunParams 로 반영한다
+  setCam(camIdx);
   resize();
   addEventListener('resize', resize);
   requestAnimationFrame(loop);
@@ -628,6 +676,7 @@ function attachPolish(mat) {
 
 /* ══ 카메라 프리셋 ══════════════════════════════════ */
 const CAMS = [
+  { n: '섹션',   split: true },
   { n: '전체',   el: 0.34, az: 0.70, d: 0.82, look: 0.40 },
   { n: '천장뷰', el: 1.24, az: 0.01, d: 0.80, look: 0.20 },
   { n: '좌측',   el: 0.20, az: -1.36, d: 0.70, look: 0.34 },
@@ -647,6 +696,9 @@ function buildCams() {
 }
 function setCam(i) {
   camIdx = i;
+  const split = !!CAMS[i].split;
+  $('vps').hidden = !split;
+  $('note').innerHTML = split ? `로봇 <b>${SECS.length}</b>대 · 섹션 뷰 (팔 + 차체)` : `로봇 <b>${SECS.length}</b>대 · 전체 뷰`;
   document.querySelectorAll('#cams button').forEach((b, j) =>
     b.setAttribute('aria-pressed', String(i === j)));
 }
@@ -654,6 +706,7 @@ function setCam(i) {
 function placeCamera() {
   if (!sph) return;
   const c = CAMS[camIdx];
+  if (c.split) return;
   const r = sph.radius;
   const fov = THREE.MathUtils.degToRad(camera.fov);
   const d = (r / Math.sin(fov / 2)) * c.d;
@@ -707,20 +760,119 @@ async function pollLive() {
    monitor.html?run=<id>[&speed=4] — 서버 DB 의 시뮬 기록(/api/runs/:id/chunks)을 시뮬 시각 기준으로 재생한다.
    청크를 30 s 앞서 받아 두고 시각 ≤ t 인 프레임을 쓰므로 폴링 지터가 없다. 기록 중인 런은 끝−3 s 를 따라간다. */
 /* ── 설비 조건 동기화 ── 기록(run.meta.params/robots) 또는 실행 상태(/api/sim/status.params)의 대수·레일·리프트·차 리프트를 장면에 반영 */
-const MON = { car: null, carBaseY: 0, rails: [], params: null };
+const MON = { car: null, carBaseY: 0, carTop: 1.35, rails: [], gear: [], params: null, railX: 2.9, beamY: 3.45 };
 function applyRunParams(pr, robots) {
   pr = pr || {};
   const set = (robots || []).map((r) => (r && r.id) || r).filter(Boolean).sort().join('/');
   const rc = Number(pr.robotCount) || (set === 'C' ? 1 : set === 'SL/SR' ? 2 : 3);
-  MON.params = { rc, hasRail: pr.hasRail !== false, hasLift: pr.hasLift !== false, carLift: (Number(pr.carLift) || 0) / 1000 };
+  MON.params = { rc, hasRail: pr.hasRail !== false, hasLift: pr.hasLift !== false, carLift: (Number(pr.carLift) || 0) / 1000, raw: pr, robots };
   if (typeof arms !== 'undefined' && arms) arms.forEach((a) => {
     const on = a.overhead ? (rc === 1 || rc === 3) : (rc >= 2);
+    a.enabled = on;
     a.carriage.visible = on;
     if (a.lift) a.lift.visible = MON.params.hasLift;
   });
   MON.rails.forEach((r) => { r.visible = MON.params.hasRail; });
   if (MON.car) MON.car.position.y = MON.carBaseY + MON.params.carLift;
+  layoutSections();
   addEvent('C', `설비 조건 동기화 — 로봇 ${rc}대 · 레일 ${MON.params.hasRail ? '있음' : '없음'} · 리프트 ${MON.params.hasLift ? '있음' : '없음'} · 차 리프트 ${Math.round(MON.params.carLift * 1000)} mm`, 'info');
+}
+
+/* ── 로봇별 섹션 뷰 ── 실행 중인 로봇마다 칸 하나. 칸에는 그 팔 + 차체만 그린다(레일·갠트리·다른 팔 제외).
+   렌더러는 하나 — 캔버스를 scissor 로 잘라 칸마다 카메라를 바꿔 그린다. 카메라는 팔의 캐리지를 부드럽게 따라간다. */
+const SECS = [];
+const NAMES = { C: '천장', SL: '좌측', SR: '우측' };
+function layoutSections() {
+  if (typeof arms === 'undefined' || !arms || !arms.length) return;
+  const box = $('vps');
+  SECS.length = 0;
+  box.innerHTML = '';
+  for (const a of arms) {
+    if (!a.enabled) continue;
+    const el = document.createElement('div');
+    el.className = 'vp';
+    el.innerHTML = `<div class="vp__hd"><b>${a.id} · ${NAMES[a.id]}</b><span class="vp__st" data-state="POLISH"><i></i><span>POLISH</span></span><span class="vp__pct">0.0%</span><span class="vp__f">— N</span></div>`;
+    box.appendChild(el);
+    const cam = new THREE.PerspectiveCamera(36, 1, 0.05, 400);
+    const sec = { arm: a, el, cam, tgt: new THREE.Vector3(), stEl: el.querySelector('.vp__st'), stTx: el.querySelector('.vp__st span'),
+                  pctEl: el.querySelector('.vp__pct'), fEl: el.querySelector('.vp__f'), st: '', pct: '', f: '' };
+    sec.tgt.copy(sectionTarget(a, _v3));
+    SECS.push(sec);
+  }
+  box.dataset.n = String(Math.max(1, SECS.length));
+  const split = !!CAMS[camIdx].split;
+  box.hidden = !split;
+  $('note').innerHTML = split ? `로봇 <b>${SECS.length}</b>대 · 섹션 뷰 (팔 + 차체)` : `로봇 <b>${SECS.length}</b>대 · 전체 뷰`;
+}
+const _v3 = new THREE.Vector3(), _off = new THREE.Vector3();
+function sectionTarget(a, out) {
+  const lift = MON.params ? MON.params.carLift : 0;
+  const cz = a.carriage.position.z;
+  /* 천장: 지붕 + 매달린 팔 사이. 측면: 팔과 차 옆면 사이 */
+  return a.overhead ? out.set(0, MON.carTop + lift + 0.55, cz) : out.set(a.sx * (MON.carHalfW + 0.15), lift + 0.85, cz);
+}
+function placeSectionCams(dt) {
+  const k = 1 - Math.exp(-dt * 3);
+  for (const s of SECS) {
+    const a = s.arm;
+    if (!s.init) { s.init = true; s.tgt.copy(sectionTarget(a, _v3)); }   // 첫 프레임은 바로 맞춘다(캐리지는 animate3D 뒤에야 제자리)
+    else s.tgt.lerp(sectionTarget(a, _v3), k);
+    /* 천장: 앞·우측 위에서 지붕을 내려다본다. 측면: 팔 뒤편 바깥·앞쪽 대각선 — 팔과 차 옆면이 한 프레임에 들어온다 */
+    if (a.overhead) _off.set(1.2, 1.3, 2.7); else _off.set(a.sx * 2.1, 1.5, 2.9);
+    s.cam.position.copy(s.tgt).add(_off);
+    s.cam.lookAt(s.tgt);
+  }
+}
+/* 섹션 뷰: 거더·레일·리프트가 없으므로 천장 팔은 지붕 위 작업 높이로 내리고, 측면 팔은 차 옆 받침 기둥 위에 세운다.
+   전체 뷰: 거더에 매달고 레일 위 리프트에 다시 올린다 */
+function placeGear(split) {
+  const lift = MON.params ? MON.params.carLift : 0;
+  const hasLift = !MON.params || MON.params.hasLift;
+  for (const a of arms) {
+    if (a.overhead) { a.carriage.position.y = split ? MON.carTop + lift + 1.0 : MON.beamY + 0.01; continue; }
+    const baseY = split ? 0.9 + lift * 0.6 : a.liftH;
+    a.carriage.position.x = a.sx * (split ? MON.carHalfW + 0.62 : a.railX);
+    a.carriage.position.y = split ? 0 : a.railTop;
+    a.arm.root.position.y = baseY;
+    if (a.lift) a.lift.visible = !split && hasLift;
+    if (a.ped) { a.ped.visible = split; a.ped.scale.y = baseY; a.ped.position.y = baseY / 2; }
+  }
+}
+function renderSplit() {
+  const cr = canvas.getBoundingClientRect();
+  const W = canvas.clientWidth, H = canvas.clientHeight;
+  renderer.setScissorTest(false);
+  renderer.setViewport(0, 0, W, H);
+  renderer.clear();
+  MON.rails.forEach((r) => { r.visible = false; });
+  MON.gear.forEach((g) => { g.visible = false; });
+  placeGear(true);
+  for (const s of SECS) {
+    const rr = s.el.getBoundingClientRect();
+    const x = rr.left - cr.left, y = cr.bottom - rr.bottom, w = rr.width, h = rr.height;
+    if (w < 2 || h < 2) continue;
+    arms.forEach((b) => { b.carriage.visible = b === s.arm; });
+    const asp = w / h;
+    s.cam.aspect = asp;
+    s.cam.fov = asp < 0.7 ? 58 : asp < 1 ? 50 : asp < 1.4 ? 42 : 36;
+    s.cam.updateProjectionMatrix();
+    renderer.setViewport(x, y, w, h);
+    renderer.setScissor(x, y, w, h);
+    renderer.setScissorTest(true);
+    renderer.render(scene, s.cam);
+  }
+  renderer.setScissorTest(false);
+}
+function renderSingle() {
+  const hasRail = !MON.params || MON.params.hasRail;
+  MON.rails.forEach((r) => { r.visible = hasRail; });
+  MON.gear.forEach((g) => { g.visible = true; });
+  arms.forEach((b) => { b.carriage.visible = !!b.enabled; });
+  placeGear(false);
+  renderer.setScissorTest(false);
+  renderer.setViewport(0, 0, canvas.clientWidth, canvas.clientHeight);
+  placeCamera();
+  renderer.render(scene, camera);
 }
 
 const REPLAY = { on: false, id: null, run: null, t: 0, speed: 1, frames: [], loadedTo: -1, loading: false, events: [], evIdx: 0,
@@ -870,8 +1022,8 @@ function loop(now) {
   frames++; fpsT += dt;
   if (fpsT >= 1) { $('fps').textContent = (REPLAY.on ? ('REPLAY ' + REPLAY.speed + 'x · ' + hhmmss(REPLAY.t) + ' · ') : LIVE.on ? 'LIVE · ' : 'DEMO · ') + Math.round(frames / fpsT) + ' fps'; frames = 0; fpsT = 0; }
 
-  placeCamera();
-  renderer.render(scene, camera);
+  placeSectionCams(dt);
+  if (CAMS[camIdx].split && SECS.length) renderSplit(); else renderSingle();
 }
 
 function animate3D(p, dt) {
@@ -901,6 +1053,16 @@ function animate3D(p, dt) {
                   -1.05 + Math.cos(ph) * 0.12, 0, 0.72 + Math.sin(ph * 1.2) * 0.10, ph * 0.5]);
     }
     if (!REDUCED && a.working) a.arm.spin(1800, dt);
+    /* 섹션 헤더 — 그 로봇의 상태·진행률·접촉력 */
+    const sec = SECS.find((s) => s.arm === a);
+    if (sec) {
+      const st = rb && rb.state ? String(rb.state) : (S.done ? 'DONE' : (S.running ? 'POLISH' : 'HOLD'));
+      const pct = (pi * 100).toFixed(1) + '%';
+      const f = rb && Number.isFinite(Number(rb.force)) ? Number(rb.force).toFixed(1) + ' N' : '— N';
+      if (st !== sec.st) { sec.st = st; sec.stEl.dataset.state = st; sec.stTx.textContent = st; }
+      if (pct !== sec.pct) { sec.pct = pct; sec.pctEl.textContent = pct; }
+      if (f !== sec.f) { sec.f = f; sec.fEl.textContent = f; }
+    }
   });
 }
 
