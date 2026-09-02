@@ -2045,8 +2045,12 @@ class PolyTwinViewport extends HTMLElement {
         const st = cell.userData.liveState;
         if (holdS && st && st !== 'POLISH') hop = Math.max(hop, cell.userData.ceiling ? 0.35 : 0.12);   // 이동 중: 천장은 차 위 35 cm, 측면은 12 cm 들고 따라간다
         if (seg > 0.5) hop = Math.max(hop, cell.userData.ceiling ? 0.35 : 0.2);                         // 먼 레인 전환(앞↔뒤)은 높게 넘어간다 — 유리·지붕 관통 금지
-        if (hop > 0) pt.addScaledVector(nrm, hop);
-        const contact = hop < 0.004;
+        /* 들어올림은 지수 스무딩으로 — 상태가 바뀌어도 팔이 부드럽게 떠오르고 내려앉는다 */
+        const hs = cell.userData.hopCur == null ? hop
+          : cell.userData.hopCur + (hop - cell.userData.hopCur) * (1 - Math.exp(-dt * 5));
+        cell.userData.hopCur = hs;
+        if (hs > 0.0005) pt.addScaledVector(nrm, hs);
+        const contact = hs < 0.004;
         if (ci === 0) lead = _leadP.copy(pt);
 
         /* 설비가 작업점을 따라온다(진짜 공정처럼): 천장 로봇은 갠트리를 따라 이동하며 매달림 기둥을 신축해
@@ -2128,13 +2132,16 @@ class PolyTwinViewport extends HTMLElement {
           if (this._armInsideCar(cell)) { _ikBack.copy(_ikPad).addScaledVector(nrm, 0.5); solveIK(cell, _ikPad, _ikBack, 8); }
         }
 
-        // 관절 각속도 제한 — 해가 튀어도 팔은 튀지 않게 (재생 시작 직후엔 더 느리게)
+        // 관절 가감속 — 목표에 지수적으로 접근(가까울수록 감속)하되 각속도 상한을 지킨다.
+        // 등속 클램프는 '로봇이 뚝뚝 끊기는' 느낌을 준다; IK 해의 프레임 간 미세 떨림도 이 필터가 흡수한다.
         const maxStep = JOINT_RATE * dt * (this._rateScale || 1);
+        const ease = 1 - Math.exp(-dt * 9);              // 시정수 ~110 ms
         let over = false;
         for (let jj = 0; jj < 6; jj++) {
-          const d = cell.userData.q[jj] - q0[jj];
-          if (Math.abs(d) > maxStep) { q0[jj] += Math.sign(d) * maxStep; over = true; }
-          else q0[jj] = cell.userData.q[jj];
+          let d = (cell.userData.q[jj] - q0[jj]) * ease;
+          if (Math.abs(d) > maxStep) d = Math.sign(d) * maxStep;
+          if (Math.abs(cell.userData.q[jj] - (q0[jj] + d)) > 1e-5) over = true;
+          q0[jj] += d;
         }
         if (over) setCellQ(cell, q0);
 
