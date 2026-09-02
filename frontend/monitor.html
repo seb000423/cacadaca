@@ -325,8 +325,7 @@ button { font: inherit; color: inherit; background: none; border: 0; cursor: poi
     <div class="view__top">
       <div class="cams" id="cams" role="group" aria-label="카메라"></div>
       <div class="legend">
-        <div><i style="background:var(--crit)"></i>미연마</div>
-        <div><i style="background:var(--accent)"></i>연마 완료</div>
+        <div><i style="background:var(--accent)"></i>작업 지점</div>
       </div>
     </div>
 
@@ -574,10 +573,10 @@ async function boot() {
     o.castShadow = o.receiveShadow = true;
     if (!o.geometry.attributes.normal) o.geometry.computeVertexNormals();
     o.material = new THREE.MeshPhysicalMaterial({
-      color: 0x99A2AC, roughness: 0.82, metalness: 0.55,
+      color: 0x3A4149, roughness: 0.38, metalness: 0.55,   /* 중립 도장 — 진행을 색으로 벗겨 보이던 표현(앞→뒤 스윕)은 실제 작업 순서와 달라 제거 */
       clearcoat: 0.6, clearcoatRoughness: 0.35, envMapIntensity: 1.45,
     });
-    attachPolish(o.material);
+    /* attachPolish(o.material);   진행 스윕 셰이더 제거 — 진행률은 상단 바·섹션 헤더·히트맵이 보여준다 */
   });
   cell.add(car);
   MON.car = car; MON.carBaseY = car.position.y;

@@ -592,6 +592,8 @@ async function handleApi(req, res, pathname) {
     if (!run) return json(res, 404, { error: 'run not found' });
     if (!mm[2] && method === 'GET') return json(res, 200, { run: runPublic(run), last_seq: await store.lastChunkSeq(run.id) });
     if (!mm[2] && method === 'DELETE') {
+      /* 공개 데모: 시연 데이터 보호 — 삭제는 전면 차단 */
+      return json(res, 403, { error: '테스트 관리자는 삭제가 불가능합니다.' });
       if (run.status === 'recording') return json(res, 409, { error: '기록 중인 런은 지울 수 없습니다. 먼저 정지하세요.' });
       const n = await store.deleteRun(run.id);
       await store.log(sess.login_id, 'run.delete', String(run.id), run.name || '');
@@ -719,6 +721,8 @@ async function handleApi(req, res, pathname) {
 
     const m = pathname.match(/^\/api\/library\/(\d+)$/);
     if (m && method === 'DELETE') {
+      /* 공개 데모: 시연 데이터 보호 — 삭제는 전면 차단 */
+      return json(res, 403, { error: '테스트 관리자는 삭제가 불가능합니다.' });
       const id = Number(m[1]);
       const row = await store.findLibraryEntry(id);
       if (!row) return json(res, 404, { error: '없는 기록입니다.' });

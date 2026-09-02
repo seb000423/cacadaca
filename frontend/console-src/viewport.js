@@ -1721,11 +1721,46 @@ class PolyTwinViewport extends HTMLElement {
   get replay() { return this._replay || (this._replay = new ReplayPlayer(this)); }
 
   /** 시뮬 피드(/api/monitor 의 feed) 를 넣으면 팔이 Isaac 관절을 그대로 따른다. null 이면 해제. */
+  /* 재생(작업영역) 모드: 설비는 숨기고 로봇별 색 빛 점 + 이름표만 남긴다. 초기 세팅(대수·레일)은 시작 전까지 보인다. */
+  _waLightsOnly() {
+    const COLS = { C: 0x9BC33A, SL: 0x4FC3F7, SR: 0xFF9E4D };
+    const NAMES = { C: 'C · 천장', SL: 'SL · 좌측', SR: 'SR · 우측' };
+    this._waLights = true;
+    this.props.visible = false;                        // 레일·갠트리·매달림 기둥
+    for (const cell of this._cells) {
+      cell.visible = false;                            // 팔·받침대(셀 자식)
+      const id = cell.userData.robotId || 'C';
+      const spot = cell.userData.spot;
+      if (spot) { spot.material.color.setHex(COLS[id] || 0x9BC33A); spot.scale.setScalar(1.4); }
+      if (cell.userData.beam) cell.userData.beam.visible = false;
+      if (!cell.userData.tag) { cell.userData.tag = _makeRobotTag(NAMES[id] || id, COLS[id] || 0x9BC33A); this.robots.add(cell.userData.tag); }
+      cell.userData.tag.visible = false;
+    }
+  }
+  _waGearRestore() {
+    this.props.visible = true;
+    for (const cell of this._cells) {
+      cell.visible = true;
+      const spot = cell.userData.spot;
+      if (spot) { spot.material.color.setHex(0x8FE9FF); spot.scale.setScalar(1); }
+      if (cell.userData.tag) {
+        this.robots.remove(cell.userData.tag);
+        if (cell.userData.tag.material.map) cell.userData.tag.material.map.dispose();
+        cell.userData.tag.material.dispose();
+        cell.userData.tag = null;
+      }
+    }
+  }
+
   setLive(feed, snap = false) {
     const had = !!this._live;
     this._live = feed && feed.robots && feed.robots.some((r) => Array.isArray(r.q) || r.tcp) ? feed : null;
     this._liveWorkArea = !!(this._live && typeof this._live.kind === 'string' && this._live.kind.indexOf('result_replay') === 0);
-    if (this._liveWorkArea && !had) { this.resetPolish(); this._waBox = null; for (const c of this._cells) { c.userData.s = 0; c.userData.cursor = 0; } }
+    if (this._liveWorkArea && !had) {
+      this.resetPolish(); this._waBox = null;
+      for (const c of this._cells) { c.userData.s = 0; c.userData.cursor = 0; }
+      this._waLightsOnly();   // 시작하면 설비는 사라지고 로봇별 색 빛 점 + 이름표만 (팔 동작은 ② 공정 감시가 보여준다)
+    }
     if (this._live && !had && !this._liveWorkArea && this._vehicle !== 'scan') {   // 실제 Isaac 기록: 관절 추종 → Isaac 과 같은 스캔 차체
       this._vehicleBefore = this._vehicle;
       this.setVehicle('scan').then(() => { this._liveXf = null; if (this._live && this._live.scene) this._buildLiveXform(this._live.scene); }).catch(() => {});
@@ -1744,6 +1779,7 @@ class PolyTwinViewport extends HTMLElement {
     if (this._live && this._live.cells && Array.isArray(this._live.cells.items)) this.setCells(this._live.cells, this._live.scene);   // 셀 스냅샷: 광택 스탬프(항상) + 구슬 표시(옵션)
     if (this._live) { this.raster.visible = false; this.head.visible = false; }   // 시뮬을 따를 땐 데모 경로선은 의미가 없다
     if (had && !this._live) {
+      if (this._waLights) { this._waLights = false; this._waGearRestore(); }   // 설비 다시 표시
       this._waT0 = null; this._rateScale = 1;
       this.raster.visible = true;
       this.clearCells();
@@ -2140,16 +2176,21 @@ class PolyTwinViewport extends HTMLElement {
           const spot = cell.userData.spot, beam = cell.userData.beam;
           if (spot && beam) {
             if (contact) {
-              spot.visible = true; beam.visible = true;
+              spot.visible = true; beam.visible = !this._waLights;   // 빛 점 모드: 빔(팔→표면)은 없다 — 팔이 없으니
               spot.position.copy(_ikPad).addScaledVector(nrm, 0.012);
               spot.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), nrm);
-              spot.material.opacity = 0.3 + 0.18 * (0.5 + 0.5 * Math.sin(t * 6 + ci));
-              const wrist = cell.userData.joints[5].getWorldPosition(new THREE.Vector3());
-              const dir = new THREE.Vector3().subVectors(_ikPad, wrist); const len = Math.max(0.01, dir.length()); dir.normalize();
-              beam.position.copy(wrist).addScaledVector(dir, len / 2);
-              beam.scale.set(1, len, 1);
-              beam.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir);
+              spot.material.opacity = (this._waLights ? 0.5 : 0.3) + 0.18 * (0.5 + 0.5 * Math.sin(t * 6 + ci));
+              if (beam.visible) {
+                const wrist = cell.userData.joints[5].getWorldPosition(new THREE.Vector3());
+                const dir = new THREE.Vector3().subVectors(_ikPad, wrist); const len = Math.max(0.01, dir.length()); dir.normalize();
+                beam.position.copy(wrist).addScaledVector(dir, len / 2);
+                beam.scale.set(1, len, 1);
+                beam.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir);
+              }
             } else { spot.visible = false; beam.visible = false; }
+            /* 빛 점 모드 이름표 — 어떤 빛이 어느 로봇인지, 레인 위 현재 지점을 따라다닌다 */
+            const tag = cell.userData.tag;
+            if (tag) { tag.visible = !!this._waLights; if (tag.visible) tag.position.copy(_ikPad).addScaledVector(nrm, 0.19); }
           }
         }
 
@@ -2266,6 +2307,23 @@ async function gunzipJson(b64) {
   const w = ds.writable.getWriter(); w.write(bin); w.close();
   const txt = await new Response(ds.readable).text();
   return JSON.parse(txt);
+}
+
+/* 로봇 이름표 스프라이트 — 캔버스 텍스처, 항상 카메라를 본다 */
+function _makeRobotTag(text, colorHex) {
+  const c = document.createElement('canvas'); c.width = 512; c.height = 128;
+  const x = c.getContext('2d');
+  const col = '#' + colorHex.toString(16).padStart(6, '0');
+  x.fillStyle = 'rgba(8,10,13,0.78)'; x.fillRect(0, 0, c.width, c.height);
+  x.strokeStyle = col; x.lineWidth = 6; x.strokeRect(3, 3, c.width - 6, c.height - 6);
+  x.fillStyle = col; x.fillRect(30, c.height / 2 - 14, 28, 28);
+  x.fillStyle = '#F2F4F7'; x.font = '500 54px Pretendard, sans-serif'; x.textBaseline = 'middle';
+  x.fillText(text, 86, c.height / 2 + 4);
+  const tex = new THREE.CanvasTexture(c); tex.colorSpace = THREE.SRGBColorSpace;
+  const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: false }));
+  sp.renderOrder = 30; sp.scale.set(0.52, 0.13, 1); sp.center.set(0.5, -0.35);
+  sp.visible = false;
+  return sp;
 }
 
 class ReplayPlayer {
