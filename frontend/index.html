@@ -1015,6 +1015,16 @@ section { position: relative; scroll-margin-top: var(--header-h); }
       <span id="authFootTxt">계정이 없으신가요?</span>
       <button type="button" id="authMode">회원가입</button>
     </p>
+
+    <!-- 테스트 계정 안내 — 체험용 계정을 버튼으로 공개하고 원클릭으로 채운다 -->
+    <div style="margin-top: 14px; padding-top: 12px; border-top: 1px solid rgba(255,255,255,.08); text-align: center">
+      <button type="button" id="authTest" aria-expanded="false" style="background: none; border: 0; color: #9BC33A; font: inherit; font-size: 13px; letter-spacing: .02em; cursor: pointer; text-decoration: underline; text-underline-offset: 3px">테스트 계정 안내</button>
+      <div id="authTestBox" hidden style="margin-top: 10px; padding: 10px 12px; border: 1px solid rgba(155,195,58,.35); background: rgba(155,195,58,.07); border-radius: 4px; font-size: 13px; line-height: 1.7">
+        체험용 계정으로 로그인해 보세요.<br>
+        ID <b>admin</b> · PW <b>polytwin2026</b><br>
+        <button type="button" id="authTestFill" style="margin-top: 7px; padding: 6px 14px; border: 1px solid #9BC33A; background: transparent; color: #E8F0D8; font: inherit; font-size: 12px; cursor: pointer; border-radius: 3px">이 계정으로 입력 채우기</button>
+      </div>
+    </div>
   </form>
 </dialog>
 
@@ -1575,6 +1585,18 @@ window.__heroVideoOK = false;
   const pw = document.getElementById('authPw');
   const pw2 = document.getElementById('authPw2');
   const eye = document.getElementById('authEye');
+  /* 테스트 계정 안내 — 접혀 있다가 버튼으로 펼치고, 클릭 한 번으로 입력을 채운다 */
+  const testBtn = document.getElementById('authTest');
+  const testBox = document.getElementById('authTestBox');
+  const testFill = document.getElementById('authTestFill');
+  if (testBtn && testBox) testBtn.addEventListener('click', () => {
+    testBox.hidden = !testBox.hidden;
+    testBtn.setAttribute('aria-expanded', String(!testBox.hidden));
+  });
+  if (testFill) testFill.addEventListener('click', () => {
+    id.value = 'admin'; pw.value = 'polytwin2026';
+    const sb = document.getElementById('authSubmit'); if (sb) sb.focus();
+  });
 
   /* 서버(server/server.js)의 ID_RE 와 같은 규칙 */
   const ID_RE = /^[A-Za-z0-9._-]{4,32}$/;
