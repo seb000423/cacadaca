@@ -792,6 +792,7 @@ function resize() {
    피드가 끊기면(5 s) 자동으로 데모로 돌아간다 — 화면은 비지 않는다. */
 const LIVE = { on: false, feed: null, seen: new Set() };
 async function pollLive() {
+  if (REPLAY.on || REPLAY.starting) return;   // 재생 중엔 라이브 폴링이 LIVE 플래그를 건드리면 안 된다 (데모로 튐)
   try {
     const r = await fetch('/api/monitor', { cache: 'no-store' });
     if (!r.ok) throw new Error(r.status);
@@ -934,7 +935,7 @@ function renderSingle() {
 }
 
 const REPLAY = { on: false, id: null, run: null, t: 0, speed: 1, frames: [], loadedTo: -1, loading: false, events: [], evIdx: 0,
-                 hist: {}, follow: false, lastRefresh: 0 };
+                 hist: {}, follow: false, lastRefresh: 0, paused: false, slave: false, master: null, starting: false };
 async function gunzipJson(b64) {
   const bin = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
   const ds = new DecompressionStream('gzip');
@@ -943,6 +944,11 @@ async function gunzipJson(b64) {
 }
 async function replayEnsure(t) {
   if (!REPLAY.run || REPLAY.loading) return;
+  /* 뒤로 탐색(콘솔에서 되감기): 남은 프레임보다 앞이면 그 구간부터 다시 받는다 */
+  if (REPLAY.frames.length && t < REPLAY.frames[0].t - 0.5) { REPLAY.frames = []; REPLAY.loadedTo = Math.max(0, t - 1); }
+  /* 앞으로 점프(동기 시작·탐색): 처음부터 기어가지 말고 t 근처부터 받는다 */
+  const lastT = REPLAY.frames.length ? REPLAY.frames[REPLAY.frames.length - 1].t : -1;
+  if (t - 60 > lastT && t - 1 > REPLAY.loadedTo) { REPLAY.frames = []; REPLAY.loadedTo = Math.max(0, t - 1); }
   const need = t + 30 * Math.max(1, REPLAY.speed);
   if (REPLAY.loadedTo >= need) return;
   REPLAY.loading = true;
@@ -980,15 +986,16 @@ function replayFeed(fr) {
   return { ts: Date.now() / 1000, state: fr.s, progress: fr.p, elapsed_s: fr.e, robots,
            metrics: { cv, band, keep, cov: 100 * fr.p, unif: 100 - Math.min(cv, 100) * 0.5, over }, events: ev, t_sim: fr.t };
 }
-async function replayStart(id, speed) {
-  REPLAY.id = id; REPLAY.speed = speed || 1;
+async function replayStart(id, speed, slave) {
+  REPLAY.id = id; REPLAY.speed = speed || 1; REPLAY.slave = !!slave; REPLAY.paused = false;
+  REPLAY.frames = []; REPLAY.loadedTo = -1; REPLAY.evIdx = 0; REPLAY.hist = {};   // 다른 기록으로 전환 대비
   const r = await fetch('/api/runs/' + id, { cache: 'no-store' }).then((x) => x.json());
   REPLAY.run = r.run; REPLAY.follow = r.run.status === 'recording';
   try { REPLAY.events = ((await fetch(`/api/runs/${id}/events`, { cache: 'no-store' }).then((x) => x.json())).events || []).map((e) => ({ ...e, t: Number(e.t) })); } catch { REPLAY.events = []; }
   REPLAY.on = true; REPLAY.t = 0;
   await replayEnsure(0);
   document.body.dataset.live = '1';
-  addEvent('C', '기록 재생 — ' + (r.run.name || ('run ' + id)) + ' · ' + REPLAY.speed + 'x', 'info');
+  addEvent('C', (REPLAY.slave ? '콘솔 동기 재생 — ' : '기록 재생 — ') + (r.run.name || ('run ' + id)) + ' · ' + REPLAY.speed + 'x', 'info');
   const meta = r.run.meta || {};
   const applyWhenReady = () => { if (typeof arms !== 'undefined' && arms && arms.length && MON.car) applyRunParams(meta.params || {}, meta.robots || []); else setTimeout(applyWhenReady, 300); };
   applyWhenReady();
@@ -996,7 +1003,14 @@ async function replayStart(id, speed) {
 function replayTick(dt) {
   if (!REPLAY.run) return;
   const dur = Number(REPLAY.run.t_sim_end || 0);
-  if (REPLAY.follow) {
+  if (REPLAY.slave && REPLAY.master) {
+    /* 콘솔 시계에 종속 — 마지막 방송 시각에서 배속으로 외삽 (방송은 5 Hz) */
+    const m = REPLAY.master;
+    const est = Number(m.t) + (m.playing ? (performance.now() - m.at) / 1000 * (Number(m.speed) || 1) : 0);
+    REPLAY.t = Math.max(0, Math.min(dur || est, est));
+  } else if (REPLAY.paused) {
+    /* 일시정지 — 시계 유지 */
+  } else if (REPLAY.follow) {
     if (performance.now() - REPLAY.lastRefresh > 5000) { REPLAY.lastRefresh = performance.now(); fetch('/api/runs/' + REPLAY.id, { cache: 'no-store' }).then((x) => x.json()).then((r) => { REPLAY.run = r.run; if (r.run.status !== 'recording') REPLAY.follow = false; }).catch(() => {}); }
     REPLAY.t = Math.min(Math.max(0, dur - 3), REPLAY.t + dt * REPLAY.speed);
   } else {
@@ -1011,6 +1025,36 @@ function replayTick(dt) {
 const _qs = new URLSearchParams(location.search);
 if (_qs.get('run')) replayStart(Number(_qs.get('run')), Number(_qs.get('speed')) || 1).catch((e) => { console.warn('기록 재생 실패', e); REPLAY.on = false; });
 else { setInterval(pollLive, 500); pollLive(); }
+
+/* ── 콘솔(①)과 재생 동기화 ── 콘솔이 방송하는 시계를 그대로 따른다. URL ?run= 으로 연 독립 재생이 우선 */
+const BC = 'BroadcastChannel' in window ? new BroadcastChannel('pt-replay') : null;
+if (BC) BC.onmessage = (ev) => {
+  const m = ev.data || {};
+  if (_qs.get('run')) return;
+  if (m.kind === 'state') {
+    if ((!REPLAY.on || REPLAY.id !== m.id) && !REPLAY.starting) {
+      REPLAY.starting = true;
+      replayStart(Number(m.id), Number(m.speed) || 1, true).catch((e) => console.warn('동기 재생 실패', e)).finally(() => { REPLAY.starting = false; });
+    }
+    REPLAY.slave = true;
+    REPLAY.speed = Number(m.speed) || 1;
+    REPLAY.master = { ...m, at: performance.now() };
+    $('hold').dataset.on = m.playing ? '0' : '1';
+    $('hold').textContent = m.playing ? '일시정지' : '재개';
+  } else if (m.kind === 'stop') {
+    if (REPLAY.on && REPLAY.slave) replayExit('콘솔 재생 종료');
+  }
+};
+function replayExit(reason) {
+  REPLAY.on = false; REPLAY.run = null; REPLAY.id = null; REPLAY.slave = false; REPLAY.master = null; REPLAY.paused = false;
+  REPLAY.frames = []; REPLAY.loadedTo = -1; REPLAY.events = []; REPLAY.evIdx = 0; REPLAY.hist = {}; REPLAY.follow = false; REPLAY.t = 0;
+  LIVE.on = false; LIVE.feed = null; LIVE.seen.clear();
+  document.body.dataset.live = '';
+  $('hold').dataset.on = '0'; $('hold').textContent = '일시정지';
+  S.t = 0; S.done = false; S.running = true;
+  setState('POLISH');
+  addEvent('C', '기록 재생 종료 — ' + reason, 'info');
+}
 
 function tickLive(f) {
   const byId = {};
@@ -1042,7 +1086,9 @@ function tickLive(f) {
   $('progFill').style.width = (p * 100).toFixed(1) + '%';
   $('progPct').textContent = (p * 100).toFixed(1) + '%';
   $('tElapsed').textContent = hhmmss(Number(f.elapsed_s) || 0);
-  $('tLeft').textContent = p > 0.02 ? hhmmss(Math.max(0, (Number(f.elapsed_s) || 0) * (1 - p) / p)) : '--:--:--';
+  /* 재생은 길이를 아니 정확한 잔여(시뮬 시간)를, 라이브는 진행률 기반 추정치를 */
+  $('tLeft').textContent = REPLAY.on && REPLAY.run ? hhmmss(Math.max(0, Number(REPLAY.run.t_sim_end || 0) - REPLAY.t))
+    : (p > 0.02 ? hhmmss(Math.max(0, (Number(f.elapsed_s) || 0) * (1 - p) / p)) : '--:--:--');
   drawHeat(p);
   if (f.state) setState(String(f.state));
   (f.events || []).forEach((e) => {
@@ -1058,14 +1104,15 @@ function tickLive(f) {
 }
 
 /* ══ 루프 ═══════════════════════════════════════════ */
-let last = performance.now(), acc = 0, frames = 0, fpsT = 0;
+let last = performance.now(), acc = 0, frames = 0, fpsT = 0, PHASE = 0;
 
 function loop(now) {
   requestAnimationFrame(loop);
   const dt = Math.max(0, Math.min(0.05, (now - last) / 1000));
   last = now;
 
-  if (S.running && !S.done) {
+  PHASE += dt;
+  if (!REPLAY.on && !LIVE.on && S.running && !S.done) {   // 데모 사이클은 재생/라이브 중엔 멈춘다 (상태 배지를 덮지 않게)
     S.t += dt;
     if (S.t >= CYCLE) { S.t = CYCLE; S.done = true; setState('DONE'); }
   }
@@ -1078,7 +1125,7 @@ function loop(now) {
   if (acc >= 0.25) { if (LIVE.on) tickLive(LIVE.feed); else tickData(p, acc); acc = 0; }
 
   frames++; fpsT += dt;
-  if (fpsT >= 1) { $('fps').textContent = (REPLAY.on ? ('REPLAY ' + REPLAY.speed + 'x · ' + hhmmss(REPLAY.t) + ' · ') : LIVE.on ? 'LIVE · ' : 'DEMO · ') + Math.round(frames / fpsT) + ' fps'; frames = 0; fpsT = 0; }
+  if (fpsT >= 1) { $('fps').textContent = (REPLAY.on ? ((REPLAY.slave ? 'SYNC(콘솔) ' : 'REPLAY ') + REPLAY.speed + 'x · ' + hhmmss(REPLAY.t) + ' · ') : LIVE.on ? 'LIVE · ' : 'DEMO · ') + Math.round(frames / fpsT) + ' fps'; frames = 0; fpsT = 0; }
 
   placeSectionCams(dt);
   if (CAMS[camIdx].split && SECS.length) renderSplit(); else renderSingle();
@@ -1090,7 +1137,7 @@ function animate3D(p, dt) {
   const span = carU.uMaxZ.value - carU.uMinZ.value;
   carU.uFront.value = -carU.uMaxZ.value + span * p * 1.04;
 
-  const t = S.t;
+  const t = PHASE;   // 캔 모션 위상은 데모 시계와 무관하게 계속 흐른다
   /* 기록/피드에 로봇별 진행률이 있으면 팔마다 따로 간다(천장 C = overhead, 좌 SL = sx<0, 우 SR = sx>0). 없으면 전체 진행률. */
   const fr = LIVE.on && LIVE.feed && LIVE.feed.robots ? LIVE.feed.robots : null;
   const robotOf = (a) => fr ? (fr.find((r) => r.id === (a.overhead ? 'C' : (a.sx < 0 ? 'SL' : 'SR'))) || null) : null;
@@ -1324,6 +1371,14 @@ $('ramp').style.background = `linear-gradient(90deg, ${COL.panel}, ${COL.accent}
 
 /* ══ 조작 ═══════════════════════════════════════════ */
 $('hold').addEventListener('click', (e) => {
+  if (REPLAY.on) {
+    if (REPLAY.slave) { if (BC) BC.postMessage({ kind: 'cmd', op: 'toggle' }); return; }   // 시계 주인은 콘솔 — 명령만 보낸다
+    REPLAY.paused = !REPLAY.paused;
+    e.currentTarget.dataset.on = REPLAY.paused ? '1' : '0';
+    e.currentTarget.textContent = REPLAY.paused ? '재개' : '일시정지';
+    addEvent('C', REPLAY.paused ? '재생 일시정지' : '재생 재개', 'info');
+    return;
+  }
   S.running = !S.running;
   e.currentTarget.dataset.on = S.running ? '0' : '1';
   e.currentTarget.textContent = S.running ? '일시정지' : '재개';
@@ -1331,6 +1386,7 @@ $('hold').addEventListener('click', (e) => {
   addEvent('C', S.running ? '운전 재개' : '일시정지 — 오퍼레이터 요청', 'info');
 });
 $('stop').addEventListener('click', () => {
+  if (REPLAY.on) { replayExit('정지 버튼'); return; }
   S.t = 0; S.done = false; S.running = false; lastPhase = -1;
   $('hold').dataset.on = '1'; $('hold').textContent = '재개';
   setState('HOME');

@@ -2285,6 +2285,9 @@ class ReplayPlayer {
     const need = t + REPLAY_PREFETCH_S * Math.max(1, this.speed);   // 배속만큼 더 앞까지
     // 뒤로 탐색했으면 그 구간부터 다시 받는다
     if (this.frames.length && t < this.frames[0].t - 0.5) { this.frames = []; this.loadedTo = Math.max(0, t - 1); }
+    // 앞으로 크게 탐색했으면 t 근처부터 받는다 — 처음부터 110 s 씩 기어가지 않게
+    const lastT = this.frames.length ? this.frames[this.frames.length - 1].t : -1;
+    if (t - REPLAY_KEEP_BACK_S > lastT && t - 1 > this.loadedTo) { this.frames = []; this.loadedTo = Math.max(0, t - 1); }
     if (this.loadedTo >= need) return;
     this.loading = true;
     try {
@@ -2325,7 +2328,11 @@ class ReplayPlayer {
     this._cellApplied = k;
     if (k < 0) this.vp.clearCells(); else this.vp.setCells(S[k].data, this.scene);
   }
-  play() { if (!this.run) return; this.playing = true; this._last = performance.now(); if (!this._raf) this._raf = requestAnimationFrame((n) => this._tick(n)); this._emitState(); }
+  play() {
+    if (!this.run) return;
+    if (!this.follow && this.duration > 0 && this.t >= this.duration - 1e-6) this.seek(0);   // 끝난 기록에서 ▶ = 처음부터
+    this.playing = true; this._last = performance.now(); if (!this._raf) this._raf = requestAnimationFrame((n) => this._tick(n)); this._emitState();
+  }
   pause() { this.playing = false; this._emitState(); }
   stop() { this.playing = false; if (this._raf) cancelAnimationFrame(this._raf); this._raf = null; this.vp.setLive(null); this.vp.clearCells(); this._cellApplied = -1; this.vp._stampedN = 0; this.vp._stampKey = null; this._emitState(); }
   seek(t) { this.t = Math.max(0, Math.min(t, this.duration)); this._ensure(this.t); this._apply(); this._emitState(true); }
