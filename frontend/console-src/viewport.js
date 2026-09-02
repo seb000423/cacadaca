@@ -1088,7 +1088,8 @@ class PolyTwinViewport extends HTMLElement {
     const total = Math.max(1, Math.min(3, p.robotCount || 1));
     const ceiling = total === 1 || total === 3;
     const want = total === 1 ? 0 : 2;
-    const sig = [want, !!p.hasRail, !!p.hasLift, p.carLift || 0, this._model.uuid].join('|');
+    /* 시그니처에 total(천장 유무 포함)을 쓴다 — want(측면 수)만 쓰면 2대→3대 전환이 같은 값이라 재배치를 건너뛴다 */
+    const sig = [total, !!p.hasRail, !!p.hasLift, p.carLift || 0, this._model.uuid].join('|');
     if (sig === this._cellSig) return;
     this._cellSig = sig;
 
