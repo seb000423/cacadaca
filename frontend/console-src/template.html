@@ -364,7 +364,6 @@
           <div style="margin-top: 6px"><span style="font-family: var(--f-mono); font-size: 19px; color: var(--text-hi); font-variant-numeric: tabular-nums">{{ monReach }}</span> <span style="font-size: 15px; color: var(--text-lo)">%</span></div>
         </div>
       </section>
-      <div style="margin-top: -12px; font-size: 16px; color: var(--text-lo); line-height: 1.5; word-break: keep-all; font-variant-numeric: tabular-nums">{{ monReachNote }}</div>
 
       <sc-if value="{{ showDetail }}" hint-placeholder-val="{{ true }}">
       <section>
@@ -412,7 +411,7 @@
         </div>
         <div style="display: flex; gap: 8px">
           <div sc-camel-on-click="{{ replayToggle }}" tabindex="0" style="flex: 1; padding: 11px 0; border: 1px solid var(--accent); background: rgb(var(--accent-ch) / 0.08); text-align: center; font-size: 15px; font-weight: 500; letter-spacing: 0.06em; color: var(--text-hi); cursor: pointer">{{ replayBtn }}</div>
-          <div sc-camel-on-click="{{ toggleCells }}" tabindex="0" style="padding: 9px 10px; border: 1px solid var(--line); text-align: center; font-size: 13px; color: var(--text-lo); cursor: pointer; white-space: nowrap">{{ cellsLabel }}</div>
+          <div sc-camel-on-click="{{ toggleCells }}" tabindex="0" role="switch" aria-checked="{{ cellsOn }}" style="padding: 9px 10px; border: 1px solid {{ cellsBorder }}; background: {{ cellsBg }}; text-align: center; font-size: 13px; color: {{ cellsColor }}; cursor: pointer; white-space: nowrap; transition: background-color var(--t-fast) var(--e-in), border-color var(--t-fast) var(--e-in), color var(--t-fast) var(--e-in)">{{ cellsLabel }}</div>
           <div sc-camel-on-click="{{ deleteRun }}" tabindex="0" title="선택한 기록 삭제" style="padding: 9px 10px; border: 1px solid var(--line); text-align: center; font-size: 13px; color: var(--warn); cursor: pointer; white-space: nowrap">삭제</div>
         </div>
         <div style="display: flex; gap: 4px">
@@ -425,7 +424,6 @@
       <div sc-camel-on-click="{{ toggleRun }}" style="padding: 17px 0; border: 1px solid {{ runBorder }}; background: {{ runBg }}; font-size: 16px; font-weight: 500; letter-spacing: 0.18em; text-transform: uppercase; color: var(--text-hi); text-align: center; cursor: pointer; transition: background-color 220ms cubic-bezier(0.4,0,0.2,1), border-color 220ms cubic-bezier(0.4,0,0.2,1), color 220ms cubic-bezier(0.4,0,0.2,1)">{{ runLabel }}</div>
       <div style="display: flex; gap: 10px">
         <a href="{{ monitorHref }}" style="flex: 1; padding: 10px 0; font-size: 15px; letter-spacing: 0.06em; color: var(--text-lo); text-align: center; transition: color var(--t-base) var(--e-out); word-break: keep-all">② 공정 감시 →</a>
-        <a href="PolyTwin%20Save.html" style="flex: 1; padding: 10px 0; font-size: 15px; letter-spacing: 0.06em; text-align: center; color: var(--text-lo); transition: color var(--t-base) var(--e-out); word-break: keep-all" style-hover="color: var(--text-mid)">③ 결과 저장 →</a>
         <div sc-camel-on-click="{{ goLibrary }}" tabindex="0" style="flex: 1; padding: 10px 0; font-size: 15px; letter-spacing: 0.06em; color: var(--text-lo); text-align: center; cursor: pointer; transition: color var(--t-base) var(--e-out); word-break: keep-all" style-hover="color: var(--text-mid)">④ 라이브러리 →</div>
       </div>
     </div>
@@ -1164,10 +1162,6 @@ class Component extends DCLogic {
       monAssigned: String(m.assigned),
       monReach: m.points > 0 ? (100 * m.assigned / m.points).toFixed(0) : '0',
       /* 미도달이 남는 것은 결함이 아니라 이 구성의 사실이다. 그대로 적는다 */
-      monReachNote: m.points > 0
-        ? ('도달 ' + m.assigned.toLocaleString() + ' / ' + m.points.toLocaleString()
-           + ' pt · 미도달 구간은 검증 리포트로 남는다')
-        : '',
       monStateLabel: warn ? '접촉력 이탈' : '정상 추종',
       monStateColor: stateColor,
       monBars, monRobots,
@@ -1420,7 +1414,11 @@ class Component extends DCLogic {
       replayTime: s.replay ? (hhmm(s.replay.t) + ' / ' + hhmm(s.replay.duration) + (s.replay.follow ? ' · LIVE' : (' · ' + s.replay.speed + 'x → 남은 실제 ' + mmss(Math.max(0, Math.round((s.replay.duration - s.replay.t) / Math.max(0.01, s.replay.speed))))))) : '',
       replayBtn: s.replay && s.replay.playing ? '일시정지' : '재생',
       cellsOn: !!s.cellsOn,
-      cellsLabel: s.cellsOn ? '셀 판정 표시: 켬' : '셀 판정 표시: 끔',
+      cellsOn: s.cellsOn,
+      cellsLabel: '셀 판정 표시',
+      cellsBorder: s.cellsOn ? 'var(--accent)' : 'var(--line)',
+      cellsBg: s.cellsOn ? 'rgb(155 195 58 / 0.10)' : 'transparent',
+      cellsColor: s.cellsOn ? 'var(--text-hi)' : 'var(--text-lo)',
       toggleCells: () => this.setState({ cellsOn: !s.cellsOn }, () => { const v = this.vp(); if (v && v.setCellsVisible) v.setCellsVisible(this.state.cellsOn); }),
       deleteRun: () => this.deleteRun(),
       replaySpeedVal: String(s.replay ? s.replay.speed : 1),
