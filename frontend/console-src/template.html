@@ -672,6 +672,11 @@ class Component extends DCLogic {
     pl.onState = (st) => {
       this.setState({ replay: { ...st, active: true } });
       this._bcPost({ kind: 'state', id, t: st.t, duration: st.duration, playing: st.playing, speed: st.speed, follow: st.follow });
+      /* 결과 리플레이가 끝까지 오면 공정 통과 요약을 한 번 띄운다 (시연) */
+      if (this._replayEvalArmed && !this._replayDone && !st.follow && st.duration > 0 && !st.playing && st.t >= st.duration - 0.5) {
+        this._replayDone = true;
+        this.finishReplayEval();
+      }
     };
     pl.onFrame = (feed) => {
       const now = performance.now();
@@ -707,7 +712,19 @@ class Component extends DCLogic {
           const meta = (run && run.meta) || {};
           this._noteSimCond({ recipe: meta.recipe_values || null, robots: (meta.robots || []).map((r) => r.id), params: meta.params || null });
         }
+        this._replayRunMeta = run || null;
+        this._replayDone = false;
+        const kind0 = (run && run.meta && run.meta.kind) || '';
+        this._replayEvalArmed = kind0.indexOf('result_replay') === 0;   // v12 같은 결과 리플레이만
         pl.play(); this.push();
+        /* ?run=<id>&t=<초> — 그 시점부터 재생 (끝부분 확인용) */
+        try {
+          const q = new URLSearchParams(location.search);
+          if (Number(q.get('run')) === Number(id)) {
+            const t0 = Number(q.get('t'));
+            if (t0 > 0) pl.seek(Math.min(t0, pl.duration || t0));
+          }
+        } catch (e2) { /* 무시 */ }
       }).catch((e) => console.warn('기록 로드 실패', e));
     });
   }
@@ -882,6 +899,45 @@ class Component extends DCLogic {
     this._stashLastRun('sim', rl, result, ref, this._liveRunId);
     this.setState({ running: false, mon: null, showEvalModal: true, runSeq: seq, refSeg: ref, rl, qualEp,
                     evalSaved: false, evalErr: '' }, () => { this.push(); this.evalSave(true); });   // 실제 실행 결과는 자동 등록
+  }
+
+  /* 결과 리플레이(v12)가 끝까지 재생되면 공정 통과 요약을 띄운다 — 시연용.
+     셀 수·소요 시간은 기록에서, 품질 지표는 사전 설정값(통과 수준)이다. */
+  finishReplayEval() {
+    const run = this._replayRunMeta || {};
+    const meta = run.meta || {};
+    const dur = Number(run.t_sim_end || 0);
+    const nCells = (() => { const m = String(run.name || '').match(/(\d+)\s*셀/); return m ? Number(m[1]) : 483; })();
+    const rcv = meta.recipe_values && Object.keys(meta.recipe_values).length ? meta.recipe_values
+      : { force_n: 5.6, feed_mm_s: 45, rpm: 3000, step_over_ratio: 0.4, n_passes: 2, pad_radius_m: 0.055 };
+    const pass = Math.round(nCells * 0.952);
+    const result = {
+      quality: { gu: 88.4 },
+      rl: { force: Number(rcv.force_n) || 5.6, feed_scale_mean: 1.12 },
+      cells: { cells: nCells, polished: nCells, pass },
+      recipe: rcv,
+      elapsed_s: dur || null,
+      tag: '결과 리플레이',
+    };
+    const seq = this.state.runSeq + 1;
+    /* 숙련공 정답이 시드돼 있으면 그 세그먼트를 기준으로 허용 오차 안의 결과를 만든다 — 전 항목 충족(통과) 화면 */
+    const seed = this.state.seed || [];
+    const ref = seed.length ? seed[(seq - 1) % seed.length] : null;
+    const rl = ref
+      ? { force: ref.p.force + 0.02, stiffness: ref.p.stiffness * 1.01, damping: ref.p.damping * 0.99,
+          speed: ref.p.speed * 1.02, inband: Math.max(0, (ref.inband || 0.95) - 0.006) }
+      : { force: result.rl.force, stiffness: 520, damping: 1.0, speed: result.rl.feed_scale_mean, inband: 0.947 };
+    /* 품질 판정 표는 시드 에피소드를 쓰되, 광택은 통과값으로 덮는다 — 시연용 임의 통과 데이터(사용자 지정) */
+    const eps = (this.state.qual && this.state.qual.episodes) || [];
+    const baseEp = eps.find((e) => e.glossPass) || this.pickEpisode(seq) || null;
+    const qualEp = baseEp ? Object.assign({}, baseEp, {
+      cells: nCells,
+      glossPass: true, glossMean: 88.4, glossP10: 85.9, glossStd: 4.2, glossMin: 82.0,
+      glossBand: 'target_pass', glossTiles: baseEp.glossTiles || 144,
+    }) : null;
+    this._stashLastRun('sim', rl, result, ref, run.id || null);
+    this.setState({ runSeq: seq, refSeg: ref, rl, qualEp, showEvalModal: true,
+                    evalSaved: false, evalSaving: false, evalErr: '' }, () => this.push());
   }
 
   /* ③ 데이터 저장 화면이 읽는 '마지막 런 요약' — 화면을 옮겨도 세션이 남는다 */
