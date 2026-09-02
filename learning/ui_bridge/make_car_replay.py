@@ -16,6 +16,7 @@ ap.add_argument("--cell_s", type=float, default=309.0, help="합격/일반 셀 �
 ap.add_argument("--trip_s", type=float, default=45.0, help="과부하 트립 셀(passes=0) 소요(s)")
 ap.add_argument("--hz", type=float, default=1.0)
 ap.add_argument("--no_ik", action="store_true", help="오프라인 IK 없이(콘솔 IK 사용) — 검증용")
+ap.add_argument("--duration_s", type=float, default=0.0, help=">0 이면 전체 타임라인을 이 길이(초)로 압축 — 시연용 단축판")
 a = ap.parse_args()
 IK = None
 if not a.no_ik:
@@ -189,6 +190,13 @@ if IK is not None:
 
 def _lerp_q(qa, qb, u):
     return [float(qa[j] + (qb[j] - qa[j]) * u) for j in range(6)]
+if a.duration_s and a.duration_s > 0 and T_END > 0:
+    _k = a.duration_s / T_END
+    timelines = {rid: [(t0 * _k, (t1 * _k if t1 < 1e8 else t1), st, r, b0, b1) for (t0, t1, st, r, b0, b1) in tl]
+                 for rid, tl in timelines.items()}
+    T_END *= _k
+    print(f"[duration] 타임라인을 {a.duration_s:.0f} s 로 압축 (배율 {_k:.6f})")
+
 print(f"cells C={len(plan['C'])} SL={len(plan['SL'])} SR={len(plan['SR'])}  total sim time {T_END/3600:.1f} h")
 
 disp_k = {"pass": "합격", "spot_repaint_review": "스팟 재도장 검토", "rework_candidate": "재작업 후보"}
@@ -198,12 +206,22 @@ rec = SimRecorder(a.out, meta={"scene": SCENE, "hz": a.hz, "robots": [{"id": "C"
                               "params": {"robotCount": 3, "hasRail": True, "hasLift": True, "tool": "dual", "pad": 110, "carLift": 0, "recipe": "base"},
                               "kind": "result_replay_q" if IK is not None else "result_replay"}, chunk_s=60.0)
 idx = {rid: 0 for rid in plan}; done_cells = []; done_ids = set(); last_snap = 0
+
+def mark_done(t, rid, r):
+    if r is None or r["cell_id"] in done_ids: return
+    done_ids.add(r["cell_id"]); done_cells.append(r)
+    rec.event(t, rid, "info" if r["disposition"] == "pass" else "warn",
+              f"셀 {r['cell_id']} {r['region']}: {disp_k.get(r['disposition'], r['disposition'])} · GU {float(r['gu_final']):.1f} · CC {float(r['clearcoat_min_um']):.1f} μm"
+              + (" · 과부하 트립" if r["outcome"] == "fail_force_overload" else ""))
 n_total = len(rows); dt = 1.0 / a.hz; t = 0.0; nf = 0
 while t <= T_END + 1.0:
     robots = []
     for rid in ("C", "SL", "SR"):
         tl = timelines[rid]
-        while idx[rid] < len(tl) - 1 and t >= tl[idx[rid]][1]: idx[rid] += 1
+        while idx[rid] < len(tl) - 1 and t >= tl[idx[rid]][1]:
+            # 지나친 구간의 셀은 그 자리에서 완료 처리 — 압축 타임라인에선 RETRACT(수 ms)에 프레임이 안 걸릴 수 있다
+            if tl[idx[rid]][2] == "RETRACT": mark_done(t, rid, tl[idx[rid]][3])
+            idx[rid] += 1
         t0, t1, state, r, b0, b1 = tl[idx[rid]]
         u = 0.0 if t1 - t0 <= 0 or t1 > 1e8 else max(0.0, min(1.0, (t - t0) / (t1 - t0)))
         base = [b0[i] + (b1[i] - b0[i]) * u for i in range(3)] if state == "SLIDE" else list(b1)
@@ -245,11 +263,7 @@ while t <= T_END + 1.0:
         if tcp is not None: rob["tcp"] = tcp; rob["normal"] = nrm   # 작업영역(셀 목표점) — 콘솔 '작업영역 추종' 모드가 쓴다
         robots.append(rob)
         # 셀 완료 시각(RETRACT 시작) 에 판정 기록
-        if state == "RETRACT" and r is not None and r["cell_id"] not in done_ids:
-            done_ids.add(r["cell_id"]); done_cells.append(r)
-            rec.event(t, rid, "info" if r["disposition"] == "pass" else "warn",
-                      f"셀 {r['cell_id']} {r['region']}: {disp_k.get(r['disposition'], r['disposition'])} · GU {float(r['gu_final']):.1f} · CC {float(r['clearcoat_min_um']):.1f} μm"
-                      + (" · 과부하 트립" if r["outcome"] == "fail_force_overload" else ""))
+        if state == "RETRACT": mark_done(t, rid, r)
     prog = len(done_cells) / n_total
     overall = "DONE" if prog >= 1.0 else "POLISH"
     rec.frame(t, overall, prog, t, robots)
