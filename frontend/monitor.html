@@ -435,8 +435,8 @@ const CAR = (() => {
   const q = new URLSearchParams(location.search).get('vehicle');
   if (CARS[q]) return CARS[q];
   // 프라이빗 모드에서는 읽기만 해도 던진다
-  try { return CARS[localStorage.getItem('polytwin_vehicle')] || CARS.sonata; }
-  catch (err) { return CARS.sonata; }
+  try { return CARS[localStorage.getItem('polytwin_vehicle')] || CARS.z4; }   // 기본 z4 — ① 과 같은 이유(리플레이가 Z4 스캔 기준)
+  catch (err) { return CARS.z4; }
 })();
 /* 3D 가 뜨기 전에 적는다 — WebGL 이 막힌 브라우저에서도 차종은 맞아야 한다.
    i18n-app.js 의 옵서버가 뒤이어 EN 으로 바꾼다 */

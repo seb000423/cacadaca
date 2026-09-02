@@ -522,8 +522,10 @@ const VEHICLE_KEY = 'polytwin_vehicle';
 const readVehicle = () => {
   try {
     const id = localStorage.getItem(VEHICLE_KEY);
-    return CARS.some((c) => c.id === id) ? id : 'sonata';
-  } catch (err) { return 'sonata'; }   // 프라이빗 모드에서는 읽기만 해도 던진다
+    /* 기본은 z4 — 차 전체 결과 리플레이가 Z4 스캔 기준이라 다른 차 위에서는
+       레인 위치가 어긋나 보인다 (2026-09-02 사용자 피드백: "싱크·광택이 그때와 다르다"). */
+    return CARS.some((c) => c.id === id) ? id : 'z4';
+  } catch (err) { return 'z4'; }   // 프라이빗 모드에서는 읽기만 해도 던진다
 };
 
 // 광택기 두 종류 — 「자동차 광택」 2. 광택의 종류.
