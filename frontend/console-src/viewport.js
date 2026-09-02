@@ -1708,6 +1708,15 @@ class PolyTwinViewport extends HTMLElement {
       this._vehicleBefore = this._vehicle;
       this.setVehicle('scan').then(() => { this._liveXf = null; if (this._live && this._live.scene) this._buildLiveXform(this._live.scene); }).catch(() => {});
     }
+    if (this._liveWorkArea && !had && this._vehicle !== 'z4') {
+      /* 결과 리플레이는 Z4 도장면(재질 구분 있는 모델) 기준으로 보정돼 있다.
+         스캔·타 차종은 재질이 하나라 휠·하부까지 도장면으로 잡혀 바닥/휠을 닦는 것처럼 보인다 → Z4 로 자동 전환 */
+      this._vehicleBefore = this._vehicleBefore || this._vehicle;
+      this.setVehicle('z4').then(() => {
+        this._waBox = null; this._cellSig = null;
+        this.layoutCells(); this.resetPolish(); this._waNeedGloss = true;
+      }).catch(() => {});
+    }
     this._liveSnap = !!snap;
     if (this._live && !this._liveWorkArea && this._live.scene && !this._liveXf) this._buildLiveXform(this._live.scene);
     if (this._live && this._live.cells && Array.isArray(this._live.cells.items)) this.setCells(this._live.cells, this._live.scene);   // 셀 스냅샷: 광택 스탬프(항상) + 구슬 표시(옵션)
