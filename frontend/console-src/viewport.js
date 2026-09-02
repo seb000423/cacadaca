@@ -1740,7 +1740,7 @@ class PolyTwinViewport extends HTMLElement {
   /* 재생 중 '3D 로봇' 토글 — 켜면 팔·설비가 다시 나타나 레인을 따라 움직이고, 끄면 빛 점만 */
   setReplayGear(on) {
     this._waGearPref = !!on;
-    if (!this._liveWorkArea) return;
+    if (!this._liveWorkArea && !this._params.running) return;
     if (on) { this._waLights = false; this._waGearRestore(); }
     else this._waLightsOnly();
   }
@@ -1966,7 +1966,11 @@ class PolyTwinViewport extends HTMLElement {
     } else if (spacingChanged) {
       this.rebuildPath();
     }
+    if (p.running === false && prev.running === true && this._waLights && !this._liveWorkArea) {
+      this._waLights = false; this._waGearRestore();          // 공정 종료: 설비 복귀
+    }
     if (p.running === true && prev.running === false) {
+      if (!this._waGearPref) this._waLightsOnly();            // RL 공정도 빛 점 모드 (토글 켜면 로봇 표시)
       this.resetPolish();
       /* 대기 중에 진행량이 남아 있으면 시작하자마자 중간부터 튄다.
          셀마다 조금씩 어긋나게 두는 건 세 대가 같은 자리를 훑지 않게 하려는 것이다 */

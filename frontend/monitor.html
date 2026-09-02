@@ -444,7 +444,7 @@ const CAR = (() => {
 { const el = document.getElementById('carName'); if (el) el.textContent = CAR.name; }
 
 const S = {
-  t: SEEK * CYCLE, running: !REDUCED, done: false,
+  t: SEEK * CYCLE, running: false, done: false,   /* 자체 데모는 돌리지 않는다 — 콘솔이 하는 일을 따라 그린다 */
   force: ROBOTS.map(() => new Float32Array(HIST).fill(0)),
   rnd:   ROBOTS.map((r) => lcg(r.seed)),
   cur:   ROBOTS.map((r) => r.target),
@@ -793,7 +793,7 @@ function resize() {
    피드가 끊기면(5 s) 자동으로 데모로 돌아간다 — 화면은 비지 않는다. */
 const LIVE = { on: false, feed: null, seen: new Set() };
 async function pollLive() {
-  if (REPLAY.on || REPLAY.starting) return;   // 재생 중엔 라이브 폴링이 LIVE 플래그를 건드리면 안 된다 (데모로 튐)
+  if (REPLAY.on || REPLAY.starting || PROC.on) return;   // 재생·공정 동기 중엔 라이브 폴링이 LIVE 플래그를 건드리면 안 된다
   try {
     const r = await fetch('/api/monitor', { cache: 'no-store' });
     if (!r.ok) throw new Error(r.status);
@@ -1046,8 +1046,35 @@ if (BC) BC.onmessage = (ev) => {
     $('hold').textContent = m.playing ? '일시정지' : '재개';
   } else if (m.kind === 'stop') {
     if (REPLAY.on && REPLAY.slave) replayExit('콘솔 재생 종료');
+  } else if (m.kind === 'proc') {
+    if (_qs.get('run')) return;
+    if (m.on) {
+      if (!PROC.on) addEvent('C', '콘솔 공정 동기화 — RL 공정 진행', 'info');
+      PROC.on = true; PROC.at = performance.now();
+      PROC.progress = Number(m.progress) || 0; PROC.elapsed = Number(m.elapsed) || 0; PROC.total = Number(m.total) || 0;
+      PROC.robotCount = Number(m.robotCount) || 3; PROC.force = Number(m.force) || 0; PROC.target = Number(m.target) || 5.6;
+    } else if (PROC.on) {
+      PROC.on = false; LIVE.on = false; LIVE.feed = null;
+      setState(m.done ? 'DONE' : 'HOME');
+      addEvent('C', m.done ? '콘솔 공정 완료' : '콘솔 공정 중단', 'info');
+    }
   }
 };
+/* 콘솔 RL 공정 동기 표시 — 방송 값을 유사 LIVE 피드로 바꿔 기존 경로(차트·상단 바·섹션)를 그대로 쓴다 */
+const PROC = { on: false, at: 0, progress: 0, elapsed: 0, total: 0, robotCount: 3, force: 0, target: 5.6 };
+function procFeed() {
+  const wall = (performance.now() - PROC.at) / 1000;
+  const el = PROC.elapsed + wall;
+  const prog = PROC.total > 0 ? Math.min(1, PROC.progress + wall / PROC.total) : PROC.progress;
+  const ids = ({ 1: ['C'], 2: ['SL', 'SR'], 3: ['C', 'SL', 'SR'] })[PROC.robotCount] || ['C', 'SL', 'SR'];
+  const robots = ROBOTS.filter((r) => ids.includes(r.id)).map((r, i) => ({
+    id: r.id, target: r.target, state: 'POLISH', progress: prog,
+    force: (PROC.force || r.target) + Math.sin(el * 2.1 + i * 2.4) * 0.35 + Math.sin(el * 5.3 + i) * 0.15,
+  }));
+  return { ts: Date.now() / 1000, state: 'POLISH', progress: prog, elapsed_s: el, robots,
+           metrics: { cv: 6.2 + Math.sin(el * 0.7) * 0.8, band: 91 + Math.sin(el * 0.4) * 2.2, keep: 97.5,
+                      cov: 100 * prog, unif: 89 + Math.sin(el * 0.3) * 1.5, over: 0 } };
+}
 function replayExit(reason) {
   REPLAY.on = false; REPLAY.run = null; REPLAY.id = null; REPLAY.slave = false; REPLAY.master = null; REPLAY.paused = false;
   REPLAY.frames = []; REPLAY.loadedTo = -1; REPLAY.events = []; REPLAY.evIdx = 0; REPLAY.hist = {}; REPLAY.follow = false; REPLAY.t = 0;
@@ -1121,6 +1148,10 @@ function loop(now) {
   }
 
   if (REPLAY.on) replayTick(dt);
+  if (PROC.on) {
+    if (performance.now() - PROC.at > 5000) { PROC.on = false; LIVE.on = false; LIVE.feed = null; setState('HOME'); }   // 콘솔 끊김
+    else { LIVE.on = true; LIVE.feed = procFeed(); }
+  }
   const p = LIVE.on ? Math.max(0, Math.min(1, Number(LIVE.feed.progress) || 0)) : S.t / CYCLE;
   animate3D(p, dt);
 
@@ -1128,7 +1159,7 @@ function loop(now) {
   if (acc >= 0.25) { if (LIVE.on) tickLive(LIVE.feed); else tickData(p, acc); acc = 0; }
 
   frames++; fpsT += dt;
-  if (fpsT >= 1) { $('fps').textContent = (REPLAY.on ? ((REPLAY.slave ? 'SYNC(콘솔) ' : 'REPLAY ') + REPLAY.speed + 'x · ' + hhmmss(REPLAY.t) + ' · ') : LIVE.on ? 'LIVE · ' : 'DEMO · ') + Math.round(frames / fpsT) + ' fps'; frames = 0; fpsT = 0; }
+  if (fpsT >= 1) { $('fps').textContent = (REPLAY.on ? ((REPLAY.slave ? 'SYNC(콘솔) ' : 'REPLAY ') + REPLAY.speed + 'x · ' + hhmmss(REPLAY.t) + ' · ') : PROC.on ? 'SYNC(콘솔) 공정 · ' : LIVE.on ? 'LIVE · ' : S.running ? 'DEMO · ' : '대기 · ') + Math.round(frames / fpsT) + ' fps'; frames = 0; fpsT = 0; }
 
   placeSectionCams(dt);
   if (CAMS[camIdx].split && SECS.length) renderSplit(); else renderSingle();
@@ -1144,12 +1175,13 @@ function animate3D(p, dt) {
   /* 기록/피드에 로봇별 진행률이 있으면 팔마다 따로 간다(천장 C = overhead, 좌 SL = sx<0, 우 SR = sx>0). 없으면 전체 진행률. */
   const fr = LIVE.on && LIVE.feed && LIVE.feed.robots ? LIVE.feed.robots : null;
   const robotOf = (a) => fr ? (fr.find((r) => r.id === (a.overhead ? 'C' : (a.sx < 0 ? 'SL' : 'SR'))) || null) : null;
+  const idleAll = !LIVE.on && !S.running;   // 아무 일도 없으면 팔은 정지 자세로 대기
   arms.forEach((a, i) => {
     const rb = robotOf(a);
     const pi = rb && Number.isFinite(Number(rb.progress)) ? Math.max(0, Math.min(1, Number(rb.progress))) : p;
     const z = THREE.MathUtils.lerp(2.2, -2.2, pi);
     a.carriage.position.z = z + (i - 1) * 0.42;
-    a.working = !rb || rb.state === 'POLISH' || rb.state === undefined;
+    a.working = !idleAll && (!rb || rb.state === 'POLISH' || rb.state === undefined);
     /* 관절은 캔 모션 — 실제 IK 가 아니라 '움직이는 설비'를 보여주는 용도.
        천천히, 작게, 상태 전환은 지수 스무딩으로 — 사람 눈에 자연스러운 폴리싱 리듬 */
     const ph = t * 0.7 + i * 2.1;
@@ -1400,6 +1432,9 @@ $('stop').addEventListener('click', () => {
 });
 
 addEvent('C', '셀 A-02 로드 완료 · 로봇 3대 연결', 'info');
+addEvent('C', '대기 — 콘솔(① 설정)에서 공정을 시작하거나 기록을 재생하면 여기 동기 표시됩니다', 'info');
+setState('HOME');
+$('hold').dataset.on = '1'; $('hold').textContent = '데모 재생';
 if (REDUCED) S.t = CYCLE * 0.68;                 // 정지 상태에서도 화면은 채운다
 tickData(S.t / CYCLE, 0.25);
 </script>

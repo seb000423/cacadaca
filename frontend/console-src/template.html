@@ -977,29 +977,37 @@ class Component extends DCLogic {
     const nCells = (() => { const m = String(run.name || '').match(/(\d+)\s*셀/); return m ? Number(m[1]) : 483; })();
     const rcv = meta.recipe_values && Object.keys(meta.recipe_values).length ? meta.recipe_values
       : { force_n: 5.6, feed_mm_s: 45, rpm: 3000, step_over_ratio: 0.4, n_passes: 2, pad_radius_m: 0.055 };
-    const pass = Math.round(nCells * 0.952);
+    /* 기록 id 로 시드한 난수 — 같은 기록은 언제나 같은 결과, 다른 기록은 다른 결과(전 항목 통과 범위 안에서) */
+    const rid0 = Number(run.id) || 1;
+    const rnd = lcg(rid0 * 2654435761 + 97);
+    const gu = 86.8 + rnd() * 3.4;                      // 86.8 ~ 90.2 GU
+    const pass = Math.round(nCells * (0.93 + rnd() * 0.05));
     const result = {
-      quality: { gu: 88.4 },
-      rl: { force: Number(rcv.force_n) || 5.6, feed_scale_mean: 1.12 },
+      quality: { gu: Math.round(gu * 10) / 10 },
+      rl: { force: Number(rcv.force_n) || 5.6, feed_scale_mean: 1.05 + rnd() * 0.12 },
       cells: { cells: nCells, polished: nCells, pass },
       recipe: rcv,
       elapsed_s: dur || null,
       tag: '결과 리플레이',
     };
     const seq = this.state.runSeq + 1;
-    /* 숙련공 정답이 시드돼 있으면 그 세그먼트를 기준으로 허용 오차 안의 결과를 만든다 — 전 항목 충족(통과) 화면 */
+    /* 숙련공 정답 세그먼트도 기록 id 로 고른다 — 기록마다 다른 세그먼트·다른 대조값 */
     const seed = this.state.seed || [];
-    const ref = seed.length ? seed[(seq - 1) % seed.length] : null;
+    const ref = seed.length ? seed[rid0 % seed.length] : null;
     const rl = ref
-      ? { force: ref.p.force + 0.02, stiffness: ref.p.stiffness * 1.01, damping: ref.p.damping * 0.99,
-          speed: ref.p.speed * 1.02, inband: Math.max(0, (ref.inband || 0.95) - 0.006) }
-      : { force: result.rl.force, stiffness: 520, damping: 1.0, speed: result.rl.feed_scale_mean, inband: 0.947 };
+      ? { force: ref.p.force + (rnd() - 0.5) * 0.08, stiffness: ref.p.stiffness * (1 + (rnd() - 0.5) * 0.02),
+          damping: ref.p.damping * (1 + (rnd() - 0.5) * 0.02), speed: ref.p.speed * (1 + (rnd() - 0.5) * 0.03),
+          inband: Math.max(0, (ref.inband || 0.95) - (0.004 + rnd() * 0.006)) }
+      : { force: result.rl.force, stiffness: 520, damping: 1.0, speed: result.rl.feed_scale_mean, inband: 0.94 + rnd() * 0.015 };
     /* 품질 판정 표는 시드 에피소드를 쓰되, 광택은 통과값으로 덮는다 — 시연용 임의 통과 데이터(사용자 지정) */
     const eps = (this.state.qual && this.state.qual.episodes) || [];
-    const baseEp = eps.find((e) => e.glossPass) || this.pickEpisode(seq) || null;
+    const baseEp = (eps.length ? eps[rid0 % eps.length] : null) || this.pickEpisode(seq) || null;
     const qualEp = baseEp ? Object.assign({}, baseEp, {
       cells: nCells,
-      glossPass: true, glossMean: 88.4, glossP10: 85.9, glossStd: 4.2, glossMin: 82.0,
+      glossPass: true, glossMean: Math.round(gu * 10) / 10,
+      glossP10: Math.round((gu - 2 - rnd() * 1.4) * 10) / 10,
+      glossStd: Math.round((3.6 + rnd() * 1.2) * 10) / 10,
+      glossMin: Math.round((gu - 5.5 - rnd() * 1.6) * 10) / 10,
       glossBand: 'target_pass', glossTiles: baseEp.glossTiles || 144,
     }) : null;
     this._stashLastRun('sim', rl, result, ref, run.id || null);
@@ -1024,6 +1032,7 @@ class Component extends DCLogic {
   toggleRunDemo() {
     if (this.state.running) {                 // 진행 중 누르면 중단
       this.stopTimers();
+      this._bcPost({ kind: 'proc', on: false });
       this.setState({ running: false, mon: null, runEl: 0 }, () => this.push());
       return;
     }
@@ -1041,6 +1050,10 @@ class Component extends DCLogic {
       this._monTimer = setInterval(() => {
         const el = performance.now() - this._runT0;
         this.setState({ runEl: el, mon: this.sampleMon(el, this.state.runMs) });
+        /* ② 공정 감시 동기화 — 진행 중인 공정 상태를 방송한다 */
+        const m = this.state.mon || {};
+        this._bcPost({ kind: 'proc', on: true, progress: m.prog || 0, elapsed: el / 1000, total: this.state.runMs / 1000,
+                       robotCount: this.state.robotCount, force: m.force || 0, target: m.target || 5.6 });
       }, 200);
     });
   }
@@ -1083,6 +1096,7 @@ class Component extends DCLogic {
   // RL 탐색이 끝났다. 대상 세그먼트의 정답을 기준으로 결과를 만들고 판정 화면을 열다.
   finishRun() {
     this.stopTimers();
+    this._bcPost({ kind: 'proc', on: false, done: true });
     const seed = this.state.seed;
     if (!seed || !seed.length) {
       this.setState({ running: false, mon: null, showEvalModal: true, refSeg: null, rl: null,
