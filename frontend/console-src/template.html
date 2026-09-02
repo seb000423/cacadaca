@@ -600,8 +600,17 @@ class Component extends DCLogic {
     /* PolyTwin Console.html?run=<id> — 라이브러리/모니터에서 온 재생 링크 */
     try {
       const rid = Number(new URLSearchParams(location.search).get('run'));
-      if (rid) setTimeout(() => this.loadReplay(rid), 800);
+      /* 3D(GLB) 가 아직 안 떴으면 loadReplay 가 조용히 무시된다 — 준비될 때까지 재시도 */
+      if (rid) { let tries = 0; const tryLoad = () => { const v = this.vp(); if (v && v.replay) this.loadReplay(rid); else if (tries++ < 40) setTimeout(tryLoad, 500); }; setTimeout(tryLoad, 800); }
     } catch (e) { /* 무시 */ }
+    /* ② 공정 감시 탭과 재생 동기화 — 콘솔이 시계 주인. 상태를 방송하고, ② 의 일시정지 명령을 받는다 */
+    try {
+      if ('BroadcastChannel' in window) {
+        this._bc = new BroadcastChannel('pt-replay');
+        this._bc.onmessage = (ev) => { const m = ev.data || {}; if (m.kind === 'cmd' && m.op === 'toggle') this.replayToggle(); };
+      }
+    } catch (e) { /* 무시 */ }
+    addEventListener('pagehide', () => { if (this.state.replay && this.state.replay.active) this._bcPost({ kind: 'stop' }); });
     this._runsTimer = setInterval(() => { if (!this.state.running && !(this.state.replay && this.state.replay.active)) this.fetchRuns(); }, 10000);
     /* credentials 를 빼면 세션 쿠키가 안 실려 401 이 온다 */
     fetch(SEED_URL, { credentials: 'same-origin' })
@@ -660,7 +669,10 @@ class Component extends DCLogic {
   loadReplay(id, keepTimers) {
     const v = this.vp(); if (!v || !v.replay) return;
     const pl = v.replay, t = toolOf(this.state.tool);
-    pl.onState = (st) => this.setState({ replay: { ...st, active: true } });
+    pl.onState = (st) => {
+      this.setState({ replay: { ...st, active: true } });
+      this._bcPost({ kind: 'state', id, t: st.t, duration: st.duration, playing: st.playing, speed: st.speed, follow: st.follow });
+    };
     pl.onFrame = (feed) => {
       const now = performance.now();
       if (now - (this._rpEmit || 0) < 200) return;     // 표시 갱신은 5 Hz — 3D 는 60 fps 로 따로 돈다
@@ -701,8 +713,10 @@ class Component extends DCLogic {
   }
   stopReplay() {
     const v = this.vp(); if (v && v._replay) v.replay.stop();
+    this._bcPost({ kind: 'stop' });
     this.setState({ replay: null, replayId: '', mon: null }, () => this.push());
   }
+  _bcPost(m) { try { if (this._bc) this._bc.postMessage(m); } catch (e) { /* 무시 */ } }
   pickRun(e) { const id = Number(e.target.value); if (!id) this.stopReplay(); else this.loadReplay(id); }
   deleteRun() {
     const id = Number(this.state.replayId); if (!id) return;
