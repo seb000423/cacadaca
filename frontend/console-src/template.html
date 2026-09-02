@@ -411,6 +411,7 @@
         </div>
         <div style="display: flex; gap: 8px">
           <div sc-camel-on-click="{{ replayToggle }}" tabindex="0" style="flex: 1; padding: 11px 0; border: 1px solid var(--accent); background: rgb(var(--accent-ch) / 0.08); text-align: center; font-size: 15px; font-weight: 500; letter-spacing: 0.06em; color: var(--text-hi); cursor: pointer">{{ replayBtn }}</div>
+          <div sc-camel-on-click="{{ toggleGear }}" tabindex="0" role="switch" aria-checked="{{ gearOn }}" title="재생 중 로봇·설비 3D 표시 (끄면 빛 점만)" style="padding: 9px 10px; border: 1px solid {{ gearBorder }}; background: {{ gearBg }}; text-align: center; font-size: 13px; color: {{ gearColor }}; cursor: pointer; white-space: nowrap; transition: background-color var(--t-fast) var(--e-in), border-color var(--t-fast) var(--e-in), color var(--t-fast) var(--e-in)">3D 로봇</div>
           <div sc-camel-on-click="{{ toggleCells }}" tabindex="0" role="switch" aria-checked="{{ cellsOn }}" style="padding: 9px 10px; border: 1px solid {{ cellsBorder }}; background: {{ cellsBg }}; text-align: center; font-size: 13px; color: {{ cellsColor }}; cursor: pointer; white-space: nowrap; transition: background-color var(--t-fast) var(--e-in), border-color var(--t-fast) var(--e-in), color var(--t-fast) var(--e-in)">{{ cellsLabel }}</div>
           <div sc-camel-on-click="{{ deleteRun }}" tabindex="0" title="선택한 기록 삭제" style="padding: 9px 10px; border: 1px solid var(--line); text-align: center; font-size: 13px; color: var(--warn); cursor: pointer; white-space: nowrap">삭제</div>
         </div>
@@ -1425,6 +1426,11 @@ class Component extends DCLogic {
       replayTime: s.replay ? (hhmm(s.replay.t) + ' / ' + hhmm(s.replay.duration) + (s.replay.follow ? ' · LIVE' : (' · ' + s.replay.speed + 'x → 남은 실제 ' + mmss(Math.max(0, Math.round((s.replay.duration - s.replay.t) / Math.max(0.01, s.replay.speed))))))) : '',
       replayBtn: s.replay && s.replay.playing ? '일시정지' : '재생',
       cellsOn: !!s.cellsOn,
+      gearOn: !!s.replayGear,
+      gearBorder: s.replayGear ? 'var(--accent)' : 'var(--line)',
+      gearBg: s.replayGear ? 'rgb(155 195 58 / 0.10)' : 'transparent',
+      gearColor: s.replayGear ? 'var(--text-hi)' : 'var(--text-lo)',
+      toggleGear: () => this.setState({ replayGear: !s.replayGear }, () => { const v = this.vp(); if (v && v.setReplayGear) v.setReplayGear(this.state.replayGear); }),
       cellsOn: s.cellsOn,
       cellsLabel: '셀 판정 표시',
       cellsBorder: s.cellsOn ? 'var(--accent)' : 'var(--line)',

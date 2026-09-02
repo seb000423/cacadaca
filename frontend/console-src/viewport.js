@@ -1737,6 +1737,14 @@ class PolyTwinViewport extends HTMLElement {
       cell.userData.tag.visible = false;
     }
   }
+  /* 재생 중 '3D 로봇' 토글 — 켜면 팔·설비가 다시 나타나 레인을 따라 움직이고, 끄면 빛 점만 */
+  setReplayGear(on) {
+    this._waGearPref = !!on;
+    if (!this._liveWorkArea) return;
+    if (on) { this._waLights = false; this._waGearRestore(); }
+    else this._waLightsOnly();
+  }
+
   _waGearRestore() {
     this.props.visible = true;
     for (const cell of this._cells) {
@@ -1759,7 +1767,7 @@ class PolyTwinViewport extends HTMLElement {
     if (this._liveWorkArea && !had) {
       this.resetPolish(); this._waBox = null;
       for (const c of this._cells) { c.userData.s = 0; c.userData.cursor = 0; }
-      this._waLightsOnly();   // 시작하면 설비는 사라지고 로봇별 색 빛 점 + 이름표만 (팔 동작은 ② 공정 감시가 보여준다)
+      if (!this._waGearPref) this._waLightsOnly();   // 기본: 빛 점 모드 (3D 로봇 토글을 켜면 설비 유지)
     }
     if (this._live && !had && !this._liveWorkArea && this._vehicle !== 'scan') {   // 실제 Isaac 기록: 관절 추종 → Isaac 과 같은 스캔 차체
       this._vehicleBefore = this._vehicle;

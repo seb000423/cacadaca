@@ -866,19 +866,19 @@ function layoutSections() {
 }
 const _v3 = new THREE.Vector3(), _off = new THREE.Vector3();
 function sectionTarget(a, out) {
-  const lift = MON.params ? MON.params.carLift : 0;
   const cz = a.carriage.position.z;
-  /* 천장: 지붕 + 매달린 팔 사이. 측면: 팔과 차 옆면 사이 */
-  return a.overhead ? out.set(0, MON.carTop + lift + 0.2, cz) : out.set(a.sx * MON.carHalfW * 0.9, lift + 0.8, cz);
+  /* 섹션 = 팔 상태 창 — 차 없이 팔만 프레이밍한다 (차 상태는 상단 진행률·히트맵) */
+  return a.overhead ? out.set(0, a.carriage.position.y - 0.55, cz) : out.set(a.carriage.position.x * 0.92, 1.0, cz);
 }
 function placeSectionCams(dt) {
   const k = 1 - Math.exp(-dt * 3);
   for (const s of SECS) {
     const a = s.arm;
-    if (!s.init) { s.init = true; s.tgt.copy(sectionTarget(a, _v3)); }   // 첫 프레임은 바로 맞춘다(캐리지는 animate3D 뒤에야 제자리)
-    else s.tgt.lerp(sectionTarget(a, _v3), k);
+    const want = sectionTarget(a, _v3);
+    if (!s.init || s.tgt.distanceTo(want) > 1.2) { s.init = true; s.tgt.copy(want); }   // 처음·큰 점프는 즉시, 이후엔 부드럽게
+    else s.tgt.lerp(want, k);
     /* 천장: 앞·우측 위에서 지붕을 내려다본다. 측면: 팔 뒤편 바깥·앞쪽 대각선 — 팔과 차 옆면이 한 프레임에 들어온다 */
-    if (a.overhead) _off.set(1.0, 1.05, 2.1); else _off.set(a.sx * 1.6, 1.15, 2.2);
+    if (a.overhead) _off.set(0.85, 0.5, 1.9); else _off.set(a.sx * 1.15, 0.8, 1.7);
     s.cam.position.copy(s.tgt).add(_off);
     s.cam.lookAt(s.tgt);
   }
@@ -906,6 +906,7 @@ function renderSplit() {
   renderer.clear();
   MON.rails.forEach((r) => { r.visible = false; });
   MON.gear.forEach((g) => { g.visible = false; });
+  if (MON.car) MON.car.visible = false;   // 섹션 = 팔 상태 창: 차는 그리지 않는다
   placeGear(true);
   for (const s of SECS) {
     const rr = s.el.getBoundingClientRect();
@@ -924,6 +925,7 @@ function renderSplit() {
   renderer.setScissorTest(false);
 }
 function renderSingle() {
+  if (MON.car) MON.car.visible = true;
   const hasRail = !MON.params || MON.params.hasRail;
   MON.rails.forEach((r) => { r.visible = hasRail; });
   MON.gear.forEach((g) => { g.visible = true; });
@@ -1148,17 +1150,20 @@ function animate3D(p, dt) {
     const z = THREE.MathUtils.lerp(2.2, -2.2, pi);
     a.carriage.position.z = z + (i - 1) * 0.42;
     a.working = !rb || rb.state === 'POLISH' || rb.state === undefined;
-    /* 관절은 캔 모션 — 실제 IK 가 아니라 '움직이는 설비'를 보여주는 용도 */
-    const ph = t * 1.5 + i * 2.1;
-    const lift = a.working ? 0 : 0.35;   // 이동/접근 중(폴리싱 아님)이면 팔을 들어 올린 자세
+    /* 관절은 캔 모션 — 실제 IK 가 아니라 '움직이는 설비'를 보여주는 용도.
+       천천히, 작게, 상태 전환은 지수 스무딩으로 — 사람 눈에 자연스러운 폴리싱 리듬 */
+    const ph = t * 0.7 + i * 2.1;
+    const liftT = a.working ? 0 : 0.35;   // 이동/접근 중(폴리싱 아님)이면 팔을 들어 올린 자세
+    a._lift = a._lift == null ? liftT : a._lift + (liftT - a._lift) * (1 - Math.exp(-dt * 3.5));
+    const lift = a._lift;
     if (a.overhead) {
-      a.arm.setQ([Math.sin(ph * 0.5) * 0.30, -0.55 + Math.sin(ph) * 0.10 - lift,
-                  1.35 + Math.cos(ph) * 0.12, 0, 0.62 + Math.sin(ph * 1.3) * 0.09, ph * 0.4]);
+      a.arm.setQ([Math.sin(ph * 0.5) * 0.16, -0.55 + Math.sin(ph) * 0.055 - lift,
+                  1.35 + Math.cos(ph * 0.9) * 0.07, 0, 0.62 + Math.sin(ph * 1.15) * 0.05, ph * 0.22]);
     } else {
-      a.arm.setQ([a.sx * (0.22 + Math.sin(ph * 0.6) * 0.16), 0.42 + Math.sin(ph) * 0.10 - lift,
-                  -1.05 + Math.cos(ph) * 0.12, 0, 0.72 + Math.sin(ph * 1.2) * 0.10, ph * 0.5]);
+      a.arm.setQ([a.sx * (0.22 + Math.sin(ph * 0.55) * 0.09), 0.42 + Math.sin(ph) * 0.055 - lift,
+                  -1.05 + Math.cos(ph * 0.85) * 0.07, 0, 0.72 + Math.sin(ph * 1.1) * 0.055, ph * 0.28]);
     }
-    if (!REDUCED && a.working) a.arm.spin(1800, dt);
+    if (!REDUCED && a.working) a.arm.spin(1400, dt);
     /* 섹션 헤더 — 그 로봇의 상태·진행률·접촉력 */
     const sec = SECS.find((s) => s.arm === a);
     if (sec) {
