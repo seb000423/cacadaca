@@ -433,6 +433,16 @@
     [' · 리프트 ', ' · lift '],
     /* 기록 재생 이벤트: '기록 재생 — <이름> · 8x' */
     ['기록 재생 — ', 'Recording replay — '],
+    /* 콘솔 동기 재생(d2e033c) — 콘솔이 시계 주인일 때 모니터에 찍히는 이벤트·종료 사유 */
+    ['콘솔 동기 재생 — ', 'Console-synced replay — '],
+    ['콘솔 재생 종료', 'Console replay ended'],
+    ['기록 재생 종료 — ', 'Replay ended — '],
+    ['재생 일시정지', 'Replay paused'],
+    ['재생 재개', 'Replay resumed'],
+    ['정지 버튼', 'Stop button'],
+    ['동기 재생 실패', 'Synced replay failed'],
+    /* fps 표시줄 접두 — 'SYNC(콘솔) 8x · 0:01:23 · 60 fps' */
+    ['SYNC(콘솔) ', 'SYNC(console) '],
 
     /* ── ④ 라이브러리 ── */
     ['허용 힘 밴드 ', 'Allowed force band '],
