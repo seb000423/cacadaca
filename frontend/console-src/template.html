@@ -554,8 +554,8 @@ const VEHICLE_KEY = 'polytwin_vehicle';
 const readVehicle = () => {
   try {
     const id = localStorage.getItem(VEHICLE_KEY);
-    return CARS.some((c) => c.id === id) ? id : 'sonata';
-  } catch (err) { return 'sonata'; }
+    return CARS.some((c) => c.id === id) ? id : 'z4';   /* 기본 z4 — 결과 리플레이가 Z4 스캔 기준 */
+  } catch (err) { return 'z4'; }
 };
 
 /* mark 는 assets/icons/ 의 제조사 마크다. 회색조·톤 정규화가 파일에 구워져 있다 —
