@@ -1241,3 +1241,6 @@ DB 에서 프레임을 미리 받아 **보간하며 재생**한다(속도 0.5~16
   ② SimRecorder 가 기존 파일에 이어 씀 → 재생성 시 프레임 2배 중복 → 삭제 후 생성.
 - 로컬 run 22, Turso run 21 로 업로드(scratchpad/turso_upload_run.js — libsql 직접 INSERT; Vercel 은 import 라우트가 막혀 있음).
   1x 로 3:01 재생, 종료 시 9.52 통과 모달. 시연 URL: `/PolyTwin%20Console.html?run=<id>` (로컬 22 · Vercel 21).
+- **추가(사용자 리포트)**: 차종을 'BMW Z4·스캔(Isaac)' 으로 두고 재생하면 바닥·휠을 닦는 것처럼 보임 — 스캔 메시는 재질이 하나라
+  도장면 판정(mats.length===1)이 휠·하부까지 도장면으로 잡는 탓. → 결과 리플레이 진입 시 Z4 차체로 자동 전환(관절 모드의 스캔
+  자동 전환과 대칭), 종료 시 원래 차종 복귀. UI2 a08e9be, 배포 f4zd9w80i 검증.
