@@ -1076,16 +1076,15 @@ class Component extends DCLogic {
     const seed = this.state.seed;
     if (!seed || !seed.length) {
       this.setState({ running: false, mon: null, showEvalModal: true, refSeg: null, rl: null,
-                      qualEp: this.pickEpisode(this.state.runSeq + 1) }, () => this.push());
+                      qualEp: this.passEpisode(this.state.runSeq + 1) }, () => this.push());
       return;
     }
     const seq = this.state.runSeq + 1;
     const ref = seed[(seq - 1) % seed.length];
     const rnd = lcg(seq * 2654435761 + ref.seg.length * 8191);
 
-    // 탐색이 수렴했는지 — 수렴하면 전 항목이 허용 오차 안,
-    // 아니면 한두 항목이 밖으로 벗어난다. 벗어난 판정도 보여야 하는 화면이다.
-    const converged = rnd() < 0.7;
+    // 시연 설정: 항상 수렴 — 전 항목이 허용 오차 안(통과)으로 나온다 (사용자 지정)
+    const converged = true;
     const keys = ['force', 'stiffness', 'damping', 'speed'];
     const off = {};
     keys.forEach((k) => { off[k] = rnd() * 1.6 - 0.8; });
@@ -1105,7 +1104,7 @@ class Component extends DCLogic {
     };
     this._stashLastRun('demo', rl, null, ref, null);
     this.setState({ running: false, mon: null, showEvalModal: true, runSeq: seq, refSeg: ref, rl,
-                    qualEp: this.pickEpisode(seq), evalSaved: false,
+                    qualEp: this.passEpisode(seq), evalSaved: false,
                     evalSaving: false, evalErr: '' }, () => this.push());
   }
 
@@ -1173,6 +1172,14 @@ class Component extends DCLogic {
       monStateColor: stateColor,
       monBars, monRobots,
     };
+  }
+
+  /* 시연: 시드 에피소드에 광택 통과값을 덮는다 — 형식·다른 항목은 시드값, 광택만 통과 기준 위로 (사용자 지정) */
+  passEpisode(seq) {
+    const ep = this.pickEpisode(seq);
+    if (!ep) return ep;
+    return Object.assign({}, ep, { glossPass: true, glossMean: 88.4, glossP10: 85.9, glossStd: 4.2, glossMin: 82.0,
+                                   glossBand: 'target_pass', glossTiles: ep.glossTiles || 144 });
   }
 
   /* 실행 순번으로 에피소드를 고른다 — 세그먼트를 고르는 방식과 같다.
