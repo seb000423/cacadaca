@@ -98,6 +98,7 @@ function publicEntry(row) {
     sim: body.sim || null,                                   // 실제 시뮬 결과 요약(자동 등록)
     run_id: body.run_id != null ? Number(body.run_id) : null, // 기록(sim_runs) → 콘솔/모니터 재생 링크
     ref: body.ref || null,
+    meta: body.meta || null,                                 // ③ 수동 저장분(AHP·메모·태그·표준)
   };
 }
 
@@ -700,7 +701,8 @@ async function handleApi(req, res, pathname) {
       /* 클라이언트가 보낸 것 중 라이브러리가 실제로 읽는 것만 남긴다.
          sim = 시뮬 결과 요약(품질·RL·셀 처분·레시피), run_id = 기록(sim_runs) — 라이브러리에서 재생 링크 */
       const payload = JSON.stringify({ env: body.env || null, rl: body.rl, ref: body.ref || null,
-                                       sim: body.sim || null, run_id: body.run_id != null ? Number(body.run_id) : null });
+                                       sim: body.sim || null, run_id: body.run_id != null ? Number(body.run_id) : null,
+                                       meta: body.meta || null });   // ③ 수동 저장분: AHP 가중치·메모·태그·표준 지정
       if (payload.length > 200 * 1024) return json(res, 413, { error: '기록이 너무 큽니다.' });
 
       const { entry, created } = await store.createLibraryEntry({

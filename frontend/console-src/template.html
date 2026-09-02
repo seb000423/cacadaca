@@ -879,8 +879,24 @@ class Component extends DCLogic {
       inband: (result.cells && result.cells.polished) ? Math.min(1, (result.cells.pass || 0) / Math.max(1, result.cells.polished)) : 0,
     };
     this._simResult = result;
+    this._stashLastRun('sim', rl, result, ref, this._liveRunId);
     this.setState({ running: false, mon: null, showEvalModal: true, runSeq: seq, refSeg: ref, rl, qualEp,
                     evalSaved: false, evalErr: '' }, () => { this.push(); this.evalSave(true); });   // 실제 실행 결과는 자동 등록
+  }
+
+  /* ③ 데이터 저장 화면이 읽는 '마지막 런 요약' — 화면을 옮겨도 세션이 남는다 */
+  _stashLastRun(kind, rl, result, ref, runId) {
+    try {
+      const s = this.state;
+      const sim = result ? { quality: result.quality || null, rl: result.rl || null, cells: result.cells || null,
+                             recipe: result.recipe || null, elapsed_s: result.elapsed_s || null, tag: result.tag || null } : null;
+      localStorage.setItem('pt_last_run', JSON.stringify({
+        at: Date.now(), kind,
+        env: { robotCount: s.robotCount, tool: s.tool, hasRail: s.hasRail, hasLift: s.hasLift, carLift: s.carLift, recipe: s.recipe || null },
+        rl: rl || null, sim, ref: ref || null, run_id: runId || null,
+        elapsedS: Math.round((s.runEl || 0) / 1000) || null,
+      }));
+    } catch (err) { /* 저장 못 해도 공정 흐름은 계속 */ }
   }
   toggleRunDemo() {
     if (this.state.running) {                 // 진행 중 누르면 중단
@@ -974,6 +990,7 @@ class Component extends DCLogic {
       speed: ref.p.speed * (1 + off.speed * TOL.speed),
       inband: Math.max(0, ref.inband - (converged ? rnd() * 0.014 : 0.025 + rnd() * 0.07)),
     };
+    this._stashLastRun('demo', rl, null, ref, null);
     this.setState({ running: false, mon: null, showEvalModal: true, runSeq: seq, refSeg: ref, rl,
                     qualEp: this.pickEpisode(seq), evalSaved: false,
                     evalSaving: false, evalErr: '' }, () => this.push());
