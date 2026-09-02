@@ -31,6 +31,8 @@
 
     /* ══ 공용 헤더 (assets/css/pt-header.css) ══ */
     '화면': 'Screens',        /* 내비 aria-label — ①②③④ 공통 */
+    '← 메인': '← Main',       /* ① 콘솔(UI2 판) 자체 머리말의 홈 링크 */
+    '메인으로': 'To main',    /* 같은 링크의 title */
 
     /* ══ ① 콘솔 — 화면 골격 ══ */
     '차량 3D · 파라미터 설정': '3D vehicle · parameters',
@@ -482,7 +484,8 @@
      (③ 은 아직 사전 미비로 토글을 달지 않았다. 헤더 슬롯은 이미 있다.)
      선택자가 실제로 맞는지는 scripts/i18n-app-check.py --anchors 가 본다. */
   var ANCHORS = [
-    '.pt-hdr__end'     /* 공용 헤더 오른쪽 슬롯 — 언제나 맨 끝에 붙는다 */
+    '.pt-hdr__end',    /* 공용 헤더 오른쪽 슬롯 — ②④ (언제나 맨 끝에 붙는다) */
+    'main > header'    /* ① 콘솔(UI2 판, 2026-09-02 복원) — 3D 뷰 위 자체 머리말. pointer-events 는 .pt-lang 이 auto 로 살린다 */
   ];
 
   var CSS =

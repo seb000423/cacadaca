@@ -231,6 +231,8 @@ def covered(s, keys, phrases, rx):
 # 여기서는 그 선택자가 각 화면에 실제로 있는지만 본다 — 없으면 상자가 안 뜬다.
 ANCHOR_SIGN = [
     ('.pt-hdr__end', re.compile(r'class="pt-hdr__end"')),
+    # ① 콘솔(UI2 판, 2026-09-02 복원) — 공용 헤더가 없어 main 바로 밑 자체 머리말에 붙인다
+    ('main > header', re.compile(r'<main[^>]*>\s*<header')),
 ]
 
 
