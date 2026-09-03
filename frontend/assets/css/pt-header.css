@@ -110,3 +110,16 @@
 @media (prefers-reduced-motion: reduce) {
   .pt-hdr__nav a { transition-duration: 1ms; }
 }
+
+/* ── 모바일: 헤더를 한 줄에 눌러 담는다 — 내비는 가로 스크롤 ── */
+@media (max-width: 760px) {
+  /* 그리드(가운데 로고 기준) 대신 단순 flex 한 줄 — 우측 정렬로 넘친 내용이 왼쪽 칸을 덮는 문제 방지 */
+  .pt-hdr__in { padding: 0 10px; gap: 8px; display: flex; }
+  .pt-hdr__end { justify-content: flex-start; }
+  /* 좌·우 그룹은 자기 칸 안에서 가로 스크롤 — 이웃 칸 위로 겹쳐 오르지 않게 */
+  .pt-hdr__start, .pt-hdr__end { min-width: 0; overflow-x: auto; overflow-y: hidden; flex-wrap: nowrap; scrollbar-width: none; }
+  .pt-hdr__start::-webkit-scrollbar, .pt-hdr__end::-webkit-scrollbar { display: none; }
+  .pt-hdr__start > *, .pt-hdr__end > * { flex: none; }
+  .pt-hdr__nav { gap: 10px; flex: none; }
+  .pt-hdr__sep, .pt-hdr__stat { display: none; }
+}
