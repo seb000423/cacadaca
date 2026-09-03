@@ -1767,7 +1767,7 @@ class PolyTwinViewport extends HTMLElement {
     if (this._liveWorkArea && !had) {
       this.resetPolish(); this._waBox = null;
       for (const c of this._cells) { c.userData.s = 0; c.userData.cursor = 0; }
-      if (!this._waGearPref) this._waLightsOnly();   // 기본: 빛 점 모드 (3D 로봇 토글을 켜면 설비 유지)
+      if (this._waGearPref === false) this._waLightsOnly();   // 기본: 로봇·설비 표시. '빛 점' 토글을 켠 경우만 빛 점 모드
     }
     if (this._live && !had && !this._liveWorkArea && this._vehicle !== 'scan') {   // 실제 Isaac 기록: 관절 추종 → Isaac 과 같은 스캔 차체
       this._vehicleBefore = this._vehicle;
@@ -1970,7 +1970,7 @@ class PolyTwinViewport extends HTMLElement {
       this._waLights = false; this._waGearRestore();          // 공정 종료: 설비 복귀
     }
     if (p.running === true && prev.running === false) {
-      if (!this._waGearPref) this._waLightsOnly();            // RL 공정도 빛 점 모드 (토글 켜면 로봇 표시)
+      if (this._waGearPref === false) this._waLightsOnly();   // RL 공정: 기본 로봇 표시, '빛 점' 토글 시 빛 점
       this.resetPolish();
       /* 대기 중에 진행량이 남아 있으면 시작하자마자 중간부터 튄다.
          셀마다 조금씩 어긋나게 두는 건 세 대가 같은 자리를 훑지 않게 하려는 것이다 */
@@ -2165,6 +2165,12 @@ class PolyTwinViewport extends HTMLElement {
           const step = RAIL_SPEED * dt;
           cell.position[LONG] += THREE.MathUtils.clamp(goal - cell.position[LONG], -step, step);
           cell.updateMatrixWorld(true);
+          /* 천장 캐리지가 미끄러지면 매달림 기둥도 함께 — 리플레이 추종에서만 옮기면 데모·공정에서 팔이 기둥에서 떨어져 보인다 */
+          if (cell.userData.ceiling && this._hang && this._liftGeo) {
+            const beamY = this._beamY || (cell.position.y + 1.0);
+            this._hang.position.set(cell.position.x, beamY, cell.position.z);
+            this._hang.scale.y = Math.max(0.05, (beamY - cell.position.y) / this._liftGeo.userData.size.y);
+          }
         }
 
         // 패드 접촉면 = 표면점, 툴 축은 법선 반대 방향.
