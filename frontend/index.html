@@ -896,6 +896,15 @@ section { position: relative; scroll-margin-top: var(--header-h); }
   .auth__submit[aria-busy="true"]::after { animation: none; width: 100%; }
   *, *::before, *::after { transition-duration: 1ms !important; animation-duration: 1ms !important; animation-iteration-count: 1 !important; }
 }
+
+/* ── 모바일 헤더: 로그인 후 세션 버튼(관리자·LOG OUT)이 가운데 로고와 겹치던 문제 ──
+   좁은 폭에선 로고를 심벌만 남기고, 세션 버튼을 컴팩트하게. 데스크톱 무변경. */
+@media (max-width: 640px) {
+  .mark > span { display: none; }
+  .mark { letter-spacing: 0; padding-inline-start: 0; }
+  .hdr__auth { gap: 6px; }
+  .hdr__auth .btn { padding: 0 12px; min-height: 40px; font-size: 13px; letter-spacing: 0.04em; white-space: nowrap; }
+}
 </style>
 </head>
 <body>

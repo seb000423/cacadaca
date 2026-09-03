@@ -934,6 +934,15 @@ html[lang="en"] .p-txt li,
 html[lang="en"] .post p,
 html[lang="en"] .qa__a,
 html[lang="en"] .page-head .lede { text-align: start; }
+
+/* ── 모바일 헤더: 로그인 후 세션 버튼(관리자·LOG OUT)이 가운데 로고와 겹치던 문제 ──
+   좁은 폭에선 로고를 심벌만 남기고, 세션 버튼을 컴팩트하게. 데스크톱 무변경. */
+@media (max-width: 640px) {
+  .mark > span { display: none; }
+  .mark { letter-spacing: 0; padding-inline-start: 0; }
+  .hdr__auth { gap: 6px; }
+  .hdr__auth .btn { padding: 0 12px; min-height: 40px; font-size: 13px; letter-spacing: 0.04em; white-space: nowrap; }
+}
 </style>
 </head>
 <body>
