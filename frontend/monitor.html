@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<link rel="stylesheet" href="assets/css/pt-header.css?v=2026-09-03a">
+<link rel="stylesheet" href="assets/css/pt-header.css?v=2026-09-03b">
 <title>공정 모니터링 · PolyTwin</title>
 <meta name="description" content="폴리싱 공정 실시간 관제 — 진행률 · 접촉력 · 커버리지 · 제거량 히트맵 · 이벤트 로그.">
 <meta name="theme-color" content="#0E1216">
@@ -271,6 +271,7 @@ button { font: inherit; color: inherit; background: none; border: 0; cursor: poi
 .heat canvas { display: block; width: 100%; height: 100%; border: 1px solid var(--line); border-radius: var(--r-sm); background: var(--bg-panel); }
 
 @media (max-width: 760px) {
+  .view__top { flex-wrap: wrap; row-gap: 6px; }   /* 카메라 프리셋 + 범례가 한 줄에 안 들어가면 줄바꿈 */
   /* 모바일: 진행바·시계·배지 글자는 숨기고(점만), 버튼·내비는 가로 스크롤 */
   .pt-hdr__start .prog { display: none; }
   .pt-hdr__start .clock { display: none; }

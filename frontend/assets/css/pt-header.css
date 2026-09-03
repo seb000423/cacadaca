@@ -122,4 +122,5 @@
   .pt-hdr__start > *, .pt-hdr__end > * { flex: none; }
   .pt-hdr__nav { gap: 10px; flex: none; }
   .pt-hdr__sep, .pt-hdr__stat { display: none; }
+  .pt-hdr .pt-lang { display: none; }   /* 언어 전환은 랜딩에서 — 좁은 헤더가 밀리지 않게 */
 }

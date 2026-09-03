@@ -138,7 +138,7 @@
     /* 모바일: 고정 셸 대신 페이지가 통째로 스크롤된다 — 패널 내부 이중 스크롤 없이 아래까지 자연스럽게 */
     html, body { overflow-y: auto !important; height: auto !important; }
     .rsp-shell { position: static !important; height: auto !important; min-height: 100vh;
-                 grid-template-columns: 1fr !important; grid-template-rows: 56px 46vh auto !important; }
+                 grid-template-columns: minmax(0, 1fr) !important; grid-template-rows: 56px 46vh auto !important; }
     .rsp-shell > main { min-height: 0; }
     .rsp-shell > aside { min-height: 0; border-left: 0 !important; border-top: 1px solid var(--bg-panel);
                          overflow: visible !important; }
@@ -147,7 +147,7 @@
   }
   @media (max-width: 760px) { .rsp-status { display: none !important; } }
 </style>
-<link rel="stylesheet" href="assets/css/pt-header.css?v=2026-09-03a">
+<link rel="stylesheet" href="assets/css/pt-header.css?v=2026-09-03b">
 <script type="module" src="79b1de60-ed4e-4e8e-88e9-89de853dfefc"></script>
 </helmet>
 <div class="rsp-shell" style="position: fixed; inset: 0; display: grid; grid-template-columns: 1fr clamp(380px, 29vw, 430px); grid-template-rows: 64px 1fr; background: var(--bg-void); color: var(--text-hi)">

@@ -95,8 +95,15 @@
       transition-duration: 1ms !important;
     }
   }
+
+  /* ── 모바일: 툴바 줄바꿈, 카드·리스트 1열 ── */
+  @media (max-width: 900px) {
+    .rsp-wrap { flex-wrap: wrap !important; row-gap: 10px; }
+    .rsp-cards { grid-template-columns: 1fr !important; }
+    .rsp-list { grid-template-columns: 1fr !important; }
+  }
 </style>
-<link rel="stylesheet" href="assets/css/pt-header.css?v=2026-09-03a">
+<link rel="stylesheet" href="assets/css/pt-header.css?v=2026-09-03b">
 
 </helmet>
 <div style="position: fixed; inset: 0; display: grid; grid-template-columns: 1fr; background: var(--bg-void); color: var(--text-hi)">
@@ -135,7 +142,7 @@
 
       <div style="flex: none; padding: 16px 30px; border-bottom: 1px solid var(--line)">
         <div style="display: flex; flex-direction: column; gap: 14px">
-          <div style="display: flex; align-items: center; gap: 12px">
+          <div class="rsp-wrap" style="display: flex; align-items: center; gap: 12px">
             <input type="text" value="{{ query }}" sc-camel-on-input="{{ setQuery }}" placeholder="세그먼트 검색" style="flex: 1; max-width: 320px; padding: 10px 14px; font-size: 16px; background: var(--bg-base)">
             <div style="flex: 1"></div>
 
@@ -215,7 +222,7 @@
               <div style="font-size: 14px; color: var(--text-lo)">고정 게인 baseline</div>
             </div>
 
-            <div style="display: grid; grid-template-columns: 300px minmax(0, 1fr); gap: 20px; padding: 16px 18px 18px; border-top: 1px solid var(--line)">
+            <div class="rsp-list" style="display: grid; grid-template-columns: 300px minmax(0, 1fr); gap: 20px; padding: 16px 18px 18px; border-top: 1px solid var(--line)">
 
               <div>
                 <div style="font-size: 14px; font-weight: 500; letter-spacing: 0.12em; text-transform: uppercase; color: var(--text-lo); margin-bottom: 8px">지표 6종</div>
@@ -283,7 +290,7 @@
         </sc-if>
 
         <sc-if value="{{ isGrid }}">
-          <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(420px, 1fr)); gap: 20px">
+          <div class="rsp-cards" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(420px, 1fr)); gap: 20px">
             <sc-for list="{{ cards }}" as="c" hint-placeholder-count="6">
               <div style="border: 1px solid {{ c.border }}; background: var(--bg-base); display: flex; flex-direction: column; transition: border-color var(--t-fast) var(--e-out)">
                 <div style="position: relative; height: 60px; background: var(--bg-panel); overflow: hidden">
