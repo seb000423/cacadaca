@@ -104,9 +104,12 @@
   /* ── 모바일 반응형: 우측 패널을 3D 아래로 쌓는다 ── */
   @media (max-width: 760px) { .rsp-hide-sm { display: none !important; } }
   @media (max-width: 900px) {
-    .rsp-shell { grid-template-columns: 1fr !important; grid-template-rows: 56px 46vh minmax(0, 1fr) !important; }
-    .rsp-shell > main { min-height: 0; }
-    .rsp-shell > aside { min-height: 0; border-left: 0 !important; border-top: 1px solid var(--bg-panel); }
+    html, body { overflow-y: auto !important; height: auto !important; }
+    .rsp-shell { position: static !important; height: auto !important; min-height: 100vh;
+                 grid-template-columns: 1fr !important; grid-template-rows: 64px auto auto !important; }
+    .rsp-shell > main, .rsp-shell > aside { min-height: 0; overflow: visible !important; height: auto !important; }
+    .rsp-shell > aside { border-left: 0 !important; border-top: 1px solid var(--bg-panel); }
+    .rsp-shell > aside > * { flex: none !important; }   /* 고정 높이용 스페이서가 페이지 흐름에서 빈 공간으로 늘어나지 않게 */
   }
 </style>
 <link rel="stylesheet" href="assets/css/pt-header.css?v=2026-09-03a">

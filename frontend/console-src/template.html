@@ -135,10 +135,17 @@
 
   /* ── 모바일 반응형: 우측 패널을 3D 아래로 쌓는다 ── */
   @media (max-width: 900px) {
-    .rsp-shell { grid-template-columns: 1fr !important; grid-template-rows: 56px 46vh minmax(0, 1fr) !important; }
+    /* 모바일: 고정 셸 대신 페이지가 통째로 스크롤된다 — 패널 내부 이중 스크롤 없이 아래까지 자연스럽게 */
+    html, body { overflow-y: auto !important; height: auto !important; }
+    .rsp-shell { position: static !important; height: auto !important; min-height: 100vh;
+                 grid-template-columns: 1fr !important; grid-template-rows: 56px 46vh auto !important; }
     .rsp-shell > main { min-height: 0; }
-    .rsp-shell > aside { min-height: 0; border-left: 0 !important; border-top: 1px solid var(--bg-panel); }
+    .rsp-shell > aside { min-height: 0; border-left: 0 !important; border-top: 1px solid var(--bg-panel);
+                         overflow: visible !important; }
+    .rsp-shell > aside > div { overflow: visible !important; }
+    .rsp-shell > aside > * { flex: none !important; }   /* 고정 높이용 스페이서가 페이지 흐름에서 빈 공간으로 늘어나지 않게 */
   }
+  @media (max-width: 760px) { .rsp-status { display: none !important; } }
 </style>
 <link rel="stylesheet" href="assets/css/pt-header.css?v=2026-09-03a">
 <script type="module" src="79b1de60-ed4e-4e8e-88e9-89de853dfefc"></script>
@@ -167,7 +174,7 @@
   <main style="position: relative; overflow: hidden">
     <polytwin-viewport style="position: absolute; inset: 0"></polytwin-viewport>
 
-    <div style="position: absolute; left: 26px; bottom: 22px; z-index: 10; display: flex; gap: 26px; font-family: var(--f-mono); font-size: 16px; color: var(--text-lo); pointer-events: none">
+    <div class="rsp-status" style="position: absolute; left: 26px; bottom: 22px; z-index: 10; display: flex; gap: 26px; font-family: var(--f-mono); font-size: 16px; color: var(--text-lo); pointer-events: none">
       <div>경로 간격 <span style="color: var(--accent)">{{ spacing }}</span> mm</div>
       <div>패스 <span style="color: var(--text-mid)">{{ passes }}</span></div>
       <div>추정 <span style="color: var(--text-mid)">{{ eta }}</span></div>
